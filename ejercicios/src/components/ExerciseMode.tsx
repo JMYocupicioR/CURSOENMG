@@ -249,6 +249,14 @@ const ExerciseMode: React.FC<{ publicMode?: boolean }> = ({ publicMode = false }
   const previewPatternId = publicMode
     ? undefined
     : (searchParams.get('patternId') || (!assignmentId ? navState.patternId : undefined));
+  const returnTo = (() => {
+    if (publicMode) return null;
+    const raw = searchParams.get('from');
+    if (!raw || !raw.startsWith('/') || raw.startsWith('//') || raw.includes('://') || raw.includes('\\')) {
+      return null;
+    }
+    return raw;
+  })();
   const [publicIds, setPublicIds] = useState<Set<string> | null>(publicMode ? null : new Set());
   const [assignmentLaunch, setAssignmentLaunch] = useState<ClinicalAssignmentLaunchState | null>(null);
   const [assignmentLoading, setAssignmentLoading] = useState(Boolean(assignmentId));
@@ -896,6 +904,18 @@ const ExerciseMode: React.FC<{ publicMode?: boolean }> = ({ publicMode = false }
       if (!confirmed) return;
     }
     navigate('/dashboard?tab=assignments');
+  };
+
+  const handleTopBack = () => {
+    if (assignmentId) {
+      leaveAssignedSession();
+      return;
+    }
+    if (returnTo) {
+      navigate(returnTo);
+      return;
+    }
+    setCurrentStep('config');
   };
 
   // ─── Status Cell Color ──────
@@ -2074,16 +2094,34 @@ const ExerciseMode: React.FC<{ publicMode?: boolean }> = ({ publicMode = false }
 
   return (
     <div className="min-h-screen w-full bg-gray-900 text-gray-100 pt-14 sm:pt-16">
+      {currentStep === 'config' && returnTo && (
+        <div className="sticky top-14 sm:top-16 z-40 border-b border-gray-700/60 bg-gray-800/95">
+          <div className="max-w-5xl mx-auto px-3 py-2">
+            <button
+              type="button"
+              onClick={() => navigate(returnTo)}
+              className="inline-flex items-center gap-1.5 text-sm font-semibold text-gray-300 hover:text-white"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              Volver al catálogo
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Top bar with timer + clickable progress */}
       {currentStep !== 'config' && (
         <div className="bg-gray-800/95 backdrop-blur-lg border-b border-gray-700/60 sticky top-14 sm:top-16 z-40" style={{ backgroundColor: 'rgba(31, 41, 55, 0.97)', backdropFilter: 'blur(12px)', borderBottom: '1px solid rgba(55, 65, 81, 0.6)' }}>
           <div className="max-w-5xl mx-auto px-3 sm:px-4">
             {/* Top row: back + tabs + timer */}
             <div className="flex items-center gap-1 sm:gap-3 py-2 sm:py-2.5">
-              <button onClick={() => assignmentId ? leaveAssignedSession() : setCurrentStep('config')}
-                className="text-gray-400 hover:text-white transition-colors p-1.5 -ml-1.5 rounded-lg hover:bg-gray-700/50"
-                title={assignmentId ? 'Volver a tareas' : 'Volver a configuración'}>
+              <button onClick={handleTopBack}
+                className="text-gray-400 hover:text-white transition-colors p-1.5 -ml-1.5 rounded-lg hover:bg-gray-700/50 inline-flex items-center gap-1 shrink-0"
+                title={assignmentId ? 'Volver a tareas' : returnTo ? 'Volver al catálogo' : 'Volver a configuración'}>
                 <ArrowLeft className="w-5 h-5" />
+                {returnTo && !assignmentId && (
+                  <span className="hidden sm:inline text-xs font-semibold">Catálogo</span>
+                )}
               </button>
 
               {assignmentId && (

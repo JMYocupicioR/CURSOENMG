@@ -16,6 +16,7 @@ import {
   UserCheck,
   Sparkles,
   BookMarked,
+  ArrowLeft,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthProvider';
 import { useStaffViewStore } from '../../stores/staffViewStore';
@@ -254,9 +255,52 @@ export function AdminLayout({
         </div>
       </div>
 
+      <div className="lg:hidden sticky top-14 sm:top-16 z-30 -mx-4 sm:-mx-6 mb-3 border-b border-slate-200/80 dark:border-slate-800 bg-slate-50/95 dark:bg-slate-950/95 backdrop-blur-xl">
+        <div className="flex items-center gap-2 px-3 py-2">
+          {location.pathname !== '/admin' && (
+            <Link
+              to="/admin"
+              className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-100 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+              Panel
+            </Link>
+          )}
+          <div className="flex-1 min-w-0 overflow-x-auto scrollbar-none flex gap-1.5">
+            {allTabs.map(({ to, label, shortLabel, icon: Icon, exact, badge }) => {
+              const active = isActive(to, exact);
+              return (
+                <Link
+                  key={to}
+                  to={to}
+                  title={label}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all ${
+                    active
+                      ? 'bg-indigo-600 text-white shadow-xs'
+                      : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border border-slate-200/80 dark:border-slate-800'
+                  }`}
+                >
+                  <Icon className="w-3.5 h-3.5" />
+                  <span>{shortLabel ?? label}</span>
+                  <NavBadge count={badge} />
+                </Link>
+              );
+            })}
+          </div>
+          <Link
+            to="/portal"
+            onClick={() => { if (isAdmin) enterStudentMode(); }}
+            className="sm:hidden shrink-0 inline-flex items-center justify-center w-8 h-8 rounded-xl text-indigo-600 dark:text-cyan-400 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700"
+            title="Ver como alumno"
+            aria-label="Ver como alumno"
+          >
+            <Eye className="w-3.5 h-3.5" />
+          </Link>
+        </div>
+      </div>
+
       <div className="flex flex-col lg:flex-row gap-4 lg:gap-8">
-        {/* Navigation Sidebar */}
-        <aside className="lg:w-64 flex-shrink-0">
+        <aside className="hidden lg:block lg:w-64 flex-shrink-0">
           <div className="p-3 sm:p-4 rounded-2xl sm:rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-sm lg:sticky lg:top-24">
             <div className="flex items-center gap-2.5 mb-3 pb-3 border-b border-slate-100 dark:border-slate-800">
               <div className="w-9 h-9 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 text-white flex items-center justify-center shadow-md shadow-indigo-500/20 shrink-0">
@@ -266,44 +310,6 @@ export function AdminLayout({
                 <p className="font-black text-slate-900 dark:text-white text-sm truncate">Panel Docente</p>
                 <p className="text-[11px] text-slate-400 truncate">Dirección {BRAND.shortName}</p>
               </div>
-              <div className="flex items-center gap-1.5 sm:hidden shrink-0">
-                <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300 border border-emerald-200/80 dark:border-emerald-800/60">
-                  <CheckCircle2 className="w-3 h-3 text-emerald-500" />
-                  {isAdmin ? 'Admin' : 'Profesor'}
-                </span>
-                <Link
-                  to="/portal"
-                  onClick={() => { if (isAdmin) enterStudentMode(); }}
-                  className="inline-flex items-center justify-center w-8 h-8 rounded-xl text-indigo-600 dark:text-cyan-400 bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700"
-                  title="Ver como alumno"
-                  aria-label="Ver como alumno"
-                >
-                  <Eye className="w-3.5 h-3.5" />
-                </Link>
-              </div>
-            </div>
-
-            {/* Mobile horizontal scroll of tabs */}
-            <div className="lg:hidden overflow-x-auto pb-2 scrollbar-none flex gap-1.5">
-              {allTabs.map(({ to, label, shortLabel, icon: Icon, exact, badge }) => {
-                const active = isActive(to, exact);
-                return (
-                  <Link
-                    key={to}
-                    to={to}
-                    title={label}
-                    className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all ${
-                      active
-                        ? 'bg-indigo-600 text-white shadow-xs'
-                        : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
-                    }`}
-                  >
-                    <Icon className="w-3.5 h-3.5" />
-                    <span>{shortLabel ?? label}</span>
-                    <NavBadge count={badge} />
-                  </Link>
-                );
-              })}
             </div>
 
             {/* Desktop 3-Group Navigation */}

@@ -45,6 +45,28 @@ describe('shouldRedirectToStaffInbox', () => {
     })).toBe(true);
   });
 
+  it('keeps an admin on the root so the teacher landing can render', () => {
+    expect(shouldRedirectToStaffInbox({
+      isStaff: true,
+      isAdmin: true,
+      isLoading: false,
+      hydrated: true,
+      studentMode: false,
+      pathname: '/',
+    })).toBe(false);
+  });
+
+  it('still sends an editor from the root to the inbox', () => {
+    expect(shouldRedirectToStaffInbox({
+      isStaff: true,
+      isAdmin: false,
+      isLoading: false,
+      hydrated: true,
+      studentMode: false,
+      pathname: '/',
+    })).toBe(true);
+  });
+
   it('keeps an admin who chose student mode on the portal', () => {
     expect(shouldRedirectToStaffInbox({
       isStaff: true,

@@ -21,15 +21,19 @@ export function postLoginPath(options: {
   return '/portal';
 }
 
-/** Admin o profesor en la home del alumno deben caer en la bandeja, salvo modo estudiante. */
+/** Admin o profesor en la home del alumno deben caer en la bandeja, salvo modo estudiante.
+ *  El admin se queda en `/`: ahí vive el landing del profesor. */
 export function shouldRedirectToStaffInbox(options: {
   isStaff: boolean;
+  isAdmin?: boolean;
   isLoading: boolean;
   hydrated: boolean;
   studentMode: boolean;
   pathname: string;
 }): boolean {
   if (options.isLoading || !options.hydrated || !options.isStaff || options.studentMode) return false;
+  const pathname = options.pathname.split('?')[0]?.split('#')[0] ?? '';
+  if (options.isAdmin && pathname === '/') return false;
   return isStudentHomePath(options.pathname);
 }
 

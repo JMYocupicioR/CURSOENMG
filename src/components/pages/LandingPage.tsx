@@ -33,6 +33,8 @@ import {
   Layers
 } from 'lucide-react';
 import { useCourseStore } from '../../stores/courseStore';
+import { useStaffViewStore } from '../../stores/staffViewStore';
+import { TeacherLanding } from '../landing/TeacherLanding';
 import { WorkshopCard } from '../course/WorkshopCard';
 import { ComefyrBadge } from '../landing/ComefyrBadge';
 import { ClinicalTraceSimulator } from '../landing/ClinicalTraceSimulator';
@@ -115,7 +117,8 @@ function countTopics(topics: any[]): number {
 
 export default function LandingPage() {
   const { modules } = useAllModules();
-  const { user, isEnrolledPhysician } = useAuth();
+  const { isAdmin, isEnrolledPhysician } = useAuth();
+  const studentMode = useStaffViewStore((s) => s.view) === 'student' && isAdmin;
   const [searchQuery, setSearchQuery] = useState('');
   const allTopics = useMemo(() => getAllSearchableTopics(), []);
   const { upcomingWorkshops, load: loadCourse } = useCourseStore();
@@ -138,6 +141,10 @@ export default function LandingPage() {
       .filter(r => r.title.toLowerCase().includes(q) || r.description?.toLowerCase().includes(q))
       .slice(0, 10);
   }, [searchQuery, allTopics]);
+
+  if (isAdmin && !studentMode) {
+    return <TeacherLanding />;
+  }
 
   return (
     <main className="relative min-h-screen bg-gradient-to-b from-slate-50 via-white to-slate-50/80 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 text-slate-900 dark:text-slate-100">

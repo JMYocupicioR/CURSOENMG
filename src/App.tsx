@@ -75,6 +75,7 @@ function AdminEntryGate() {
   const hydrated = useStaffViewStore((s) => s.hydrated);
   const openInbox = shouldRedirectToStaffInbox({
     isStaff: Boolean(user && (isAdmin || isEditor)),
+    isAdmin: Boolean(user && isAdmin),
     isLoading,
     hydrated,
     studentMode: isAdmin && view === 'student',

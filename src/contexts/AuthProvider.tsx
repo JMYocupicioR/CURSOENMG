@@ -12,6 +12,7 @@ import { supabase, isSupabaseConfigured, sb } from '../lib/supabase';
 import type { AppRole, CourseId, EnrollmentStatus, Profile, Subscription } from '../types/database';
 import { recordUserActivity } from '../services/studentPlanService';
 import { hasActivePremiumSubscription, isEnrolledInCourse as enrolledInCourse } from '../utils/courseEnrollment';
+import { readAuthSnapshot, writeAuthSnapshot } from '../lib/authSnapshot';
 import { useStaffViewStore } from '../stores/staffViewStore';
 
 export interface StudentRegistrationData {
@@ -71,7 +72,39 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-async function fetchUserData(userId: string) {
+type ReadyUserData = {
+  status: 'ready';
+  profile: Profile | null;
+  roles: AppRole[];
+  bootstrapAvailable: boolean;
+  hasPremiumAccess: boolean;
+  subscription: Subscription | null;
+  courseIds: CourseId[];
+  pendingCourseIds: CourseId[];
+  courseSchemaReady: boolean;
+};
+
+type UserDataResult = ReadyUserData | { status: 'offline' };
+
+function isTransportError(error: { message?: string } | null | undefined): boolean {
+  if (!error?.message) return false;
+  const msg = error.message.toLowerCase();
+  return (
+    msg.includes('failed to fetch') ||
+    msg.includes('networkerror') ||
+    msg.includes('network request failed') ||
+    msg.includes('load failed') ||
+    msg.includes('offline') ||
+    msg.includes('timeout') ||
+    msg.includes('err_internet_disconnected')
+  );
+}
+
+async function fetchUserData(userId: string): Promise<UserDataResult> {
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+    return { status: 'offline' };
+  }
+
   const [ctxRes, pendingRes] = await Promise.all([
     supabase.rpc('get_my_auth_context'),
     supabase
@@ -101,6 +134,7 @@ async function fetchUserData(userId: string) {
       ? payload.course_ids.filter((id): id is CourseId => typeof id === 'string' && id.length > 0)
       : [];
     return {
+      status: 'ready',
       profile: payload.profile ?? null,
       roles: (payload.roles ?? []) as AppRole[],
       bootstrapAvailable: payload.bootstrap_available === true,
@@ -110,6 +144,10 @@ async function fetchUserData(userId: string) {
       pendingCourseIds: parsedPendingCourseIds,
       courseSchemaReady: Object.prototype.hasOwnProperty.call(payload, 'course_ids'),
     };
+  }
+
+  if (ctxError && isTransportError(ctxError)) {
+    return { status: 'offline' };
   }
 
   if (ctxError) console.error('[Auth] get_my_auth_context:', ctxError.message);
@@ -132,6 +170,10 @@ async function fetchUserData(userId: string) {
       .eq('status', 'active'),
   ]);
 
+  if (rolesRes.error && isTransportError(rolesRes.error)) {
+    return { status: 'offline' };
+  }
+
   if (profileRes.error) console.error('[Auth] profiles:', profileRes.error.message);
   if (rolesRes.error) console.error('[Auth] user_roles:', rolesRes.error.message);
 
@@ -146,6 +188,7 @@ async function fetchUserData(userId: string) {
     .filter((id): id is CourseId => typeof id === 'string' && id.length > 0);
 
   return {
+    status: 'ready',
     profile: (profileRes.data as Profile | null) ?? null,
     roles,
     bootstrapAvailable: bootstrapRes.data === true,
@@ -155,6 +198,12 @@ async function fetchUserData(userId: string) {
     pendingCourseIds: parsedPendingCourseIds,
     courseSchemaReady: !coursesRes.error,
   };
+}
+
+function applyAuthSnapshot(userId: string, apply: (snapshot: { roles: AppRole[]; profile: Profile | null }) => void) {
+  const snap = readAuthSnapshot(userId);
+  if (!snap) return;
+  apply(snap);
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -171,8 +220,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loadedUserId, setLoadedUserId] = useState<string | null>(null);
 
   const loadUserData = useCallback(async (userId: string) => {
+    applyAuthSnapshot(userId, (snap) => {
+      setProfile(snap.profile);
+      setRoles(snap.roles);
+      if (snap.roles.includes('admin') || snap.roles.includes('editor')) {
+        setHasPremiumAccess(true);
+      }
+    });
+
     try {
       const data = await fetchUserData(userId);
+      if (data.status === 'offline') return;
       setProfile(data.profile);
       setRoles(data.roles);
       setBootstrapAvailable(data.bootstrapAvailable);
@@ -181,6 +239,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setPendingCourseIds(data.pendingCourseIds);
       setCourseSchemaReady(data.courseSchemaReady);
       setSubscription(data.subscription);
+      writeAuthSnapshot({
+        userId,
+        roles: data.roles,
+        profile: data.profile,
+      });
+    } catch (error) {
+      console.error('[Auth] loadUserData:', error);
     } finally {
       setLoadedUserId(userId);
     }
@@ -433,6 +498,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         'comefyr_member_id',
         'avatar_url',
         'bio',
+        'is_public',
         'subspecialty',
         'specialty_cedula',
         'cmmr_certified',

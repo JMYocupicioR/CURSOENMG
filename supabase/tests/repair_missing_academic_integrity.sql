@@ -30,11 +30,24 @@ GRANT SELECT ON public.public_specialist_profiles TO anon, authenticated;
 DROP POLICY IF EXISTS "profiles_public_read" ON public.profiles;
 DROP POLICY IF EXISTS "profiles_self_or_staff_read" ON public.profiles;
 CREATE POLICY "profiles_self_or_staff_read" ON public.profiles
-  FOR SELECT USING (
+  FOR SELECT
+  TO authenticated
+  USING (
     id = auth.uid()
     OR public.is_admin()
     OR public.is_editor()
   );
+
+DROP POLICY IF EXISTS "profiles_public_directory_read" ON public.profiles;
+CREATE POLICY "profiles_public_directory_read" ON public.profiles
+  FOR SELECT
+  TO anon, authenticated
+  USING (
+    enrollment_status = 'approved'
+    AND (is_public = true OR show_in_editorial_committee = true)
+  );
+
+GRANT SELECT ON public.profiles TO anon, authenticated;
 
 -- ─── 2. quiz_questions: anon sin SELECT; solo staff lee la tabla ─────────────
 
@@ -74,6 +87,10 @@ BEGIN
     comefyr_member_id = COALESCE(p_updates->>'comefyr_member_id', comefyr_member_id),
     avatar_url = CASE WHEN p_updates ? 'avatar_url' THEN p_updates->>'avatar_url' ELSE avatar_url END,
     bio = COALESCE(p_updates->>'bio', bio),
+    is_public = CASE
+      WHEN p_updates ? 'is_public' THEN COALESCE((p_updates->>'is_public')::boolean, is_public)
+      ELSE is_public
+    END,
     subspecialty = COALESCE(p_updates->>'subspecialty', subspecialty),
     specialty_cedula = COALESCE(p_updates->>'specialty_cedula', specialty_cedula),
     cmmr_certified = COALESCE((p_updates->>'cmmr_certified')::boolean, cmmr_certified),

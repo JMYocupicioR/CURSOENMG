@@ -1,7 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
-  BookOpen,
   Plus,
   Search,
   Activity,
@@ -11,13 +10,11 @@ import {
   Copy,
   Trash2,
   Eye,
-  ArrowLeft,
   RefreshCw,
   GraduationCap,
   SearchX,
   Globe,
 } from 'lucide-react';
-import { Breadcrumbs } from '../common/Breadcrumbs';
 import {
   loadAllCaseTemplates,
   deleteCaseTemplate,
@@ -26,6 +23,7 @@ import {
 } from '../../services/emgExerciseService';
 import { EmgCaseEditorModal } from './EmgCaseEditorModal';
 import { AssignClinicalCaseModal } from './AssignClinicalCaseModal';
+import { AdminLayout } from './AdminLayout';
 import { useAuth } from '../../contexts/AuthProvider';
 
 const CATEGORY_NAMES: Record<string, string> = {
@@ -200,111 +198,86 @@ export default function AdminExerciseCasesPage() {
     setIsAssignModalOpen(true);
   };
 
-  return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 p-4 sm:p-8 space-y-6">
-      <div className="max-w-7xl mx-auto space-y-6">
-        {/* Breadcrumb & Navigation */}
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <Breadcrumbs
-            items={[
-              { label: 'Administración', to: '/admin' },
-              { label: 'Casos y Ejercicios EMG' },
-            ]}
-          />
+  const metrics = [
+    { label: 'Total', value: totalCount, hint: 'Catálogo', valueClass: 'text-slate-900 dark:text-white' },
+    { label: 'Examen', value: examCount, hint: 'Protegidos', valueClass: 'text-purple-600 dark:text-purple-300' },
+    { label: 'Práctica', value: practiceCount, hint: 'En simulador', valueClass: 'text-emerald-600 dark:text-emerald-300' },
+    { label: 'Docentes', value: customCount, hint: 'A medida', valueClass: 'text-amber-600 dark:text-amber-300' },
+    { label: 'Trampa', value: pitfallCount, hint: 'Variantes', valueClass: 'text-rose-600 dark:text-rose-300' },
+  ];
 
-          <div className="flex items-center gap-2">
+  return (
+    <AdminLayout>
+      <div className="space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <h1 className="text-lg sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight">
+              Casos EMG
+            </h1>
+            <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 font-mono text-slate-500 dark:text-slate-300">
+              {source === 'supabase' ? 'Sincronizado' : 'Catálogo local'}
+            </span>
+          </div>
+          <div className="flex items-center gap-3">
+            <Link
+              to="/simuladores/publico"
+              target="_blank"
+              className="text-xs font-semibold text-slate-500 hover:text-amber-600 dark:text-slate-400 dark:hover:text-amber-300"
+            >
+              Ver simulador público
+            </Link>
             <button
               onClick={loadData}
-              className="p-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-400 hover:text-white transition cursor-pointer"
+              className="p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-500 hover:text-slate-900 dark:hover:text-white transition cursor-pointer"
               title="Recargar catálogo"
             >
               <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
             </button>
-            <Link
-              to="/simuladores/publico"
-              target="_blank"
-              className="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold transition flex items-center gap-1.5"
-            >
-              <Globe className="w-4 h-4" />
-              <span>Ver Simulador Público</span>
-            </Link>
           </div>
         </div>
 
-        {/* Hero Header */}
-        <div className="p-6 sm:p-8 rounded-3xl bg-gradient-to-br from-amber-500/15 via-slate-900 to-indigo-950 border border-amber-500/30 relative overflow-hidden flex flex-wrap items-center justify-between gap-4">
-          <div className="space-y-1.5 z-10">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/20 border border-amber-500/40 text-amber-300 text-xs font-extrabold uppercase tracking-wider">
-              <BookOpen className="w-3.5 h-3.5" />
-              <span>Gestor Académico de Casos Clínicos EMG</span>
-              <span className="text-[10px] px-2 py-0.5 rounded-full bg-black/30 font-mono text-slate-300">
-                {source === 'supabase' ? 'Sincronizado Supabase' : 'Catálogo Local'}
-              </span>
-            </div>
-            <h1 className="text-2xl sm:text-3xl font-black text-white">
-              Simulador de Casos y Ejercicios EMG
-            </h1>
-            <p className="text-slate-300 text-xs sm:text-sm max-w-2xl">
-              Administra el catálogo de casos clínicos del motor de electromiografía, crea nuevos
-              ejemplos con valores fisiológicos y asígnalos directamente a los alumnos de tu curso.
-            </p>
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+          <div className="relative flex-1 min-w-0">
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Buscar por nombre, hallazgo o diagnóstico..."
+              className="w-full pl-9 pr-3 py-2 rounded-xl bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white placeholder-slate-400 focus:ring-1 focus:ring-amber-500 outline-none text-sm"
+            />
           </div>
-
-          <div className="flex flex-wrap items-center gap-2.5 z-10">
+          <div className="flex gap-2">
             <button
               onClick={handleCreateNew}
-              className="px-5 py-2.5 rounded-2xl bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-white font-bold text-xs transition flex items-center gap-2 shadow-lg shadow-amber-500/25 cursor-pointer"
+              className="flex-1 sm:flex-none px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-white font-bold text-xs transition flex items-center justify-center gap-1.5 cursor-pointer"
             >
               <Plus className="w-4 h-4" />
-              <span>Nuevo Caso Clínico</span>
+              <span>Nuevo caso</span>
             </button>
-
             <button
               onClick={() => handleAssign()}
-              className="px-5 py-2.5 rounded-2xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-bold text-xs transition flex items-center gap-2 shadow-lg shadow-indigo-500/25 cursor-pointer"
+              className="flex-1 sm:flex-none px-3.5 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-bold text-xs transition flex items-center justify-center gap-1.5 cursor-pointer"
             >
               <Send className="w-4 h-4" />
-              <span>Asignar a Alumnos</span>
+              <span>Asignar</span>
             </button>
           </div>
         </div>
 
-        {/* Metrics Cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 sm:gap-4">
-          <div className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800">
-            <div className="text-[11px] text-slate-400 uppercase font-bold tracking-wider">Total Casos</div>
-            <div className="text-2xl sm:text-3xl font-black text-white mt-1">{totalCount}</div>
-            <div className="text-[10px] text-slate-500 mt-0.5">En catálogo activo</div>
-          </div>
-
-          <div className="p-4 rounded-2xl bg-purple-950/20 border border-purple-800/40">
-            <div className="text-[11px] text-purple-400 uppercase font-bold tracking-wider flex items-center gap-1">
-              <GraduationCap className="w-3.5 h-3.5" /> Banco Examen
+        <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
+          {metrics.map((metric) => (
+            <div
+              key={metric.label}
+              className="shrink-0 min-w-[6.75rem] px-3 py-2 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800"
+            >
+              <div className="text-[10px] uppercase font-bold tracking-wider text-slate-500">{metric.label}</div>
+              <div className={`text-xl font-black leading-tight mt-0.5 ${metric.valueClass}`}>{metric.value}</div>
+              <div className="text-[10px] text-slate-400 mt-0.5">{metric.hint}</div>
             </div>
-            <div className="text-2xl sm:text-3xl font-black text-purple-300 mt-1">{examCount}</div>
-            <div className="text-[10px] text-purple-400/80 mt-0.5">Protegidos (no libres)</div>
-          </div>
-
-          <div className="p-4 rounded-2xl bg-emerald-950/20 border border-emerald-800/40">
-            <div className="text-[11px] text-emerald-400 uppercase font-bold tracking-wider">Práctica Libre</div>
-            <div className="text-2xl sm:text-3xl font-black text-emerald-300 mt-1">{practiceCount}</div>
-            <div className="text-[10px] text-emerald-400/80 mt-0.5">Visibles en simulador</div>
-          </div>
-
-          <div className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800">
-            <div className="text-[11px] text-amber-400 uppercase font-bold tracking-wider">Casos Docentes</div>
-            <div className="text-2xl sm:text-3xl font-black text-amber-300 mt-1">{customCount}</div>
-            <div className="text-[10px] text-slate-500 mt-0.5">Creados a medida</div>
-          </div>
-
-          <div className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800">
-            <div className="text-[11px] text-rose-400 uppercase font-bold tracking-wider">Casos Trampa</div>
-            <div className="text-2xl sm:text-3xl font-black text-rose-300 mt-1">{pitfallCount}</div>
-            <div className="text-[10px] text-slate-500 mt-0.5">Variantes / artefactos</div>
-          </div>
+          ))}
         </div>
 
-        {/* Filter Bar & Category Chips */}
         <div className="space-y-3">
           {/* Barra de Filtros interactiva con chips de categoría */}
           <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-thin scrollbar-thumb-slate-800">
@@ -335,19 +308,7 @@ export default function AdminExerciseCasesPage() {
             })}
           </div>
 
-          <div className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800 flex flex-wrap items-center justify-between gap-3 text-xs">
-            <div className="relative flex-1 min-w-[240px]">
-              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
-              <input
-                type="text"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Buscar por nombre, hallazgo o diagnóstico..."
-                className="w-full pl-9 pr-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-white placeholder-slate-500 focus:ring-1 focus:ring-amber-500 outline-none"
-              />
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2 text-xs">
               <select
                 value={usageFilter}
                 onChange={(e) => setUsageFilter(e.target.value as any)}
@@ -382,21 +343,20 @@ export default function AdminExerciseCasesPage() {
               {hasActiveFilters && (
                 <button
                   onClick={resetFilters}
-                  className="px-3 py-2 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 hover:bg-rose-500/20 text-xs font-semibold transition flex items-center gap-1.5 cursor-pointer"
+                  className="px-3 py-2 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-700 dark:text-rose-300 hover:bg-rose-500/20 text-xs font-semibold transition flex items-center gap-1.5 cursor-pointer"
                   title="Restablecer todos los filtros"
                 >
                   <RefreshCw className="w-3.5 h-3.5" />
                   <span>Limpiar</span>
                 </button>
               )}
-            </div>
           </div>
 
           {/* Contador de resultados */}
-          <div className="flex items-center justify-between text-xs text-slate-400 px-1">
+          <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 px-1">
             <span>
-              Mostrando <strong className="text-white font-bold">{filteredCases.length}</strong> de{' '}
-              <strong className="text-slate-300 font-semibold">{cases.length}</strong> casos clínicos
+              Mostrando <strong className="text-slate-900 dark:text-white font-bold">{filteredCases.length}</strong> de{' '}
+              <strong className="text-slate-700 dark:text-slate-300 font-semibold">{cases.length}</strong> casos clínicos
             </span>
             {categoryFilter !== 'all' && (
               <span className="text-[11px] text-amber-400 font-medium">
@@ -560,7 +520,13 @@ export default function AdminExerciseCasesPage() {
 
                     <button
                       type="button"
-                      onClick={() => navigate(`/ejercicios?patternId=${c.patternId}`)}
+                      onClick={() => {
+                        const params = new URLSearchParams({
+                          patternId: c.patternId,
+                          from: '/admin/ejercicios',
+                        });
+                        navigate(`/ejercicios?${params.toString()}`);
+                      }}
                       className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-emerald-400 transition cursor-pointer"
                       title="Probar en el simulador"
                     >
@@ -629,6 +595,6 @@ export default function AdminExerciseCasesPage() {
         onClose={() => setIsAssignModalOpen(false)}
         initialCasePatternId={assigningPatternId}
       />
-    </div>
+    </AdminLayout>
   );
 }

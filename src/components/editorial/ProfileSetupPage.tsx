@@ -1161,15 +1161,23 @@ export default function ProfileSetupPage() {
 
           {/* Checkboxes de visibilidad y declaración */}
           <div className="space-y-3 pt-2">
-            <label className="flex items-center gap-3 text-xs text-slate-700 dark:text-slate-300 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={form.is_public}
-                onChange={(e) => setForm({ ...form, is_public: e.target.checked })}
-                className="w-4 h-4 rounded text-cyan-600 focus:ring-cyan-500 border-slate-300 dark:border-slate-700"
-              />
-              <span>Mostrar mi perfil públicamente en la lista de especialistas de ElectroDx Diplomado</span>
-            </label>
+            <div>
+              <label className={`flex items-center gap-3 text-xs text-slate-700 dark:text-slate-300 ${profile?.enrollment_status === 'approved' ? 'cursor-pointer' : 'cursor-not-allowed opacity-70'}`}>
+                <input
+                  type="checkbox"
+                  checked={form.is_public}
+                  disabled={profile?.enrollment_status !== 'approved'}
+                  onChange={(e) => setForm({ ...form, is_public: e.target.checked })}
+                  className="w-4 h-4 rounded text-cyan-600 focus:ring-cyan-500 border-slate-300 dark:border-slate-700 disabled:cursor-not-allowed"
+                />
+                <span>Mostrar mi perfil públicamente en la lista de especialistas de ElectroDx Diplomado</span>
+              </label>
+              {profile?.enrollment_status !== 'approved' && (
+                <p className="mt-1 pl-7 text-[11px] text-slate-500 dark:text-slate-400">
+                  Disponible cuando tu inscripción al diplomado esté aprobada.
+                </p>
+              )}
+            </div>
 
             <label className="flex items-start gap-3 text-xs text-slate-700 dark:text-slate-300 cursor-pointer">
               <input
