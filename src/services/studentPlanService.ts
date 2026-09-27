@@ -437,6 +437,7 @@ export async function createAssignment(
       priority: newAssignment.priority,
       min_score: assignment.min_score ?? null,
       assigned_by: assignment.assigned_by ?? null,
+      ...(assignment.materials && assignment.materials.length > 0 ? { materials: assignment.materials } : {}),
     })
     .select()
     .single();

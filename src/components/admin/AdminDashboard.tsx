@@ -51,7 +51,7 @@ import type { QuizValidationItem } from '../../types/quiz';
 import type { StudentCohortSummary } from '../../types/academicGradebook';
 import type { CalendarItem } from '../../types/academicCalendar';
 import { loadAcademicCalendarFeed } from '../../services/academicCalendarService';
-import { itemsInRange, startOfWeekMonday, endOfWeekMonday } from '../../utils/academicCalendar';
+import { calendarItemStartDate, itemsInRange, startOfWeekMonday, endOfWeekMonday } from '../../utils/academicCalendar';
 
 // Teacher Modals
 import TeacherQuickGradeModal from './TeacherQuickGradeModal';
@@ -60,7 +60,106 @@ import { AssignClinicalCaseModal } from './AssignClinicalCaseModal';
 import AttendanceTrackerModal from './AttendanceTrackerModal';
 import StudentKardexModal from './StudentKardexModal';
 import { CreateLiveClassModal } from './CreateLiveClassModal';
-import { TopicAdoptionInbox } from './TopicAdoptionInbox';
+import { TopicAdoptionInbox, type TopicAdoptionSummary } from './TopicAdoptionInbox';
+
+interface CollapsibleDashboardSectionProps {
+  id: string;
+  title: string;
+  subtitle?: string;
+  icon: React.ReactNode;
+  iconBgClass: string;
+  badgeContent: React.ReactNode;
+  badgeVariant?: 'alarm' | 'success' | 'warning' | 'info' | 'neutral';
+  headerAction?: React.ReactNode;
+  isOpen: boolean;
+  onToggle: () => void;
+  children: React.ReactNode;
+}
+
+function CollapsibleDashboardSection({
+  title,
+  subtitle,
+  icon,
+  iconBgClass,
+  badgeContent,
+  badgeVariant = 'neutral',
+  headerAction,
+  isOpen,
+  onToggle,
+  children,
+}: CollapsibleDashboardSectionProps) {
+  const isAlarm = badgeVariant === 'alarm';
+
+  return (
+    <section
+      className={`rounded-3xl border transition-colors bg-white dark:bg-slate-900 overflow-hidden shadow-xs ${
+        isAlarm
+          ? 'border-rose-300 dark:border-rose-900/60 ring-1 ring-rose-500/20 hover:border-rose-400 dark:hover:border-rose-700'
+          : 'border-slate-200/80 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
+      }`}
+    >
+      {/* ── Clickable Header Bar ── */}
+      <div
+        onClick={onToggle}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            onToggle();
+          }
+        }}
+        aria-expanded={isOpen}
+        className="w-full p-4 flex flex-wrap items-center justify-between gap-3 text-left cursor-pointer hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition select-none"
+      >
+        <div className="flex items-center gap-3 min-w-0">
+          <div
+            className={`w-9 h-9 rounded-2xl flex items-center justify-center font-bold shrink-0 transition-transform ${
+              isOpen ? 'scale-105' : ''
+            } ${iconBgClass}`}
+          >
+            {icon}
+          </div>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <h2 className="text-sm font-bold text-slate-900 dark:text-white">
+                {title}
+              </h2>
+              {badgeContent}
+            </div>
+            {subtitle && (
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate mt-0.5">
+                {subtitle}
+              </p>
+            )}
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2.5 shrink-0 ml-auto">
+          {headerAction && (
+            <div onClick={(e) => e.stopPropagation()}>
+              {headerAction}
+            </div>
+          )}
+          <button
+            type="button"
+            className="p-1.5 rounded-xl hover:bg-slate-200/60 dark:hover:bg-slate-700/60 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition"
+            aria-label={isOpen ? 'Colapsar sección' : 'Expandir sección'}
+          >
+            <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
+          </button>
+        </div>
+      </div>
+
+      {/* ── Collapsible Content ── */}
+      {isOpen && (
+        <div className="p-4 sm:p-5 border-t border-slate-100 dark:border-slate-800/80 bg-slate-50/30 dark:bg-slate-950/20">
+          {children}
+        </div>
+      )}
+    </section>
+  );
+}
 
 export default function AdminDashboard() {
   const { user, profile, isAdmin } = useAuth();
@@ -75,6 +174,26 @@ export default function AdminDashboard() {
   const [allProfiles, setAllProfiles] = useState<AdminProfileRow[]>([]);
   const [cohortSummaries, setCohortSummaries] = useState<Map<string, StudentCohortSummary>>(new Map());
   const [weekItems, setWeekItems] = useState<CalendarItem[]>([]);
+
+  // Topic Adoption summary & collapsible sections state (all collapsed by default)
+  const [topicSummary, setTopicSummary] = useState<TopicAdoptionSummary | null>(null);
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
+
+  const toggleSection = (id: string) => {
+    setOpenSections((prev) => ({ ...prev, [id]: !prev[id] }));
+  };
+
+  const allSectionIds = ['topics', 'submissions', 'waitlist', 'quizzes', 'editorial', 'retakes', 'atRisk', 'calendar'];
+  const areAllOpen = allSectionIds.every((id) => openSections[id]);
+  const toggleAllSections = () => {
+    if (areAllOpen) {
+      setOpenSections({});
+    } else {
+      const all: Record<string, boolean> = {};
+      allSectionIds.forEach((id) => { all[id] = true; });
+      setOpenSections(all);
+    }
+  };
 
   // Action busy states
   const [admittingId, setAdmittingId] = useState<string | null>(null);
@@ -381,6 +500,27 @@ export default function AdminDashboard() {
     return liveWorkshop || currentWeekItems[0] || null;
   }, [weekItems]);
 
+  // Total pending alarms calculation for visual guidance (red = action needed)
+  const totalPendingAlarms = useMemo(() => {
+    let count = 0;
+    if (topicSummary && topicSummary.myTopicsCount === 0) count++;
+    if (sortedSubmissions.length > 0) count += sortedSubmissions.length;
+    if (admissionCount > 0) count += admissionCount;
+    if (pendingQuizzes.length > 0) count += pendingQuizzes.length;
+    if (pendingTopicRevisions.length > 0) count += pendingTopicRevisions.length;
+    if (pendingRetakes.length > 0) count += pendingRetakes.length;
+    if (atRiskStudents.length > 0) count += atRiskStudents.length;
+    return count;
+  }, [
+    topicSummary,
+    sortedSubmissions.length,
+    admissionCount,
+    pendingQuizzes.length,
+    pendingTopicRevisions.length,
+    pendingRetakes.length,
+    atRiskStudents.length,
+  ]);
+
   return (
     <AdminLayout
       title="Bandeja"
@@ -466,39 +606,234 @@ export default function AdminDashboard() {
       )}
 
       {/* ══════════════════════════════════════════════════════════════════════════
-          BANDEJA: COLA DE DECISIONES CORTAS
+          BANDEJA: GUÍA VISUAL Y SECCIONES COLAPSABLES
           ══════════════════════════════════════════════════════════════════════════ */}
-      <div className="space-y-8">
-        {/* ── 1. Médicos en lista de espera (con Admitir en la misma fila) ── */}
-        <section>
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-xl bg-amber-500/15 text-amber-600 dark:text-amber-400 flex items-center justify-center font-bold">
-                <Clock className="w-4 h-4" />
-              </div>
-              <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                <span>Médicos en lista de espera</span>
-                <span
-                  className={`px-2 py-0.5 rounded-full text-xs font-black ${
-                    waitlistError
-                      ? 'bg-rose-100 text-rose-800 dark:bg-rose-950/80 dark:text-rose-300 border border-rose-300 dark:border-rose-800'
-                      : admissionCount > 0
-                      ? 'bg-amber-100 text-amber-900 dark:bg-amber-950/80 dark:text-amber-300 border border-amber-300 dark:border-amber-800'
-                      : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'
-                  }`}
-                >
-                  {waitlistError ? 'sin lectura' : `${admissionCount} por admitir`}
-                </span>
-              </h2>
+      
+      {/* ── Barra de Guía Visual y Resumen de Pendientes ── */}
+      <div className="mb-6 p-4 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex items-center gap-3 min-w-0">
+          <div
+            className={`w-10 h-10 rounded-2xl flex items-center justify-center font-bold shrink-0 ${
+              totalPendingAlarms > 0
+                ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400'
+                : 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+            }`}
+          >
+            {totalPendingAlarms > 0 ? (
+              <AlertTriangle className="w-5 h-5 text-rose-600 dark:text-rose-400" />
+            ) : (
+              <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+            )}
+          </div>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                Guía de Pendientes de la Bandeja
+              </h3>
+              <span
+                className={`px-2.5 py-0.5 rounded-full text-xs font-black border inline-flex items-center gap-1.5 ${
+                  totalPendingAlarms > 0
+                    ? 'bg-rose-100 text-rose-800 dark:bg-rose-950/80 dark:text-rose-200 border-rose-300 dark:border-rose-800 shadow-2xs'
+                    : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
+                }`}
+              >
+                {totalPendingAlarms > 0 && <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />}
+                {totalPendingAlarms > 0
+                  ? `${totalPendingAlarms} ${totalPendingAlarms === 1 ? 'pendiente que resolver' : 'pendientes que resolver'}`
+                  : 'Todo al día (0 pendientes)'}
+              </span>
             </div>
+            {/* Color coding legend as user requested */}
+            <div className="flex items-center gap-3 text-[11px] text-slate-500 dark:text-slate-400 mt-1 flex-wrap">
+              <span className="inline-flex items-center gap-1 text-rose-700 dark:text-rose-400 font-semibold">
+                <span className="w-2 h-2 rounded-full bg-rose-500" />
+                Rojo = Alarma / Pendientes a resolver
+              </span>
+              <span>·</span>
+              <span className="inline-flex items-center gap-1 text-amber-700 dark:text-amber-400 font-semibold">
+                <span className="w-2 h-2 rounded-full bg-amber-500" />
+                Ámbar = En propuesta
+              </span>
+              <span>·</span>
+              <span className="inline-flex items-center gap-1 text-emerald-700 dark:text-emerald-400 font-semibold">
+                <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                Verde = Al día / Confirmado
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={toggleAllSections}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-semibold transition cursor-pointer shadow-2xs"
+          >
+            <span>{areAllOpen ? 'Colapsar todas las secciones' : 'Expandir todas las secciones'}</span>
+          </button>
+        </div>
+      </div>
+
+      <div className="space-y-4">
+        {/* ── 1. Temas Docentes y Asignación de Clases (AL INICIO, colapsable, colapsado por defecto) ── */}
+        <TopicAdoptionInbox
+          onChanged={loadData}
+          isOpen={openSections['topics'] ?? false}
+          onToggle={() => toggleSection('topics')}
+          onSummaryChange={setTopicSummary}
+        />
+
+        {/* ── 2. Entregas por calificar (colapsable, colapsada por defecto) ── */}
+        <CollapsibleDashboardSection
+          id="submissions"
+          title="Entregas por calificar"
+          subtitle="Tareas y casos clínicos que esperan tu evaluación"
+          icon={<FileCheck className="w-4 h-4" />}
+          iconBgClass={
+            sortedSubmissions.length > 0
+              ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400'
+              : 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+          }
+          badgeVariant={sortedSubmissions.length > 0 ? 'alarm' : 'success'}
+          badgeContent={
+            sortedSubmissions.length > 0 ? (
+              <span className="px-2.5 py-0.5 rounded-full text-xs font-black bg-rose-100 text-rose-800 dark:bg-rose-950/80 dark:text-rose-200 border border-rose-300 dark:border-rose-800 inline-flex items-center gap-1.5 shadow-2xs">
+                <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
+                {sortedSubmissions.length} por calificar (Alarma)
+              </span>
+            ) : (
+              <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 inline-flex items-center gap-1">
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                Al día · 0 por calificar
+              </span>
+            )
+          }
+          headerAction={
+            <Link
+              to="/admin/alumnos/tareas?nueva=1"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition shadow-2xs"
+            >
+              Nueva tarea
+            </Link>
+          }
+          isOpen={openSections['submissions'] ?? false}
+          onToggle={() => toggleSection('submissions')}
+        >
+          {sortedSubmissions.length === 0 ? (
+            <div className="p-4 rounded-2xl border border-dashed border-slate-200 dark:border-slate-800 bg-white/40 dark:bg-slate-900/40 text-xs text-slate-500 flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+              <span>Al día: no hay tareas ni casos clínicos pendientes de calificación en este momento.</span>
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden divide-y divide-slate-100 dark:divide-slate-800 shadow-2xs">
+              {sortedSubmissions.map((item) => {
+                const { assignment, studentProfile } = item;
+                const submittedDate = assignment.submitted_at
+                  ? new Date(assignment.submitted_at).toLocaleDateString('es-MX', {
+                      month: 'short',
+                      day: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })
+                  : 'Reciente';
+
+                return (
+                  <div
+                    key={assignment.id}
+                    className="p-3.5 sm:px-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-slate-50 dark:hover:bg-slate-800/40 transition text-xs"
+                  >
+                    <div className="flex items-start sm:items-center gap-3 min-w-0">
+                      <div className="w-9 h-9 rounded-xl bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-bold text-xs shrink-0 mt-0.5 sm:mt-0">
+                        {studentProfile?.display_name?.charAt(0) || 'M'}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="font-bold text-slate-900 dark:text-white truncate">
+                            {studentProfile?.display_name || 'Médico Cursista'}
+                          </p>
+                          <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 shrink-0">
+                            {assignment.type === 'clinical_case'
+                              ? 'Caso EMG'
+                              : assignment.type === 'emg_report'
+                              ? 'Reporte de Trazos'
+                              : 'Tarea Práctica'}
+                          </span>
+                          <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200 dark:border-rose-800">
+                            Pendiente
+                          </span>
+                        </div>
+                        <p className="font-medium text-slate-700 dark:text-slate-300 truncate mt-0.5">
+                          {assignment.title}
+                        </p>
+                        {assignment.student_notes && (
+                          <p className="text-[11px] text-slate-500 italic truncate">
+                            "{assignment.student_notes}"
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100 dark:border-slate-800">
+                      <div className="flex items-center gap-1.5 text-[11px] text-slate-400">
+                        <Clock className="w-3 h-3" />
+                        <span>{submittedDate}</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setGradingItem(item)}
+                        className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white font-bold text-xs shadow-2xs transition cursor-pointer"
+                      >
+                        <FileCheck className="w-3.5 h-3.5" />
+                        <span>Calificar</span>
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </CollapsibleDashboardSection>
+
+        {/* ── 3. Médicos en lista de espera (colapsable, colapsada por defecto) ── */}
+        <CollapsibleDashboardSection
+          id="waitlist"
+          title="Médicos en lista de espera"
+          subtitle="Solicitudes de acceso y admisión pendientes de aprobación"
+          icon={<Clock className="w-4 h-4" />}
+          iconBgClass={
+            admissionCount > 0 || waitlistError
+              ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400'
+              : 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+          }
+          badgeVariant={admissionCount > 0 || waitlistError ? 'alarm' : 'success'}
+          badgeContent={
+            waitlistError ? (
+              <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-rose-100 text-rose-800 dark:bg-rose-950/80 dark:text-rose-300 border border-rose-300 dark:border-rose-800">
+                Sin lectura
+              </span>
+            ) : admissionCount > 0 ? (
+              <span className="px-2.5 py-0.5 rounded-full text-xs font-black bg-rose-100 text-rose-800 dark:bg-rose-950/80 dark:text-rose-200 border border-rose-300 dark:border-rose-800 inline-flex items-center gap-1.5 shadow-2xs">
+                <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
+                {admissionCount} por admitir (Alarma)
+              </span>
+            ) : (
+              <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 inline-flex items-center gap-1">
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                Al día · 0 por admitir
+              </span>
+            )
+          }
+          headerAction={
             <Link
               to="/admin/admisiones"
               className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline"
             >
               Ver todas las admisiones →
             </Link>
-          </div>
-
+          }
+          isOpen={openSections['waitlist'] ?? false}
+          onToggle={() => toggleSection('waitlist')}
+        >
           {waitlistError ? (
             <div className="p-4 rounded-2xl border border-rose-200 dark:border-rose-900/60 bg-rose-50/70 dark:bg-rose-950/30 text-xs text-rose-700 dark:text-rose-300 flex items-center gap-2">
               <AlertTriangle className="w-4 h-4 shrink-0" />
@@ -510,7 +845,7 @@ export default function AdminDashboard() {
               <span>Al día: no hay solicitudes de médicos en lista de espera pendientes de admisión.</span>
             </div>
           ) : (
-            <div className="rounded-3xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden divide-y divide-slate-100 dark:divide-slate-800 shadow-sm">
+            <div className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden divide-y divide-slate-100 dark:divide-slate-800 shadow-2xs">
               {profilePending.map((profile) => (
                 <div
                   key={profile.id}
@@ -525,7 +860,7 @@ export default function AdminDashboard() {
                         <p className="font-bold text-slate-900 dark:text-white truncate">
                           {profile.display_name || 'Médico sin nombre'}
                         </p>
-                        <span className="px-2 py-0.2 rounded-md text-[10px] font-semibold bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300">
+                        <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800">
                           Perfil por aprobar
                         </span>
                       </div>
@@ -562,8 +897,11 @@ export default function AdminDashboard() {
                         <p className="font-bold text-slate-900 dark:text-white truncate">
                           {item.display_name}
                         </p>
-                        <span className="px-2 py-0.2 rounded-md text-[10px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                        <span className="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
                           {item.course_title}
+                        </span>
+                        <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800">
+                          Por admitir
                         </span>
                       </div>
                       <p className="text-[11px] text-slate-500 truncate mt-0.5">
@@ -591,145 +929,53 @@ export default function AdminDashboard() {
               ))}
             </div>
           )}
-        </section>
+        </CollapsibleDashboardSection>
 
-        {/* ── 2. Entregas por calificar (la más antigua arriba, con Calificar en la fila) ── */}
-        <section>
-            <div className="flex items-center justify-between mb-3 gap-3">
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-xl bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-bold">
-                <FileCheck className="w-4 h-4" />
-              </div>
-              <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                <span>Entregas por calificar</span>
-                <span
-                  className={`px-2 py-0.5 rounded-full text-xs font-black ${
-                    sortedSubmissions.length > 0
-                      ? 'bg-amber-400 text-slate-950'
-                      : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'
-                  }`}
-                >
-                  {sortedSubmissions.length} por calificar
-                </span>
-              </h2>
-            </div>
-            <Link
-              to="/admin/alumnos/tareas?nueva=1"
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold shrink-0"
-            >
-              Nueva tarea
-            </Link>
-          </div>
-
-          {sortedSubmissions.length === 0 ? (
-            <div className="p-4 rounded-2xl border border-dashed border-slate-200 dark:border-slate-800 bg-white/40 dark:bg-slate-900/40 text-xs text-slate-500 flex items-center gap-2">
-              <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
-              <span>Al día: no hay tareas ni casos clínicos pendientes de calificación en este momento.</span>
-            </div>
-          ) : (
-            <div className="rounded-3xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden divide-y divide-slate-100 dark:divide-slate-800 shadow-sm">
-              {sortedSubmissions.map((item) => {
-                const { assignment, studentProfile } = item;
-                const submittedDate = assignment.submitted_at
-                  ? new Date(assignment.submitted_at).toLocaleDateString('es-MX', {
-                      month: 'short',
-                      day: 'numeric',
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    })
-                  : 'Reciente';
-
-                return (
-                  <div
-                    key={assignment.id}
-                    className="p-3.5 sm:px-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-slate-50 dark:hover:bg-slate-800/40 transition text-xs"
-                  >
-                    <div className="flex items-start sm:items-center gap-3 min-w-0">
-                      <div className="w-9 h-9 rounded-xl bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-bold text-xs shrink-0 mt-0.5 sm:mt-0">
-                        {studentProfile?.display_name?.charAt(0) || 'M'}
-                      </div>
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <p className="font-bold text-slate-900 dark:text-white truncate">
-                            {studentProfile?.display_name || 'Médico Cursista'}
-                          </p>
-                          <span className="px-2 py-0.2 rounded-md text-[10px] font-bold bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 shrink-0">
-                            {assignment.type === 'clinical_case'
-                              ? 'Caso EMG'
-                              : assignment.type === 'emg_report'
-                              ? 'Reporte de Trazos'
-                              : 'Tarea Práctica'}
-                          </span>
-                        </div>
-                        <p className="font-medium text-slate-700 dark:text-slate-300 truncate mt-0.5">
-                          {assignment.title}
-                        </p>
-                        {assignment.student_notes && (
-                          <p className="text-[11px] text-slate-500 italic truncate">
-                            "{assignment.student_notes}"
-                          </p>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100 dark:border-slate-800">
-                      <div className="flex items-center gap-1.5 text-[11px] text-slate-400">
-                        <Clock className="w-3 h-3" />
-                        <span>{submittedDate}</span>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setGradingItem(item)}
-                        className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white font-bold text-xs shadow-2xs transition cursor-pointer"
-                      >
-                        <FileCheck className="w-3.5 h-3.5" />
-                        <span>Calificar</span>
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </section>
-
-        {/* ── 3. Cola de revisión de quizzes y exámenes (Validación clínica) ── */}
-        <section>
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 flex items-center justify-center font-bold">
-                <GraduationCap className="w-4 h-4" />
-              </div>
-              <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                <span>Cola de revisión de quizzes</span>
-                <span
-                  className={`px-2 py-0.5 rounded-full text-xs font-black ${
-                    pendingQuizzes.length > 0
-                      ? 'bg-emerald-100 text-emerald-900 dark:bg-emerald-950/80 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800'
-                      : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'
-                  }`}
-                >
-                  {pendingQuizzes.length} {pendingQuizzes.length === 1 ? 'examen pendiente' : 'exámenes pendientes de revisión'}
-                </span>
-              </h2>
-            </div>
-            {pendingQuizzes.length > 0 && (
+        {/* ── 4. Cola de revisión de quizzes (Validación clínica) ── */}
+        <CollapsibleDashboardSection
+          id="quizzes"
+          title="Cola de revisión de quizzes"
+          subtitle="Evaluaciones pendientes de validación clínica de reactivos"
+          icon={<GraduationCap className="w-4 h-4" />}
+          iconBgClass={
+            pendingQuizzes.length > 0
+              ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400'
+              : 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+          }
+          badgeVariant={pendingQuizzes.length > 0 ? 'alarm' : 'success'}
+          badgeContent={
+            pendingQuizzes.length > 0 ? (
+              <span className="px-2.5 py-0.5 rounded-full text-xs font-black bg-rose-100 text-rose-800 dark:bg-rose-950/80 dark:text-rose-200 border border-rose-300 dark:border-rose-800 inline-flex items-center gap-1.5 shadow-2xs">
+                <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
+                {pendingQuizzes.length} por validar (Alarma)
+              </span>
+            ) : (
+              <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 inline-flex items-center gap-1">
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                Al día · 0 exámenes pendientes
+              </span>
+            )
+          }
+          headerAction={
+            pendingQuizzes.length > 0 ? (
               <Link
                 to="/admin/revisiones?tab=clinical"
                 className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline"
               >
-                Abrir validación clínica completa →
+                Abrir validación clínica →
               </Link>
-            )}
-          </div>
-
+            ) : undefined
+          }
+          isOpen={openSections['quizzes'] ?? false}
+          onToggle={() => toggleSection('quizzes')}
+        >
           {pendingQuizzes.length === 0 ? (
             <div className="p-4 rounded-2xl border border-dashed border-slate-200 dark:border-slate-800 bg-white/40 dark:bg-slate-900/40 text-xs text-slate-500 flex items-center gap-2">
               <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
               <span>Al día: no hay exámenes ni cuestionarios pendientes de revisión clínica.</span>
             </div>
           ) : (
-            <div className="rounded-3xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden divide-y divide-slate-100 dark:divide-slate-800 shadow-sm">
+            <div className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden divide-y divide-slate-100 dark:divide-slate-800 shadow-2xs">
               {displayedQuizzes.map((quiz) => {
                 const title = quiz.title || `Evaluación: ${quiz.topic_id}`;
                 const mod = allModules.find((m) => m.id === quiz.module_id);
@@ -750,11 +996,11 @@ export default function AdminDashboard() {
                           <p className="font-bold text-slate-900 dark:text-white truncate">
                             {title}
                           </p>
-                          <span className="px-2 py-0.2 rounded-md text-[10px] font-bold bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300">
+                          <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800">
                             Pendiente
                           </span>
                           {isDuplicate && (
-                            <span className="px-2 py-0.2 rounded-md text-[10px] font-bold bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/30">
+                            <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/30">
                               Duplicado
                             </span>
                           )}
@@ -832,45 +1078,53 @@ export default function AdminDashboard() {
               )}
             </div>
           )}
-        </section>
+        </CollapsibleDashboardSection>
 
-        {/* ── 4. Todos los pendientes de aprobación de los temas (Cola editorial) ── */}
-        <section>
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-xl bg-purple-500/15 text-purple-600 dark:text-purple-400 flex items-center justify-center font-bold">
-                <FileCheck className="w-4 h-4" />
-              </div>
-              <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                <span>Temas pendientes de aprobación</span>
-                <span
-                  className={`px-2 py-0.5 rounded-full text-xs font-black ${
-                    pendingTopicRevisions.length > 0
-                      ? 'bg-purple-100 text-purple-900 dark:bg-purple-950/80 dark:text-purple-300 border border-purple-300 dark:border-purple-800'
-                      : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'
-                  }`}
-                >
-                  {pendingTopicRevisions.length} propuestas
-                </span>
-              </h2>
-            </div>
-            {pendingTopicRevisions.length > 0 && (
+        {/* ── 5. Temas pendientes de aprobación (Cola editorial) ── */}
+        <CollapsibleDashboardSection
+          id="editorial"
+          title="Temas pendientes de aprobación"
+          subtitle="Propuestas curriculares y lecciones por aprobar en el temario"
+          icon={<FileCheck className="w-4 h-4" />}
+          iconBgClass={
+            pendingTopicRevisions.length > 0
+              ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400'
+              : 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+          }
+          badgeVariant={pendingTopicRevisions.length > 0 ? 'alarm' : 'success'}
+          badgeContent={
+            pendingTopicRevisions.length > 0 ? (
+              <span className="px-2.5 py-0.5 rounded-full text-xs font-black bg-rose-100 text-rose-800 dark:bg-rose-950/80 dark:text-rose-200 border border-rose-300 dark:border-rose-800 inline-flex items-center gap-1.5 shadow-2xs">
+                <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
+                {pendingTopicRevisions.length} propuestas por aprobar
+              </span>
+            ) : (
+              <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 inline-flex items-center gap-1">
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                Al día · 0 propuestas pendientes
+              </span>
+            )
+          }
+          headerAction={
+            pendingTopicRevisions.length > 0 ? (
               <Link
                 to="/admin/revisiones"
                 className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline"
               >
                 Abrir cola editorial completa →
               </Link>
-            )}
-          </div>
-
+            ) : undefined
+          }
+          isOpen={openSections['editorial'] ?? false}
+          onToggle={() => toggleSection('editorial')}
+        >
           {pendingTopicRevisions.length === 0 ? (
             <div className="p-4 rounded-2xl border border-dashed border-slate-200 dark:border-slate-800 bg-white/40 dark:bg-slate-900/40 text-xs text-slate-500 flex items-center gap-2">
               <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
               <span>Al día: no hay temas ni propuestas editoriales pendientes de aprobación en el temario.</span>
             </div>
           ) : (
-            <div className="rounded-3xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden divide-y divide-slate-100 dark:divide-slate-800 shadow-sm">
+            <div className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden divide-y divide-slate-100 dark:divide-slate-800 shadow-2xs">
               {pendingTopicRevisions.map((rev) => {
                 const title = rev.payload?.title || rev.target_topic_id || 'Tema en revisión';
                 const isQuiz = rev.payload?.revisionType === 'quiz';
@@ -888,8 +1142,11 @@ export default function AdminDashboard() {
                           <p className="font-bold text-slate-900 dark:text-white truncate">
                             {title}
                           </p>
-                          <span className="px-2 py-0.2 rounded-md text-[10px] font-semibold bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300">
+                          <span className="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300">
                             {isQuiz ? 'Evaluación' : `Módulo ${rev.module_id}`}
+                          </span>
+                          <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200 dark:border-rose-800">
+                            Por aprobar
                           </span>
                         </div>
                         <p className="text-[11px] text-slate-500 truncate mt-0.5">
@@ -920,30 +1177,36 @@ export default function AdminDashboard() {
               })}
             </div>
           )}
-        </section>
+        </CollapsibleDashboardSection>
 
-        {/* ── 5. Reintentos de examen (con Aprobar o Rechazar) ── */}
-        <section>
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-xl bg-cyan-500/15 text-cyan-600 dark:text-cyan-400 flex items-center justify-center font-bold">
-                <RotateCcw className="w-4 h-4" />
-              </div>
-              <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                <span>Reintentos de examen</span>
-                <span
-                  className={`px-2 py-0.5 rounded-full text-xs font-black ${
-                    pendingRetakes.length > 0
-                      ? 'bg-cyan-100 text-cyan-900 dark:bg-cyan-950/80 dark:text-cyan-300 border border-cyan-300 dark:border-cyan-800'
-                      : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'
-                  }`}
-                >
-                  {pendingRetakes.length} solicitudes
-                </span>
-              </h2>
-            </div>
-          </div>
-
+        {/* ── 6. Reintentos de examen (colapsable, colapsado por defecto) ── */}
+        <CollapsibleDashboardSection
+          id="retakes"
+          title="Reintentos de examen"
+          subtitle="Solicitudes de alumnos que requieren aprobación o rechazo"
+          icon={<RotateCcw className="w-4 h-4" />}
+          iconBgClass={
+            pendingRetakes.length > 0
+              ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400'
+              : 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+          }
+          badgeVariant={pendingRetakes.length > 0 ? 'alarm' : 'success'}
+          badgeContent={
+            pendingRetakes.length > 0 ? (
+              <span className="px-2.5 py-0.5 rounded-full text-xs font-black bg-rose-100 text-rose-800 dark:bg-rose-950/80 dark:text-rose-200 border border-rose-300 dark:border-rose-800 inline-flex items-center gap-1.5 shadow-2xs">
+                <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
+                {pendingRetakes.length} solicitudes (Alarma)
+              </span>
+            ) : (
+              <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 inline-flex items-center gap-1">
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                Al día · 0 solicitudes
+              </span>
+            )
+          }
+          isOpen={openSections['retakes'] ?? false}
+          onToggle={() => toggleSection('retakes')}
+        >
           {pendingRetakes.length === 0 ? (
             <div className="p-4 rounded-2xl border border-dashed border-slate-200 dark:border-slate-800 bg-white/40 dark:bg-slate-900/40 text-xs text-slate-500 flex items-center gap-2">
               <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
@@ -964,7 +1227,7 @@ export default function AdminDashboard() {
                         </p>
                         <p className="text-slate-400 text-[11px]">{ret.studentProfile?.email}</p>
                       </div>
-                      <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-cyan-50 dark:bg-cyan-950/60 text-cyan-700 dark:text-cyan-300 border border-cyan-200 dark:border-cyan-800">
+                      <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800">
                         Reintento Solicitado
                       </span>
                     </div>
@@ -1004,43 +1267,51 @@ export default function AdminDashboard() {
               ))}
             </div>
           )}
-        </section>
+        </CollapsibleDashboardSection>
 
-        {/* ── 6. Alumnos en riesgo (con nombre, calificación y enlace a kárdex) ── */}
-        <section>
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-xl bg-rose-500/15 text-rose-600 dark:text-rose-400 flex items-center justify-center font-bold">
-                <AlertTriangle className="w-4 h-4" />
-              </div>
-              <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                <span>Alumnos en riesgo</span>
-                <span
-                  className={`px-2 py-0.5 rounded-full text-xs font-black ${
-                    atRiskStudents.length > 0
-                      ? 'bg-rose-100 text-rose-900 dark:bg-rose-950/80 dark:text-rose-300 border border-rose-300 dark:border-rose-800'
-                      : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'
-                  }`}
-                >
-                  {atRiskStudents.length} en alerta
-                </span>
-              </h2>
-            </div>
+        {/* ── 7. Alumnos en riesgo (colapsable, colapsado por defecto) ── */}
+        <CollapsibleDashboardSection
+          id="atRisk"
+          title="Alumnos en riesgo"
+          subtitle="Estudiantes con rezago académico o calificación menor a 70 pts"
+          icon={<AlertTriangle className="w-4 h-4" />}
+          iconBgClass={
+            atRiskStudents.length > 0
+              ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400'
+              : 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+          }
+          badgeVariant={atRiskStudents.length > 0 ? 'alarm' : 'success'}
+          badgeContent={
+            atRiskStudents.length > 0 ? (
+              <span className="px-2.5 py-0.5 rounded-full text-xs font-black bg-rose-100 text-rose-800 dark:bg-rose-950/80 dark:text-rose-200 border border-rose-300 dark:border-rose-800 inline-flex items-center gap-1.5 shadow-2xs">
+                <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
+                {atRiskStudents.length} en alerta académica
+              </span>
+            ) : (
+              <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 inline-flex items-center gap-1">
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                Al día · Sin alumnos en riesgo
+              </span>
+            )
+          }
+          headerAction={
             <Link
               to="/admin/alumnos"
               className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline"
             >
               Ver todos los alumnos →
             </Link>
-          </div>
-
+          }
+          isOpen={openSections['atRisk'] ?? false}
+          onToggle={() => toggleSection('atRisk')}
+        >
           {atRiskStudents.length === 0 ? (
             <div className="p-4 rounded-2xl border border-dashed border-slate-200 dark:border-slate-800 bg-white/40 dark:bg-slate-900/40 text-xs text-slate-500 flex items-center gap-2">
               <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
               <span>Excelente: ningún alumno de la cohorte se encuentra en estado de riesgo o rezago académico.</span>
             </div>
           ) : (
-            <div className="rounded-3xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden divide-y divide-slate-100 dark:divide-slate-800 shadow-sm">
+            <div className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden divide-y divide-slate-100 dark:divide-slate-800 shadow-2xs">
               {atRiskStudents.slice(0, 5).map(({ profile: std, summary }) => (
                 <div
                   key={std.id}
@@ -1076,45 +1347,83 @@ export default function AdminDashboard() {
               ))}
             </div>
           )}
-        </section>
+        </CollapsibleDashboardSection>
 
-        <TopicAdoptionInbox onChanged={loadData} />
+        {/* ── 8. La clase de esta semana (colapsable, colapsado por defecto) ── */}
+        <CollapsibleDashboardSection
+          id="calendar"
+          title="La clase de esta semana"
+          subtitle="Próxima sesión en vivo o evento agendado en el calendario"
+          icon={<Calendar className="w-4 h-4" />}
+          iconBgClass="bg-indigo-500/15 text-indigo-600 dark:text-indigo-400"
+          badgeVariant={thisWeekClass ? 'info' : 'neutral'}
+          badgeContent={
+            thisWeekClass ? (
+              <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
+                {calendarItemStartDate(thisWeekClass.startsAt, thisWeekClass.allDay).toLocaleDateString('es-MX', {
+                  weekday: 'short',
+                  day: 'numeric',
+                  month: 'short',
+                })}
+              </span>
+            ) : (
+              <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+                Sin clase programada
+              </span>
+            )
+          }
+          headerAction={
+            <Link
+              to="/admin/calendario"
+              className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline"
+            >
+              <span>{thisWeekClass ? 'Abrir calendario' : 'Programar en el calendario'}</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </Link>
+          }
+          isOpen={openSections['calendar'] ?? false}
+          onToggle={() => toggleSection('calendar')}
+        >
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-9 h-9 rounded-xl bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0">
+                <Calendar className="w-4 h-4" />
+              </div>
+              <div className="min-w-0">
+                {thisWeekClass ? (
+                  <div>
+                    <p className="text-slate-800 dark:text-slate-200 font-semibold text-sm">
+                      {thisWeekClass.title}
+                    </p>
+                    <p className="text-slate-500 dark:text-slate-400 text-xs mt-0.5">
+                      Fecha:{' '}
+                      <span className="text-indigo-600 dark:text-cyan-400 font-bold">
+                        {calendarItemStartDate(thisWeekClass.startsAt, thisWeekClass.allDay).toLocaleDateString('es-MX', {
+                          weekday: 'long',
+                          day: 'numeric',
+                          month: 'long',
+                          year: 'numeric',
+                        })}
+                      </span>
+                    </p>
+                  </div>
+                ) : (
+                  <p className="text-slate-500 dark:text-slate-400">
+                    No hay ninguna clase en vivo o evento programado para esta semana.
+                  </p>
+                )}
+              </div>
+            </div>
 
-        {/* ── 7. La clase de esta semana (una sola línea del calendario) ── */}
-        <section className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="w-8 h-8 rounded-xl bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0">
-              <Calendar className="w-4 h-4" />
-            </div>
-            <div className="min-w-0">
-              {thisWeekClass ? (
-                <p className="text-slate-800 dark:text-slate-200 truncate">
-                  <strong className="text-slate-900 dark:text-white">Esta semana:</strong>{' '}
-                  <span className="text-indigo-600 dark:text-cyan-400 font-semibold">
-                    {new Date(thisWeekClass.startsAt).toLocaleDateString('es-MX', {
-                      weekday: 'short',
-                      day: 'numeric',
-                      month: 'short',
-                    })}
-                  </span>{' '}
-                  · {thisWeekClass.title}
-                </p>
-              ) : (
-                <p className="text-slate-500 dark:text-slate-400">
-                  <strong className="text-slate-700 dark:text-slate-300">Esta semana:</strong> Sin clase en vivo o evento programado.
-                </p>
-              )}
-            </div>
+            <Link
+              to="/admin/calendario"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-indigo-200 dark:border-indigo-800 font-bold text-xs text-indigo-600 dark:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 transition shrink-0"
+            >
+              <span>{thisWeekClass ? 'Ver en calendario' : 'Programar clase'}</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </Link>
           </div>
-
-          <Link
-            to="/admin/calendario"
-            className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline shrink-0"
-          >
-            <span>{thisWeekClass ? 'Abrir calendario' : 'Programar en el calendario'}</span>
-            <ArrowRight className="w-3.5 h-3.5" />
-          </Link>
-        </section>
+        </CollapsibleDashboardSection>
       </div>
 
       {/* ══════════════════════════════════════════════════════════════════════════

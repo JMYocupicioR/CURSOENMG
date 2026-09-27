@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   CALENDAR_COLOR_LABELS_STORAGE_KEY,
+  calendarEventColor,
   calendarTypeLabel,
   DEFAULT_CALENDAR_COLOR_LABELS,
   mergeCalendarColorLabels,
@@ -20,6 +21,8 @@ describe('calendar color labels', () => {
     expect(merged.exam.label).toBe('');
     expect(calendarTypeLabel('exam', merged)).toBe('Exámenes');
     expect(merged.milestone.label).toBe('Cortes');
+    expect(calendarEventColor('reading', merged)).toBe(merged.practical_task.color);
+    expect(calendarEventColor('emg_report', merged)).toBe(merged.practical_task.color);
   });
 
   it('round-trips through storage', () => {

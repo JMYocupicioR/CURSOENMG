@@ -1,8 +1,8 @@
 import { Link } from 'react-router-dom';
 import { AlertTriangle, ArrowRight, Calendar } from 'lucide-react';
 import type { CalendarItem } from '../../../types/academicCalendar';
-import { endOfWeekMonday, itemsInRange, startOfWeekMonday } from '../../../utils/academicCalendar';
-import { calendarTypeColor, calendarTypeLabel, useCalendarColorLabels } from '../../../utils/calendarColorLabels';
+import { calendarItemStartDate, endOfWeekMonday, itemsInRange, startOfWeekMonday } from '../../../utils/academicCalendar';
+import { calendarEventColor, calendarTypeLabel, useCalendarColorLabels } from '../../../utils/calendarColorLabels';
 
 export function CalendarThisWeekStrip({
   items,
@@ -25,7 +25,7 @@ export function CalendarThisWeekStrip({
             <Calendar className="w-4 h-4 text-indigo-500" />
             Esta semana
           </h3>
-          <p className="text-xs text-slate-500 mt-0.5">Clases, exámenes, casos y cortes en el calendario académico.</p>
+          <p className="text-xs text-slate-500 mt-0.5">Clases, exámenes, tareas, casos y cortes en el calendario académico.</p>
         </div>
         <Link
           to={href}
@@ -53,9 +53,9 @@ export function CalendarThisWeekStrip({
         <ul className="space-y-2">
           {weekItems.map((item) => (
             <li key={item.id} className="flex items-center gap-2.5 text-xs">
-              <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: calendarTypeColor(item.type, labels) }} />
+              <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: calendarEventColor(item.type, labels) }} />
               <span className="text-slate-400 font-semibold w-24 shrink-0">
-                {new Date(item.startsAt).toLocaleDateString('es-MX', { weekday: 'short', day: 'numeric' })}
+                {calendarItemStartDate(item.startsAt, item.allDay).toLocaleDateString('es-MX', { weekday: 'short', day: 'numeric' })}
               </span>
               <span className="font-bold text-slate-800 dark:text-slate-100 truncate">{item.title}</span>
               <span className="text-slate-400 ml-auto shrink-0">{calendarTypeLabel(item.type, labels)}</span>

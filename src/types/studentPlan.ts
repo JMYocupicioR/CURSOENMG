@@ -1,3 +1,4 @@
+import type { AssignmentMaterial } from '../utils/assignmentMaterials';
 import type { Profile } from './database';
 import type { QuizAttempt, ModuleQuizProgress } from './quiz';
 import type { ExamSession } from './exam';
@@ -58,6 +59,8 @@ export interface StudentAssignment {
   title: string;
   type: AssignmentType;
   description: string;
+  /** Archivos y enlaces que el profesor adjunta al publicar la tarea. */
+  materials?: AssignmentMaterial[] | null;
   target_module_id?: string | null;
   target_topic_id?: string | null;
   target_subtopic_id?: string | null;

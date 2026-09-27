@@ -11,6 +11,7 @@ import { QuizTopicBadge } from '../quiz/QuizTopicBadge';
 import { OfflineTopicBadge } from '../OfflineTopicBadge';
 import { getQuizFlagForTopic } from '../../services/quizService';
 import { CourseGate } from '../CourseGate';
+import { QuizCatalogReturnBar } from '../admin/quiz/QuizCatalogReturnBar';
 import type { QuizTopicFlag } from '../../types/quiz';
 import { Topic } from '../../types/content';
 import { ChevronRight, Home, ArrowLeft, ArrowRight, List, X, ChevronUp, BookMarked, ExternalLink, Play, Lightbulb, Target, ImageIcon, CheckCircle2, Clock, ClipboardList, Sparkles, FileText } from 'lucide-react';
@@ -844,6 +845,7 @@ export default function TopicPage() {
   return (
     <CourseGate moduleId={moduleId!} topicId={topic.id}>
       <main ref={mainRef} id="contenido-principal" className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-10 xl:px-16 pt-20 sm:pt-24 pb-24">
+        <QuizCatalogReturnBar kind="topic" />
         {/* Grid layout: content + sidebar */}
         <div className="lg:grid lg:grid-cols-[1fr_280px] xl:grid-cols-[1fr_300px] lg:gap-10 xl:gap-14">
         {/* Content Column */}

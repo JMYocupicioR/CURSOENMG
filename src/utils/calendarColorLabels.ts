@@ -33,7 +33,13 @@ export const DEFAULT_CALENDAR_COLOR_LABELS: CalendarColorLabelMap = {
   practical_task: { color: '#f59e0b', label: 'Tareas' },
 };
 
-export const CALENDAR_LEGEND_TYPES: CalendarItemType[] = ['session', 'exam', 'clinical_case', 'milestone'];
+export const CALENDAR_LEGEND_TYPES: CalendarItemType[] = [
+  'session',
+  'exam',
+  'practical_task',
+  'clinical_case',
+  'milestone',
+];
 
 const HEX = /^#([0-9a-fA-F]{6})$/;
 const listeners = new Set<() => void>();
@@ -87,6 +93,12 @@ export function calendarTypeLabel(type: CalendarItemType, labels: CalendarColorL
 
 export function calendarTypeColor(type: CalendarItemType, labels: CalendarColorLabelMap): string {
   return labels[type]?.color || DEFAULT_CALENDAR_COLOR_LABELS[type].color;
+}
+
+/** Lecturas e informes se pintan con el color de Tareas. */
+export function calendarEventColor(type: CalendarItemType, labels: CalendarColorLabelMap): string {
+  const family = type === 'reading' || type === 'emg_report' ? 'practical_task' : type;
+  return calendarTypeColor(family, labels);
 }
 
 export function calendarChipStyle(color: string): { backgroundColor: string; borderColor: string; color: string } {

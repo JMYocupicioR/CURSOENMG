@@ -93,6 +93,7 @@ import {
   getStudentLearningPlans,
 } from '../../services/studentPlanService';
 import { AssignmentDeliveryEditor } from './AssignmentDeliveryPanel';
+import { AssignmentMaterialsList } from './AssignmentMaterialsList';
 import { fetchServerNotifications, markAllServerNotificationsRead, markServerNotificationRead, mergeServerNotifications } from '../../services/assignmentSubmissionService';
 import { StudentStudyHub } from './StudentStudyHub';
 import { StudentCertificatePanel } from './StudentCertificatePanel';
@@ -2398,6 +2399,9 @@ export default function StudentDashboard() {
                           ? 'Caso clínico sin detalles asignado por tu profesor. Abre la actividad en el simulador para analizar la historia clínica, estudios neurofisiológicos y emitir tu diagnóstico.'
                           : asg.description}
                       </p>
+                      {!(isCase && asg.status !== 'approved') && (
+                        <AssignmentMaterialsList materials={asg.materials} />
+                      )}
 
                       {/* Tags de configuración del examen */}
                       {asg.type === 'exam' && (
@@ -2727,6 +2731,7 @@ export default function StudentDashboard() {
                     {submittingAsg.description && (
                       <p className="text-xs text-slate-500 mt-1">{submittingAsg.description}</p>
                     )}
+                    <AssignmentMaterialsList materials={submittingAsg.materials} className="mt-3" />
                   </div>
                   <button
                     type="button"

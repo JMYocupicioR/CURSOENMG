@@ -116,6 +116,9 @@ function collectVisibleDescendantIds(
   return ids;
 }
 
+/** Cuántos temas disparan un aviso antes de proponer o retirar un bloque. */
+export const ADOPT_SCOPE_CONFIRM_AT = 9;
+
 /** Nodo elegido, o ese nodo más los descendientes visibles si includeSubtree. */
 export function collectAdoptTopicIds(
   topics: Topic[],

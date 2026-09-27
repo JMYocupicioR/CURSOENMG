@@ -2,14 +2,10 @@ import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Activity, Calendar, ClipboardList, Pencil, UserCheck, Video, X } from 'lucide-react';
 import type { CalendarItem } from '../../../types/academicCalendar';
-import { parseLocalDateKey } from '../../../utils/academicCalendar';
-import { calendarChipStyle, calendarTypeColor, calendarTypeLabel, useCalendarColorLabels } from '../../../utils/calendarColorLabels';
+import { calendarItemStartDate } from '../../../utils/academicCalendar';
+import { calendarChipStyle, calendarEventColor, calendarTypeLabel, useCalendarColorLabels } from '../../../utils/calendarColorLabels';
 import { listWorkshopInstructorNames } from '../../../services/topicTeachingService';
-
-function calendarDayDate(iso: string): Date {
-  if (/^\d{4}-\d{2}-\d{2}/.test(iso)) return parseLocalDateKey(iso.slice(0, 10));
-  return new Date(iso);
-}
+import { AssignmentMaterialsList } from '../../student/AssignmentMaterialsList';
 
 export function CalendarEventInspector({
   item,
@@ -73,8 +69,8 @@ export function CalendarEventInspector({
 
   if (!item) return null;
 
-  const start = item.allDay ? calendarDayDate(item.startsAt) : new Date(item.startsAt);
-  const end = item.endsAt ? (item.allDay ? calendarDayDate(item.endsAt) : new Date(item.endsAt)) : null;
+  const start = calendarItemStartDate(item.startsAt, item.allDay);
+  const end = item.endsAt ? calendarItemStartDate(item.endsAt, item.allDay) : null;
 
   return (
     <div className="fixed inset-0 z-50">
@@ -94,7 +90,7 @@ export function CalendarEventInspector({
           <div className="min-w-0">
             <span
               className="inline-flex px-2 py-0.5 rounded-lg text-[10px] font-bold border"
-              style={calendarChipStyle(calendarTypeColor(item.type, labels))}
+              style={calendarChipStyle(calendarEventColor(item.type, labels))}
             >
               {calendarTypeLabel(item.type, labels)}
             </span>
@@ -116,6 +112,7 @@ export function CalendarEventInspector({
         {item.description ? (
           <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed line-clamp-4">{item.description}</p>
         ) : null}
+        <AssignmentMaterialsList materials={item.materials} />
 
         <dl className="space-y-2 text-xs">
           <div className="flex justify-between gap-3">

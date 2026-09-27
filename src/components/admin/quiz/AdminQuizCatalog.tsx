@@ -1,54 +1,87 @@
-import { useEffect, useState, useMemo } from 'react';
-import { Link } from 'react-router-dom';
+import { useEffect, useState, useMemo, type MouseEvent } from 'react';
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Search,
-  Filter,
   GraduationCap,
-  BookOpen,
   CheckCircle2,
   AlertCircle,
   Edit3,
   Eye,
-  ExternalLink,
-  Plus,
   ClipboardList,
-  Sparkles,
-  Layers,
+  ChevronRight,
 } from 'lucide-react';
 import { useAllModules } from '../../../hooks/useAllModules';
 import { getAllFlatTopics, topicListKey } from '../../../services/contentMerge';
 import { getAllQuizFlags } from '../../../services/quizService';
 import { getTopicPublicUrl } from '../../../utils/adminUtils';
-import type { QuizTopicFlag } from '../../../types/quiz';
+import type { QuizTopicFlag, QuizQuestionDraft } from '../../../types/quiz';
 import { AdminQuizSimulatorModal } from './AdminQuizSimulatorModal';
 import { getQuizEditorDataForTopic } from '../../../services/editorialService';
+import {
+  buildQuizCatalogPath,
+  clearQuizCatalogReturn,
+  parseQuizCatalogStatus,
+  quizRowDomId,
+  rememberQuizCatalogReturn,
+  type QuizCatalogStatus,
+} from '../../../utils/quizCatalogNavigation';
 
 interface AdminQuizCatalogProps {
   onSelectTopic: (topicId: string, moduleId: string) => void;
 }
 
+type CatalogTopic = {
+  topic: { id: string; title: string };
+  moduleId: string;
+  moduleNumber: number;
+  moduleTitle: string;
+  listKey: string;
+};
+
 export function AdminQuizCatalog({ onSelectTopic }: AdminQuizCatalogProps) {
   const { modules, loading: modulesLoading } = useAllModules();
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const location = useLocation();
   const [flags, setFlags] = useState<QuizTopicFlag[]>([]);
   const [loadingFlags, setLoadingFlags] = useState(true);
 
-  // Filters
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedModuleFilter, setSelectedModuleFilter] = useState('all');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'with_quiz' | 'no_quiz'>('all');
+  const searchQuery = searchParams.get('q') ?? '';
+  const selectedModuleFilter = searchParams.get('modulo') ?? 'all';
+  const statusFilter = parseQuizCatalogStatus(searchParams.get('estado'));
+  const focusedRowId = location.hash.replace(/^#/, '');
+
+  const writeFilters = (patch: {
+    q?: string;
+    modulo?: string;
+    estado?: QuizCatalogStatus;
+  }) => {
+    navigate(
+      buildQuizCatalogPath({
+        q: patch.q !== undefined ? patch.q : searchQuery,
+        modulo: patch.modulo !== undefined ? patch.modulo : selectedModuleFilter,
+        estado: patch.estado !== undefined ? patch.estado : statusFilter,
+      }),
+      { replace: true },
+    );
+  };
 
   // Simulator preview state
   const [simulatorData, setSimulatorData] = useState<{
     isOpen: boolean;
     title: string;
     passScore: number;
-    questions: any[];
+    questions: QuizQuestionDraft[];
   }>({
     isOpen: false,
     title: '',
     passScore: 70,
     questions: [],
   });
+
+  useEffect(() => {
+    clearQuizCatalogReturn();
+  }, []);
 
   useEffect(() => {
     getAllQuizFlags()
@@ -92,14 +125,10 @@ export function AdminQuizCatalog({ onSelectTopic }: AdminQuizCatalogProps) {
       const flag = flagsMap.get(item.topic.id);
       const hasQuiz = Boolean(flag && flag.question_count > 0);
 
-      // Status filter
       if (statusFilter === 'with_quiz' && !hasQuiz) return false;
       if (statusFilter === 'no_quiz' && hasQuiz) return false;
-
-      // Module filter
       if (selectedModuleFilter !== 'all' && item.moduleId !== selectedModuleFilter) return false;
 
-      // Search query
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
         const matchesTitle = item.topic.title.toLowerCase().includes(q);
@@ -112,7 +141,14 @@ export function AdminQuizCatalog({ onSelectTopic }: AdminQuizCatalogProps) {
     });
   }, [allLeafTopics, flagsMap, statusFilter, selectedModuleFilter, searchQuery]);
 
-  // Stats calculation
+  useEffect(() => {
+    if (!focusedRowId || modulesLoading) return;
+    const timer = window.setTimeout(() => {
+      document.getElementById(focusedRowId)?.scrollIntoView({ block: 'center' });
+    }, 80);
+    return () => window.clearTimeout(timer);
+  }, [focusedRowId, modulesLoading, filteredTopics.length]);
+
   const totalTopics = allLeafTopics.length;
   const topicsWithQuiz = allLeafTopics.filter((t) => {
     const f = flagsMap.get(t.topic.id);
@@ -120,8 +156,12 @@ export function AdminQuizCatalog({ onSelectTopic }: AdminQuizCatalogProps) {
   }).length;
   const totalQuestions = flags.reduce((acc, f) => acc + (f.question_count || 0), 0);
   const coveragePercentage = totalTopics > 0 ? Math.round((topicsWithQuiz / totalTopics) * 100) : 0;
+  const catalogFilters = {
+    q: searchQuery,
+    modulo: selectedModuleFilter,
+    estado: statusFilter,
+  };
 
-  // Open direct student preview for a topic
   const handleQuickPreview = async (topicId: string, topicTitle: string) => {
     try {
       const data = await getQuizEditorDataForTopic(topicId);
@@ -137,9 +177,10 @@ export function AdminQuizCatalog({ onSelectTopic }: AdminQuizCatalogProps) {
     }
   };
 
+  const loadingList = (modulesLoading || loadingFlags) && filteredTopics.length === 0;
+
   return (
     <div className="space-y-6">
-      {/* Top Banner & Quick Navigation */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-5 rounded-2xl bg-gradient-to-r from-indigo-900 via-slate-900 to-purple-950 text-white border border-indigo-500/20 shadow-lg">
         <div>
           <div className="flex items-center gap-2 mb-1">
@@ -150,7 +191,7 @@ export function AdminQuizCatalog({ onSelectTopic }: AdminQuizCatalogProps) {
           </div>
           <h2 className="text-lg sm:text-xl font-bold">Gestión y Edición de Quizzes</h2>
           <p className="text-xs sm:text-sm text-indigo-200/80 max-w-xl mt-0.5">
-            Supervisa los cuestionarios activos para los alumnos de los 13 módulos del programa y edita las preguntas directamente.
+            Abre el tema o el módulo para leerlo. Al volver, el renglón queda marcado para agregarle el cuestionario.
           </p>
         </div>
 
@@ -165,7 +206,6 @@ export function AdminQuizCatalog({ onSelectTopic }: AdminQuizCatalogProps) {
         </div>
       </div>
 
-      {/* KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-sm">
           <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
@@ -216,29 +256,15 @@ export function AdminQuizCatalog({ onSelectTopic }: AdminQuizCatalogProps) {
         </div>
       </div>
 
-      {/* Filter and Search Bar */}
-      <div className="flex flex-col md:flex-row gap-3 items-center justify-between p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-sm">
-        {/* Search */}
-        <div className="relative w-full md:w-80">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Buscar por tema o módulo..."
-            className="w-full pl-9 pr-4 py-2 rounded-xl text-xs sm:text-sm border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:ring-2 focus:ring-indigo-500/20"
-          />
-        </div>
-
-        {/* Dropdowns */}
-        <div className="flex flex-wrap items-center gap-2.5 w-full md:w-auto">
-          {/* Module Selector */}
+      <div className="flex flex-col gap-3 p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-sm">
+        <div className="grid gap-3 lg:grid-cols-[minmax(16rem,20rem)_minmax(0,1fr)]">
           <select
             value={selectedModuleFilter}
-            onChange={(e) => setSelectedModuleFilter(e.target.value)}
-            className="px-3 py-2 rounded-xl text-xs sm:text-sm border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-medium"
+            onChange={(e) => writeFilters({ modulo: e.target.value })}
+            aria-label="Filtrar por módulo"
+            className="w-full px-3 py-2.5 rounded-xl text-sm border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-medium"
           >
-            <option value="all">Todos los Módulos (13)</option>
+            <option value="all">Todos los Módulos ({modules.length || 13})</option>
             {modules.map((m) => (
               <option key={m.id} value={m.id}>
                 Módulo {m.number}: {m.title}
@@ -246,175 +272,79 @@ export function AdminQuizCatalog({ onSelectTopic }: AdminQuizCatalogProps) {
             ))}
           </select>
 
-          {/* Status filter */}
-          <div className="flex rounded-xl bg-slate-100 dark:bg-slate-800 p-1 border border-slate-200/80 dark:border-slate-700">
-            <button
-              type="button"
-              onClick={() => setStatusFilter('all')}
-              className={`px-3 py-1 text-xs font-semibold rounded-lg transition ${
-                statusFilter === 'all'
-                  ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-xs'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
-              }`}
-            >
-              Todos ({allLeafTopics.length})
-            </button>
-            <button
-              type="button"
-              onClick={() => setStatusFilter('with_quiz')}
-              className={`px-3 py-1 text-xs font-semibold rounded-lg transition ${
-                statusFilter === 'with_quiz'
-                  ? 'bg-white dark:bg-slate-900 text-emerald-600 dark:text-emerald-400 shadow-xs'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
-              }`}
-            >
-              Con Quiz ({topicsWithQuiz})
-            </button>
-            <button
-              type="button"
-              onClick={() => setStatusFilter('no_quiz')}
-              className={`px-3 py-1 text-xs font-semibold rounded-lg transition ${
-                statusFilter === 'no_quiz'
-                  ? 'bg-white dark:bg-slate-900 text-amber-600 dark:text-amber-400 shadow-xs'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
-              }`}
-            >
-              Sin Quiz ({totalTopics - topicsWithQuiz})
-            </button>
+          <div className="relative">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+            <input
+              type="search"
+              value={searchQuery}
+              onChange={(e) => writeFilters({ q: e.target.value })}
+              placeholder="Buscar por tema o módulo..."
+              className="w-full pl-9 pr-4 py-2.5 rounded-xl text-sm border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:ring-2 focus:ring-indigo-500/20"
+            />
           </div>
         </div>
-      </div>
 
-      {/* Catalog Table / List */}
-      <div className="overflow-hidden rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm">
-        <div className="overflow-x-auto">
-          <table className="min-w-full text-left text-xs sm:text-sm">
-            <thead className="bg-slate-50 dark:bg-slate-950/60 text-slate-500 font-bold uppercase tracking-wider text-[11px] border-b border-slate-100 dark:border-slate-800">
-              <tr>
-                <th className="px-5 py-3.5">Módulo & Tema</th>
-                <th className="px-4 py-3.5">Estado del Quiz</th>
-                <th className="px-4 py-3.5">Preguntas</th>
-                <th className="px-4 py-3.5">Mínimo (%)</th>
-                <th className="px-5 py-3.5 text-right">Acciones</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-              {filteredTopics.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="py-12 text-center text-slate-400">
-                    No se encontraron temas con los filtros aplicados.
-                  </td>
-                </tr>
-              ) : (
-                filteredTopics.map((item) => {
-                  const flag = flagsMap.get(item.topic.id);
-                  const hasQuiz = Boolean(flag && flag.question_count > 0);
-                  const publicUrl = getTopicPublicUrl(item.moduleId, item.topic.id);
-
-                  return (
-                    <tr
-                      key={item.listKey}
-                      className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition"
-                    >
-                      {/* Topic title & module */}
-                      <td className="px-5 py-4">
-                        <div className="flex items-start gap-2.5">
-                          <span className="w-6 h-6 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-bold text-[11px] flex items-center justify-center shrink-0 mt-0.5">
-                            {item.moduleNumber}
-                          </span>
-                          <div>
-                            <p className="font-bold text-slate-900 dark:text-white leading-snug">
-                              {item.topic.title}
-                            </p>
-                            <p className="text-[11px] text-slate-400 mt-0.5 flex items-center gap-1">
-                              <span>Módulo {item.moduleNumber}: {item.moduleTitle}</span>
-                              <span>·</span>
-                              <code className="text-[10px] text-slate-500 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">
-                                {item.topic.id}
-                              </code>
-                            </p>
-                          </div>
-                        </div>
-                      </td>
-
-                      {/* Status badge */}
-                      <td className="px-4 py-4 whitespace-nowrap">
-                        {hasQuiz ? (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
-                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
-                            Activo {flag?.version ? `(v${flag.version})` : ''}
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
-                            <AlertCircle className="w-3.5 h-3.5 text-amber-500" />
-                            Sin Cuestionario
-                          </span>
-                        )}
-                      </td>
-
-                      {/* Question count */}
-                      <td className="px-4 py-4 whitespace-nowrap">
-                        {hasQuiz ? (
-                          <span className="font-bold text-slate-900 dark:text-white">
-                            {flag?.question_count} reactivos
-                          </span>
-                        ) : (
-                          <span className="text-slate-400">0</span>
-                        )}
-                      </td>
-
-                      {/* Pass score */}
-                      <td className="px-4 py-4 whitespace-nowrap text-slate-600 dark:text-slate-300">
-                        {hasQuiz ? `${flag?.pass_score ?? 70}%` : '—'}
-                      </td>
-
-                      {/* Actions */}
-                      <td className="px-5 py-4 whitespace-nowrap text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          {hasQuiz && (
-                            <button
-                              type="button"
-                              onClick={() => handleQuickPreview(item.topic.id, item.topic.title)}
-                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-semibold transition"
-                              title="Probar simulador de alumno"
-                            >
-                              <Eye className="w-3.5 h-3.5" />
-                              <span className="hidden sm:inline">Simular</span>
-                            </button>
-                          )}
-
-                          <button
-                            type="button"
-                            onClick={() => onSelectTopic(item.topic.id, item.moduleId)}
-                            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold shadow-xs transition"
-                          >
-                            <Edit3 className="w-3.5 h-3.5" />
-                            <span>{hasQuiz ? 'Editar Quiz' : 'Crear Quiz'}</span>
-                          </button>
-
-                          {publicUrl && (
-                            <Link
-                              to={publicUrl}
-                              target="_blank"
-                              rel="noreferrer"
-                              title="Ver lección en curso"
-                              className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-white transition"
-                            >
-                              <ExternalLink className="w-3.5 h-3.5" />
-                            </Link>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
+        <div className="grid grid-cols-3 rounded-xl bg-slate-100 dark:bg-slate-800 p-1 border border-slate-200/80 dark:border-slate-700 sm:flex sm:w-fit">
+          <StatusTab
+            label={`Todos (${allLeafTopics.length})`}
+            active={statusFilter === 'all'}
+            onClick={() => writeFilters({ estado: 'all' })}
+            activeClass="text-indigo-600 dark:text-indigo-400"
+          />
+          <StatusTab
+            label={`Con Quiz (${topicsWithQuiz})`}
+            active={statusFilter === 'with_quiz'}
+            onClick={() => writeFilters({ estado: 'with_quiz' })}
+            activeClass="text-emerald-600 dark:text-emerald-400"
+          />
+          <StatusTab
+            label={`Sin Quiz (${totalTopics - topicsWithQuiz})`}
+            active={statusFilter === 'no_quiz'}
+            onClick={() => writeFilters({ estado: 'no_quiz' })}
+            activeClass="text-amber-600 dark:text-amber-400"
+          />
         </div>
       </div>
 
-      {/* Modal Simulator */}
+      <div className="overflow-hidden rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm">
+        <p className="px-4 sm:px-5 py-3 text-xs text-slate-500 dark:text-slate-400 border-b border-slate-100 dark:border-slate-800">
+          Toca el nombre del tema o del módulo para abrirlo. La lista conserva el filtro y marca el renglón al regresar.
+        </p>
+        {loadingList ? (
+          <p className="py-12 text-center text-sm text-slate-400">Cargando temas…</p>
+        ) : filteredTopics.length === 0 ? (
+          <p className="py-12 text-center text-sm text-slate-400">
+            No se encontraron temas con los filtros aplicados.
+          </p>
+        ) : (
+          <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+            {filteredTopics.map((item) => {
+              const flag = flagsMap.get(item.topic.id);
+              const hasQuiz = Boolean(flag && flag.question_count > 0);
+              const rowId = quizRowDomId(item.moduleId, item.topic.id);
+              return (
+                <CatalogTopicRow
+                  key={item.listKey}
+                  item={item}
+                  hasQuiz={hasQuiz}
+                  questionCount={flag?.question_count ?? 0}
+                  version={flag?.version}
+                  passScore={flag?.pass_score ?? 70}
+                  focused={focusedRowId === rowId}
+                  rowId={rowId}
+                  returnTo={buildQuizCatalogPath(catalogFilters, {
+                    moduleId: item.moduleId,
+                    topicId: item.topic.id,
+                  })}
+                  onSelectTopic={onSelectTopic}
+                  onPreview={() => handleQuickPreview(item.topic.id, item.topic.title)}
+                />
+              );
+            })}
+          </ul>
+        )}
+      </div>
+
       <AdminQuizSimulatorModal
         isOpen={simulatorData.isOpen}
         onClose={() => setSimulatorData((prev) => ({ ...prev, isOpen: false }))}
@@ -423,5 +353,155 @@ export function AdminQuizCatalog({ onSelectTopic }: AdminQuizCatalogProps) {
         questions={simulatorData.questions}
       />
     </div>
+  );
+}
+
+function StatusTab({
+  label,
+  active,
+  onClick,
+  activeClass,
+}: {
+  label: string;
+  active: boolean;
+  onClick: () => void;
+  activeClass: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`px-2 sm:px-3 py-2 text-[11px] sm:text-xs font-semibold rounded-lg transition text-center whitespace-nowrap ${
+        active
+          ? `bg-white dark:bg-slate-900 shadow-xs ${activeClass}`
+          : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+      }`}
+    >
+      {label}
+    </button>
+  );
+}
+
+function CatalogTopicRow({
+  item,
+  hasQuiz,
+  questionCount,
+  version,
+  passScore,
+  focused,
+  rowId,
+  returnTo,
+  onSelectTopic,
+  onPreview,
+}: {
+  item: CatalogTopic;
+  hasQuiz: boolean;
+  questionCount: number;
+  version?: number;
+  passScore: number;
+  focused: boolean;
+  rowId: string;
+  returnTo: string;
+  onSelectTopic: (topicId: string, moduleId: string) => void;
+  onPreview: () => void;
+}) {
+  const publicUrl = getTopicPublicUrl(item.moduleId, item.topic.id);
+  const openLesson = (event: MouseEvent<HTMLAnchorElement>) => {
+    rememberQuizCatalogReturn(returnTo);
+    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
+  };
+
+  return (
+    <li
+      id={rowId}
+      className={`scroll-mt-28 px-4 py-4 sm:px-5 ${
+        focused
+          ? 'bg-indigo-50/80 dark:bg-indigo-950/30 ring-2 ring-inset ring-indigo-400/70'
+          : 'hover:bg-slate-50/60 dark:hover:bg-slate-800/40'
+      }`}
+    >
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex min-w-0 items-start gap-2.5">
+          <span className="w-6 h-6 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-bold text-[11px] flex items-center justify-center shrink-0 mt-0.5">
+            {item.moduleNumber}
+          </span>
+          <div className="min-w-0">
+            {focused && (
+              <p className="text-[11px] font-bold uppercase tracking-wide text-indigo-600 dark:text-indigo-300 mb-1">
+                Continúa aquí
+              </p>
+            )}
+            {publicUrl ? (
+              <Link
+                to={publicUrl}
+                state={{ from: returnTo }}
+                onClick={openLesson}
+                className="group inline-flex items-start gap-1 text-left font-bold text-slate-900 dark:text-white leading-snug hover:text-indigo-600 dark:hover:text-indigo-300"
+              >
+                <span className="underline-offset-2 group-hover:underline">{item.topic.title}</span>
+                <ChevronRight className="w-4 h-4 mt-0.5 shrink-0 text-slate-400 group-hover:text-indigo-500" />
+              </Link>
+            ) : (
+              <p className="font-bold text-slate-900 dark:text-white leading-snug">{item.topic.title}</p>
+            )}
+            <p className="text-[11px] text-slate-400 mt-0.5 flex flex-wrap items-center gap-x-1 gap-y-0.5">
+              <Link
+                to={`/modulo/${item.moduleId}`}
+                state={{ from: returnTo }}
+                onClick={openLesson}
+                className="hover:text-indigo-500 hover:underline underline-offset-2"
+              >
+                Módulo {item.moduleNumber}: {item.moduleTitle}
+              </Link>
+              <span aria-hidden="true">·</span>
+              <code className="text-[10px] text-slate-500 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">
+                {item.topic.id}
+              </code>
+            </p>
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center lg:justify-end lg:shrink-0">
+          {hasQuiz ? (
+            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 w-fit">
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+              Activo {version ? `(v${version})` : ''}
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800 w-fit">
+              <AlertCircle className="w-3.5 h-3.5 text-amber-500" />
+              Sin Cuestionario
+            </span>
+          )}
+          <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">
+            {hasQuiz ? `${questionCount} reactivos` : '0 reactivos'}
+          </span>
+          <span className="text-xs text-slate-500 dark:text-slate-400">
+            {hasQuiz ? `Mín. ${passScore}%` : 'Sin mínimo'}
+          </span>
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            {hasQuiz && (
+              <button
+                type="button"
+                onClick={onPreview}
+                className="inline-flex items-center justify-center gap-1 px-2.5 py-2 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-semibold transition"
+                title="Probar simulador de alumno"
+              >
+                <Eye className="w-3.5 h-3.5" />
+                Simular
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => onSelectTopic(item.topic.id, item.moduleId)}
+              className="inline-flex flex-1 sm:flex-none items-center justify-center gap-1 px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold shadow-xs transition"
+            >
+              <Edit3 className="w-3.5 h-3.5" />
+              {hasQuiz ? 'Editar cuestionario' : 'Agregar cuestionario'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </li>
   );
 }

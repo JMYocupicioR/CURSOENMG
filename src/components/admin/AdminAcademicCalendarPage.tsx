@@ -16,6 +16,7 @@ import { loadAcademicCalendarFeed } from '../../services/academicCalendarService
 import { getAdminProfiles } from '../../services/editorialService';
 import { filterGradeableStudents } from '../../utils/adminUtils';
 import {
+  calendarTypesForFilter,
   defaultCalendarBoardView,
   filterItemsByTypes,
   localDateTimeInputValue,
@@ -101,7 +102,7 @@ export default function AdminAcademicCalendarPage() {
   const closeCreate = useCallback(() => setCreateDay(null), []);
 
   const visibleItems = useMemo(
-    () => filterItemsByTypes(items, typeFilter === 'all' ? 'all' : [typeFilter]),
+    () => filterItemsByTypes(items, calendarTypesForFilter(typeFilter)),
     [items, typeFilter]
   );
 

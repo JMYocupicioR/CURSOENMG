@@ -139,13 +139,15 @@ export function groupAssignmentsIntoEvents(assignments: StudentAssignment[]): Ca
     const submittedCount = rows.filter((row) => isDeliveredStatus(row.status)).length;
     const approvedCount = rows.filter((row) => row.status === 'approved').length;
     const pendingCount = rows.filter((row) => row.status === 'pending' || row.status === 'overdue').length;
+    const dueDay = toLocalDateKey(first.due_date);
     return {
       id: `asggrp_${key}`,
       type: TYPE_FROM_ASSIGNMENT[first.type],
       title: first.title,
       description: first.description,
-      startsAt: first.due_date,
-      endsAt: first.due_date,
+      materials: first.materials ?? null,
+      startsAt: dueDay || first.due_date,
+      endsAt: dueDay || first.due_date,
       allDay: true,
       rubricKey: assignmentRubricKey(first.type),
       countsForKardex: true,
@@ -281,10 +283,25 @@ export function buildRubricSnapshot(
   };
 }
 
+/** Lecturas e informes EMG comparten el filtro Tareas con la tarea práctica. */
+export const HOMEWORK_CALENDAR_TYPES: CalendarItemType[] = ['practical_task', 'reading', 'emg_report'];
+
+export function calendarTypesForFilter(filter: CalendarItemType | 'all'): CalendarItemType[] | 'all' {
+  if (filter === 'all') return 'all';
+  if (filter === 'practical_task') return HOMEWORK_CALENDAR_TYPES;
+  return [filter];
+}
+
 export function filterItemsByTypes(items: CalendarItem[], types: CalendarItemType[] | 'all'): CalendarItem[] {
   if (types === 'all' || types.length === 0) return items;
   const allowed = new Set(types);
   return items.filter((item) => allowed.has(item.type));
+}
+
+/** All-day values stored as YYYY-MM-DD stay on that calendar day in any timezone. */
+export function calendarItemStartDate(startsAt: string, allDay: boolean): Date {
+  if (allDay && /^\d{4}-\d{2}-\d{2}/.test(startsAt)) return parseLocalDateKey(startsAt.slice(0, 10));
+  return new Date(startsAt);
 }
 
 export function localDateTimeInputValue(date: Date, hours = 19, minutes = 0): string {

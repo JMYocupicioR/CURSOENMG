@@ -16,6 +16,7 @@ import {
 import type { TeacherPendingReviewItem } from '../../types/studentPlan';
 import { gradeAssignment } from '../../services/studentPlanService';
 import { AssignmentSubmissionReview } from '../student/AssignmentDeliveryPanel';
+import { AssignmentMaterialsList } from '../student/AssignmentMaterialsList';
 import { getEmgReportForAssignment, gradeEmgReport } from '../../services/studentToolsService';
 import { useAuth } from '../../contexts/AuthProvider';
 
@@ -231,6 +232,7 @@ export default function TeacherQuickGradeModal({
                   {assignment.description}
                 </p>
               )}
+              <AssignmentMaterialsList materials={assignment.materials} className="mt-2" />
             </div>
 
             {/* Timestamps */}

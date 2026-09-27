@@ -6,16 +6,20 @@ import {
   assignmentGroupKey,
   buildRubricSnapshot,
   CALENDAR_BOARD_VIEW_STORAGE_KEY,
+  calendarItemStartDate,
+  calendarTypesForFilter,
   defaultCalendarBoardView,
   filterItemsByTypes,
   getMonthGridDays,
   getWeekDays,
   groupAssignmentsIntoEvents,
+  HOMEWORK_CALENDAR_TYPES,
   itemOverlapsDay,
   itemsForDay,
   itemsInRange,
   localDateTimeInputValue,
   milestoneToCalendarItem,
+  parseLocalDateKey,
   readCalendarBoardView,
   startOfWeekMonday,
   toLocalDateKey,
@@ -100,6 +104,39 @@ describe('assignment grouping', () => {
     const clinical = events.find((item) => item.type === 'clinical_case');
     expect(clinical?.rubricKey).toBe('assignments');
     expect(clinical?.patternId).toBe('stc_leve');
+  });
+
+  it('pins a task to the local due day and keeps readings in the Tareas filter', () => {
+    const due = '2026-10-01T05:59:00.000Z';
+    const events = groupAssignmentsIntoEvents([
+      assignment({
+        id: 't1',
+        student_id: 's1',
+        title: 'Entrega de protocolo',
+        type: 'practical_task',
+        due_date: due,
+      }),
+      assignment({
+        id: 'r1',
+        student_id: 's2',
+        title: 'Lectura de Preston',
+        type: 'reading',
+        due_date: due,
+      }),
+    ]);
+
+    const task = events.find((item) => item.type === 'practical_task');
+    const localDay = toLocalDateKey(due);
+    expect(task?.startsAt).toBe(localDay);
+    expect(task?.endsAt).toBe(localDay);
+    expect(task?.allDay).toBe(true);
+    expect(calendarItemStartDate(task!.startsAt, true).toDateString()).toBe(
+      parseLocalDateKey(localDay).toDateString()
+    );
+    expect(itemsForDay(events, parseLocalDateKey(localDay))).toHaveLength(2);
+    expect(calendarTypesForFilter('practical_task')).toEqual(HOMEWORK_CALENDAR_TYPES);
+    expect(filterItemsByTypes(events, calendarTypesForFilter('practical_task'))).toHaveLength(2);
+    expect(filterItemsByTypes(events, calendarTypesForFilter('exam'))).toHaveLength(0);
   });
 });
 
@@ -221,18 +258,19 @@ describe('range filters and rubric snapshot', () => {
   });
 
   it('filters day, range and types', () => {
+    const due = '2026-09-24T23:00:00.000Z';
     const exam = groupAssignmentsIntoEvents([
       assignment({
         id: 'e1',
         student_id: 's1',
         title: 'Examen',
         type: 'exam',
-        due_date: '2026-09-24T23:00:00.000Z',
+        due_date: due,
       }),
     ])[0];
-    const day = new Date(2026, 8, 24);
+    const day = parseLocalDateKey(toLocalDateKey(due));
     expect(itemsForDay([exam], day)).toHaveLength(1);
-    expect(itemsInRange([exam], new Date(2026, 8, 20), new Date(2026, 8, 26))).toHaveLength(1);
+    expect(itemsInRange([exam], new Date(day.getFullYear(), day.getMonth(), day.getDate() - 2), new Date(day.getFullYear(), day.getMonth(), day.getDate() + 2))).toHaveLength(1);
     expect(filterItemsByTypes([exam], ['session'])).toHaveLength(0);
     expect(filterItemsByTypes([exam], ['exam'])).toHaveLength(1);
   });

@@ -1,11 +1,34 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
-import { Calendar, CheckCircle2, ClipboardList, Search, Sparkles, Users, X } from 'lucide-react';
+import { Calendar, CheckCircle2, ClipboardList, Link2, Paperclip, Search, Sparkles, Trash2, Users, X } from 'lucide-react';
 import { createBatchAssignments } from '../../services/studentPlanService';
+import {
+  removeAssignmentMaterialFiles,
+  uploadAssignmentMaterialFile,
+} from '../../services/assignmentMaterialService';
 import { getAdminProfiles } from '../../services/editorialService';
 import { filterGradeableStudents } from '../../utils/adminUtils';
+import {
+  ASSIGNMENT_MATERIAL_MAX_FILES,
+  ASSIGNMENT_MATERIAL_MAX_LINKS,
+  assignmentMaterialFileError,
+  assignmentMaterialLinkError,
+  formatAssignmentMaterialSize,
+  type AssignmentMaterial,
+} from '../../utils/assignmentMaterials';
 import { useAuth } from '../../contexts/AuthProvider';
 import type { AdminProfileRow } from '../../types/admin';
 import type { AssignmentPriority } from '../../types/studentPlan';
+
+interface DraftFile {
+  id: string;
+  file: File;
+}
+
+interface DraftLink {
+  id: string;
+  url: string;
+  label: string;
+}
 
 interface AssignHomeworkModalProps {
   isOpen: boolean;
@@ -46,6 +69,10 @@ export default function AssignHomeworkModal({
   });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [draftFiles, setDraftFiles] = useState<DraftFile[]>([]);
+  const [draftLinks, setDraftLinks] = useState<DraftLink[]>([]);
+  const [linkDraft, setLinkDraft] = useState('');
+  const [linkLabel, setLinkLabel] = useState('');
 
   useEffect(() => {
     if (!isOpen) return;
@@ -67,6 +94,14 @@ export default function AssignHomeworkModal({
     }
     if (initialDueDate) setDueDate(initialDueDate);
   }, [isOpen, initialProfiles, initialStudentId, initialDueDate]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setDraftFiles([]);
+    setDraftLinks([]);
+    setLinkDraft('');
+    setLinkLabel('');
+  }, [isOpen]);
 
   const filteredProfiles = useMemo(() => {
     return profiles.filter((profile) => {
@@ -106,6 +141,36 @@ export default function AssignHomeworkModal({
     }
   };
 
+  const addFiles = (list: FileList | null) => {
+    if (!list || list.length === 0) return;
+    setError(null);
+    const next = [...draftFiles];
+    for (const file of Array.from(list)) {
+      const validation = assignmentMaterialFileError(file, next.length);
+      if (validation) {
+        setError(validation);
+        break;
+      }
+      next.push({ id: crypto.randomUUID(), file });
+    }
+    setDraftFiles(next);
+  };
+
+  const addLink = () => {
+    const validation = assignmentMaterialLinkError(linkDraft, draftLinks.length);
+    if (validation) {
+      setError(validation);
+      return;
+    }
+    setError(null);
+    setDraftLinks((current) => [
+      ...current,
+      { id: crypto.randomUUID(), url: linkDraft.trim(), label: linkLabel.trim() },
+    ]);
+    setLinkDraft('');
+    setLinkLabel('');
+  };
+
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
     if (finalRecipientIds.length === 0) {
@@ -121,9 +186,26 @@ export default function AssignHomeworkModal({
       return;
     }
 
+    if (draftFiles.length > 0 && !user?.id) {
+      setError('Inicia sesión de nuevo para subir archivos.');
+      return;
+    }
+
     setSubmitting(true);
     setError(null);
+    const uploadedPaths: string[] = [];
+    let published = false;
     try {
+      const materials: AssignmentMaterial[] = draftLinks.map((item) => ({
+        kind: 'link',
+        url: item.url,
+        label: item.label || null,
+      }));
+      for (const item of draftFiles) {
+        const uploaded = await uploadAssignmentMaterialFile(user!.id, item.file);
+        if (uploaded.storage_path) uploadedPaths.push(uploaded.storage_path);
+        materials.push(uploaded);
+      }
       const created = await createBatchAssignments(finalRecipientIds, {
         title: title.trim(),
         type: 'practical_task',
@@ -134,10 +216,12 @@ export default function AssignHomeworkModal({
         status: 'pending',
         priority,
         assigned_by: user?.id ?? null,
+        materials,
       });
       if (created.length === 0) {
         throw new Error('No se pudo asignar la tarea. Revisa la conexión e inténtalo de nuevo.');
       }
+      published = true;
       const reloaded = await onAssigned?.();
       if (reloaded === false) {
         setError('La tarea se asignó, pero la lista no se pudo recargar. Usa Reintentar.');
@@ -145,9 +229,18 @@ export default function AssignHomeworkModal({
       }
       setTitle('');
       setDescription('');
+      setDraftFiles([]);
+      setDraftLinks([]);
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No se pudo enviar la tarea.');
+      if (!published) await removeAssignmentMaterialFiles(uploadedPaths);
+      const message = err instanceof Error ? err.message : 'No se pudo enviar la tarea.';
+      const missingColumn = message.toLowerCase().includes('materials');
+      setError(
+        missingColumn
+          ? 'Falta aplicar la migración de material de tareas (20260927053609_assignment_teacher_materials) en Supabase.'
+          : message
+      );
     } finally {
       setSubmitting(false);
     }
@@ -325,6 +418,111 @@ export default function AssignHomeworkModal({
                 className="w-full p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700"
               />
             </label>
+
+            <div className="space-y-2 rounded-2xl border border-slate-200 bg-slate-50/80 p-3 dark:border-slate-700 dark:bg-slate-800/40">
+              <div className="flex items-center justify-between gap-2">
+                <span className="inline-flex items-center gap-1.5 font-bold text-slate-700 dark:text-slate-300">
+                  <Paperclip className="h-3.5 w-3.5 text-amber-600" />
+                  Material para el alumno
+                </span>
+                <span className="text-[10px] text-slate-400">
+                  {draftFiles.length}/{ASSIGNMENT_MATERIAL_MAX_FILES} archivos
+                </span>
+              </div>
+              <p className="text-[11px] leading-relaxed text-slate-500">
+                Imagen, PDF, documento, audio o video. Cada archivo puede pesar hasta 50 MB, el máximo del plan
+                gratuito de Supabase. El proyecto tiene 1 GB de almacenamiento en total. Para algo más grande, pega un
+                enlace.
+              </p>
+              <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-amber-300 bg-white px-3 py-2.5 font-semibold text-amber-800 hover:bg-amber-50 dark:border-amber-800 dark:bg-slate-900 dark:text-amber-200 dark:hover:bg-amber-950/30">
+                <Paperclip className="h-3.5 w-3.5" />
+                Subir archivos
+                <input
+                  type="file"
+                  multiple
+                  className="sr-only"
+                  onChange={(event) => {
+                    addFiles(event.target.files);
+                    event.target.value = '';
+                  }}
+                />
+              </label>
+              {draftFiles.length > 0 && (
+                <ul className="space-y-1">
+                  {draftFiles.map((item) => (
+                    <li
+                      key={item.id}
+                      className="flex items-center gap-2 rounded-lg bg-white px-2.5 py-1.5 dark:bg-slate-900"
+                    >
+                      <span className="min-w-0 flex-1 truncate font-semibold text-slate-700 dark:text-slate-200">
+                        {item.file.name}
+                      </span>
+                      <span className="shrink-0 text-[10px] text-slate-400">
+                        {formatAssignmentMaterialSize(item.file.size)}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setDraftFiles((current) => current.filter((row) => row.id !== item.id))}
+                        className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-rose-600 dark:hover:bg-slate-800"
+                        aria-label={`Quitar ${item.file.name}`}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto]">
+                <input
+                  type="url"
+                  value={linkDraft}
+                  onChange={(event) => setLinkDraft(event.target.value)}
+                  placeholder="https://… enlace de Drive, YouTube u otro sitio"
+                  className="w-full rounded-xl border border-slate-200 bg-white p-2.5 dark:border-slate-700 dark:bg-slate-900"
+                />
+                <button
+                  type="button"
+                  onClick={addLink}
+                  disabled={draftLinks.length >= ASSIGNMENT_MATERIAL_MAX_LINKS}
+                  className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-slate-900 px-3 py-2 font-semibold text-white disabled:opacity-50 dark:bg-slate-100 dark:text-slate-900"
+                >
+                  <Link2 className="h-3.5 w-3.5" />
+                  Agregar enlace
+                </button>
+              </div>
+              <input
+                type="text"
+                value={linkLabel}
+                onChange={(event) => setLinkLabel(event.target.value)}
+                placeholder="Nombre del enlace (opcional)"
+                maxLength={180}
+                className="w-full rounded-xl border border-slate-200 bg-white p-2.5 dark:border-slate-700 dark:bg-slate-900"
+              />
+              {draftLinks.length > 0 && (
+                <ul className="space-y-1">
+                  {draftLinks.map((item) => (
+                    <li
+                      key={item.id}
+                      className="flex items-center gap-2 rounded-lg bg-white px-2.5 py-1.5 dark:bg-slate-900"
+                    >
+                      <Link2 className="h-3.5 w-3.5 shrink-0 text-amber-600" />
+                      <span className="min-w-0 flex-1 truncate font-semibold text-slate-700 dark:text-slate-200">
+                        {item.label || item.url}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setDraftLinks((current) => current.filter((row) => row.id !== item.id))}
+                        className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-rose-600 dark:hover:bg-slate-800"
+                        aria-label="Quitar enlace"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <label className="block space-y-1">
                 <span className="font-bold text-slate-700 dark:text-slate-300 inline-flex items-center gap-1">

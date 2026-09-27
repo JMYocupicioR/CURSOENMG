@@ -3,6 +3,10 @@ import { Link, useLocation } from 'react-router-dom';
 import { BadgeCheck, PenLine, Plus, ClipboardList } from 'lucide-react';
 import { getProfileById } from '../../services/editorialService';
 import { useAuth } from '../../contexts/AuthProvider';
+import {
+  quizCatalogReturnFromLocation,
+  quizEditorPath,
+} from '../../utils/quizCatalogNavigation';
 
 export function ContributionBanner({
   meta,
@@ -125,14 +129,15 @@ export function ProposeQuizLink({
   const staffEditor = isAdmin || isEditor;
   const params = new URLSearchParams({ moduleId, topicId });
   const label = hasQuiz ? 'Modificar cuestionario' : 'Agregar cuestionario';
+  const catalogReturn = quizCatalogReturnFromLocation(location.state, location.search);
   const to = staffEditor
-    ? `/admin/quizzes/${encodeURIComponent(topicId)}`
+    ? quizEditorPath(topicId, moduleId, catalogReturn)
     : `/colaborador/cuestionario?${params.toString()}`;
 
   return (
     <Link
       to={to}
-      state={{ from: location.pathname + location.search }}
+      state={{ from: catalogReturn ?? location.pathname + location.search }}
       className={
         prominent
           ? 'inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-purple-800 dark:text-purple-100 bg-purple-50 dark:bg-purple-950/40 border border-purple-300/70 dark:border-purple-700/50 hover:bg-purple-100 dark:hover:bg-purple-900/40 transition'

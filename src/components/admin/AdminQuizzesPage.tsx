@@ -3,10 +3,16 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { AdminLayout } from './AdminLayout';
 import { AdminQuizCatalog } from './quiz/AdminQuizCatalog';
 import { AdminQuizEditor } from './quiz/AdminQuizEditor';
+import {
+  buildQuizCatalogPath,
+  catalogPathFromEditorSearch,
+  parseQuizCatalogStatus,
+  quizEditorPath,
+} from '../../utils/quizCatalogNavigation';
 
 export default function AdminQuizzesPage() {
   const { topicId: routeTopicId } = useParams();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
 
   const queryTopicId = searchParams.get('topicId');
@@ -15,22 +21,25 @@ export default function AdminQuizzesPage() {
   const [selectedTopicId, setSelectedTopicId] = useState<string | null>(activeTopicId);
 
   useEffect(() => {
-    if (activeTopicId) {
-      setSelectedTopicId(activeTopicId);
-    }
+    setSelectedTopicId(activeTopicId);
   }, [activeTopicId]);
 
   const handleSelectTopic = (topicId: string, moduleId?: string) => {
     setSelectedTopicId(topicId);
-    const params = new URLSearchParams();
-    if (moduleId) params.set('moduleId', moduleId);
-    const search = params.toString();
-    navigate(search ? `/admin/quizzes/${topicId}?${search}` : `/admin/quizzes/${topicId}`);
+    const catalogReturn = buildQuizCatalogPath(
+      {
+        q: searchParams.get('q') ?? '',
+        modulo: searchParams.get('modulo') ?? 'all',
+        estado: parseQuizCatalogStatus(searchParams.get('estado')),
+      },
+      moduleId ? { moduleId, topicId } : null,
+    );
+    navigate(quizEditorPath(topicId, moduleId, catalogReturn));
   };
 
   const handleBackToCatalog = () => {
     setSelectedTopicId(null);
-    navigate('/admin/quizzes');
+    navigate(catalogPathFromEditorSearch(searchParams.toString()));
   };
 
   return (

@@ -10,6 +10,7 @@ import { useAuth } from '../../contexts/AuthProvider';
 import { ProposeSubtopicLink } from '../editorial/TopicContribution';
 import { ModuleTopicRow, TopicFilterType } from './ModuleTopicTree';
 import { CourseGate } from '../CourseGate';
+import { QuizCatalogReturnBar } from '../admin/quiz/QuizCatalogReturnBar';
 import { useTopicProgress } from '../../hooks/useTopicProgress';
 import { listPendingCurriculumLessons } from '../../services/studentResume';
 
@@ -69,6 +70,7 @@ export default function ModulePage() {
   return (
     <CourseGate moduleId={mod.id}>
       <main className="max-w-6xl mx-auto px-4 sm:px-6 pt-20 sm:pt-24 pb-20">
+        <QuizCatalogReturnBar kind="module" />
         <nav className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400 mb-6 sm:mb-8">
           <Link to={homeHref} className="hover:text-blue-500 transition-colors flex items-center gap-1 min-h-[2rem]">
             <Home className="w-3.5 h-3.5" /> {lang === 'en' ? 'Home' : user ? 'Portal' : 'Inicio'}

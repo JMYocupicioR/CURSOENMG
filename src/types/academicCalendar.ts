@@ -1,5 +1,6 @@
 import type { AcademicMilestone, GradebookRubricConfig, RubricKey } from './academicGradebook';
 import type { LiveWorkshop } from './database';
+import type { AssignmentMaterial } from '../utils/assignmentMaterials';
 import type { AssignmentType } from './studentPlan';
 
 export type CalendarItemType =
@@ -18,6 +19,7 @@ export interface CalendarItem {
   type: CalendarItemType;
   title: string;
   description?: string | null;
+  materials?: AssignmentMaterial[] | null;
   startsAt: string;
   endsAt?: string | null;
   allDay: boolean;

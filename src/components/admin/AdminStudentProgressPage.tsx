@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { BackButton } from '../common/BackButton';
+import { AssignmentMaterialsList } from '../student/AssignmentMaterialsList';
 import {
   Activity,
   Award,
@@ -1969,6 +1970,7 @@ export default function AdminStudentProgressPage() {
                           <p className="text-xs text-slate-500 max-w-xl">
                             {asg.description}
                           </p>
+                          <AssignmentMaterialsList materials={asg.materials} />
 
                           <p className="text-[11px] text-slate-400 flex items-center gap-1 pt-1">
                             <Clock className="w-3 h-3 text-slate-400" />

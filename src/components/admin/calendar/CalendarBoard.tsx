@@ -8,6 +8,7 @@ import {
   formatWeekTitle,
   getMonthGridDays,
   getWeekDays,
+  calendarItemStartDate,
   itemsForDay,
   itemsInRange,
   startOfWeekMonday,
@@ -15,6 +16,7 @@ import {
 } from '../../../utils/academicCalendar';
 import {
   calendarChipStyle,
+  calendarEventColor,
   calendarTypeColor,
   calendarTypeLabel,
   useCalendarColorLabels,
@@ -27,6 +29,7 @@ const FILTERS: { id: CalendarItemType | 'all' }[] = [
   { id: 'all' },
   { id: 'session' },
   { id: 'exam' },
+  { id: 'practical_task' },
   { id: 'clinical_case' },
   { id: 'milestone' },
 ];
@@ -314,7 +317,7 @@ export function CalendarBoard({
                         item={item}
                         compact
                         selected={selectedId === item.id}
-                        color={calendarTypeColor(item.type, labels)}
+                        color={calendarEventColor(item.type, labels)}
                         typeLabel={calendarTypeLabel(item.type, labels)}
                         onClick={() => onSelectItem(item)}
                       />
@@ -348,7 +351,7 @@ export function CalendarBoard({
                             key={item.id}
                             item={item}
                             selected={selectedId === item.id}
-                            color={calendarTypeColor(item.type, labels)}
+                            color={calendarEventColor(item.type, labels)}
                             typeLabel={calendarTypeLabel(item.type, labels)}
                             onClick={() => {
                               setOverflowKey(null);
@@ -415,7 +418,7 @@ export function CalendarBoard({
                         key={item.id}
                         item={item}
                         selected={selectedId === item.id}
-                        color={calendarTypeColor(item.type, labels)}
+                        color={calendarEventColor(item.type, labels)}
                         typeLabel={calendarTypeLabel(item.type, labels)}
                         onClick={() => onSelectItem(item)}
                       />
@@ -446,10 +449,10 @@ export function CalendarBoard({
                   selectedId === item.id ? 'bg-indigo-50/70 dark:bg-indigo-950/30' : ''
                 }`}
               >
-                <span className="mt-1.5 w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: calendarTypeColor(item.type, labels) }} />
+                <span className="mt-1.5 w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: calendarEventColor(item.type, labels) }} />
                 <div className="min-w-0 flex-1">
                   <p className="text-[11px] font-bold text-slate-400">
-                    {new Date(item.startsAt).toLocaleString('es-MX', {
+                    {calendarItemStartDate(item.startsAt, item.allDay).toLocaleString('es-MX', {
                       weekday: 'short',
                       day: 'numeric',
                       month: 'short',
