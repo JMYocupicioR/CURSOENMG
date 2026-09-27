@@ -230,6 +230,12 @@ export function findTopicByPath(
   return { topic: found, breadcrumbs };
 }
 
+/** Stable list key when the same topic slug appears more than once. */
+export function topicListKey(moduleId: string, path: string[], occurrence = 0): string {
+  const base = `${moduleId}:${path.join('/')}`;
+  return occurrence === 0 ? base : `${base}#${occurrence}`;
+}
+
 export function getAllFlatTopics(
   topics: Topic[],
   parentPath: string[] = []

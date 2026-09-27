@@ -220,37 +220,69 @@ export function TopicAdoptionInbox({ onChanged }: { onChanged?: () => void | Pro
                     </button>
                     {open ? (
                       <div className="max-h-72 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800">
-                        {group.nodes.map((node) => (
-                          <div
-                            key={`${node.moduleId}-${node.topicId}`}
-                            className="px-4 py-2.5 flex items-center justify-between gap-3 text-xs"
-                          >
-                            <div className="min-w-0">
-                              <p className="font-semibold text-slate-900 dark:text-white truncate">
-                                {node.depth > 0 ? `${'· '.repeat(node.depth)}` : ''}
-                                {node.topicTitle}
-                              </p>
-                              {node.proposed.length > 0 ? (
-                                <p className="text-[11px] text-amber-600 dark:text-amber-300 truncate">
-                                  Propuesto: {node.proposed.map(teacherLabel).join(', ')}
+                        {group.nodes.map((node, nodeIndex) => {
+                          const myCommitment = commitments.find(
+                            (row) => row.topic_id === node.topicId && row.teacher_id === userId
+                          );
+                          const isMine = Boolean(myCommitment);
+                          const hasOtherProposed = node.proposed.some((row) => row.teacher_id !== userId);
+
+                          return (
+                            <div
+                              key={`${node.moduleId}:${node.pathTitles.join('/')}:${node.topicId}:${nodeIndex}`}
+                              className="px-4 py-2.5 flex items-center justify-between gap-3 text-xs"
+                            >
+                              <div className="min-w-0">
+                                <p className="font-semibold text-slate-900 dark:text-white truncate">
+                                  {node.depth > 0 ? `${'· '.repeat(node.depth)}` : ''}
+                                  {node.topicTitle}
                                 </p>
+                                {node.proposed.length > 0 ? (
+                                  <p className="text-[11px] text-amber-600 dark:text-amber-300 truncate">
+                                    Propuesto: {node.proposed.map(teacherLabel).join(', ')}
+                                  </p>
+                                ) : null}
+                              </div>
+                              {canAdopt && !isMine ? (
+                                <button
+                                  type="button"
+                                  disabled={busyKey === `adopt-${node.topicId}`}
+                                  onClick={() => handleAdopt(node)}
+                                  title={
+                                    hasOtherProposed
+                                      ? 'Sumarme a la propuesta de este tema junto a otros profesores'
+                                      : 'Adoptar este tema para impartirlo'
+                                  }
+                                  className="shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-sky-600 hover:bg-sky-500 text-white text-[11px] font-bold disabled:opacity-60 transition cursor-pointer"
+                                >
+                                  <UserPlus className="w-3.5 h-3.5" />
+                                  {hasOtherProposed ? 'Sumarme' : 'Adoptar'}
+                                </button>
+                              ) : isMine ? (
+                                <div className="shrink-0 flex items-center gap-1.5">
+                                  <span className="text-[11px] font-semibold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/60 px-2 py-0.5 rounded-md border border-amber-200 dark:border-amber-800">
+                                    Propuesto
+                                  </span>
+                                  {myCommitment ? (
+                                    <button
+                                      type="button"
+                                      disabled={busyKey === `withdraw-${myCommitment.id}`}
+                                      onClick={() =>
+                                        void runAction(`withdraw-${myCommitment.id}`, async () => {
+                                          await withdrawTopicCommitment(myCommitment.id);
+                                        })
+                                      }
+                                      title="Cambiar de opinión y retirar mi propuesta de este tema"
+                                      className="px-2 py-0.5 rounded-md border border-rose-200 dark:border-rose-900/60 text-[11px] font-medium text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/50 transition disabled:opacity-60 cursor-pointer"
+                                    >
+                                      Retirar
+                                    </button>
+                                  ) : null}
+                                </div>
                               ) : null}
                             </div>
-                            {canAdopt && !hasMineOn(node.topicId) ? (
-                              <button
-                                type="button"
-                                disabled={busyKey === `adopt-${node.topicId}`}
-                                onClick={() => handleAdopt(node)}
-                                className="shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-sky-600 hover:bg-sky-500 text-white text-[11px] font-bold disabled:opacity-60"
-                              >
-                                <UserPlus className="w-3.5 h-3.5" />
-                                Adoptar
-                              </button>
-                            ) : hasMineOn(node.topicId) ? (
-                              <span className="shrink-0 text-[11px] font-semibold text-slate-400">Propuesto</span>
-                            ) : null}
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     ) : null}
                   </div>
@@ -341,30 +373,59 @@ export function TopicAdoptionInbox({ onChanged }: { onChanged?: () => void | Pro
                 Con profesor ({assigned.length})
               </h3>
               <div className="max-h-56 overflow-y-auto rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 divide-y divide-slate-100 dark:divide-slate-800">
-                {assigned.map((node) => (
-                  <div
-                    key={`${node.moduleId}-${node.topicId}`}
-                    className="px-4 py-2.5 flex items-center justify-between gap-3 text-xs"
-                  >
-                    <div className="min-w-0">
-                      <p className="font-semibold text-slate-900 dark:text-white truncate">{node.topicTitle}</p>
-                      <p className="text-[11px] text-slate-400 truncate">
-                        {node.confirmed.map(teacherLabel).join(', ')}
-                        {node.coverage === 'shared' ? ' · compartido' : ''}
-                      </p>
+                {assigned.map((node, nodeIndex) => {
+                  const myCommitment = commitments.find(
+                    (row) => row.topic_id === node.topicId && row.teacher_id === userId
+                  );
+                  const isMine = Boolean(myCommitment);
+
+                  return (
+                    <div
+                      key={`${node.moduleId}:${node.pathTitles.join('/')}:${node.topicId}:${nodeIndex}`}
+                      className="px-4 py-2.5 flex items-center justify-between gap-3 text-xs"
+                    >
+                      <div className="min-w-0">
+                        <p className="font-semibold text-slate-900 dark:text-white truncate">{node.topicTitle}</p>
+                        <p className="text-[11px] text-slate-400 truncate">
+                          {node.confirmed.map(teacherLabel).join(', ')}
+                          {node.coverage === 'shared' ? ' · compartido' : ''}
+                        </p>
+                      </div>
+                      {canAdopt && !isMine ? (
+                        <button
+                          type="button"
+                          disabled={busyKey === `join-${node.topicId}`}
+                          onClick={() => handleJoin(node)}
+                          title="Integrarme como co-profesor en este tema"
+                          className="shrink-0 px-2.5 py-1 rounded-lg border border-indigo-200 dark:border-indigo-800 text-[11px] font-bold text-indigo-600 dark:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 disabled:opacity-60 transition cursor-pointer"
+                        >
+                          Integrarme
+                        </button>
+                      ) : isMine ? (
+                        <div className="shrink-0 flex items-center gap-1.5">
+                          <span className="text-[11px] font-semibold text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/60 px-2 py-0.5 rounded-md border border-indigo-200 dark:border-indigo-800">
+                            {myCommitment?.status === 'confirmed' ? 'Confirmado' : 'Propuesto'}
+                          </span>
+                          {myCommitment ? (
+                            <button
+                              type="button"
+                              disabled={busyKey === `withdraw-${myCommitment.id}`}
+                              onClick={() =>
+                                void runAction(`withdraw-${myCommitment.id}`, async () => {
+                                  await withdrawTopicCommitment(myCommitment.id);
+                                })
+                              }
+                              title="Retirar mi participación en este tema"
+                              className="px-2 py-0.5 rounded-md border border-rose-200 dark:border-rose-900/60 text-[11px] font-medium text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/50 transition disabled:opacity-60 cursor-pointer"
+                            >
+                              Retirar
+                            </button>
+                          ) : null}
+                        </div>
+                      ) : null}
                     </div>
-                    {canAdopt && !hasMineOn(node.topicId) ? (
-                      <button
-                        type="button"
-                        disabled={busyKey === `join-${node.topicId}`}
-                        onClick={() => handleJoin(node)}
-                        className="shrink-0 px-2.5 py-1 rounded-lg border border-indigo-200 dark:border-indigo-800 text-[11px] font-bold text-indigo-600 dark:text-indigo-300 disabled:opacity-60"
-                      >
-                        Integrarme
-                      </button>
-                    ) : null}
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           ) : null}

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -24,7 +24,7 @@ import { useAuth } from '../../../contexts/AuthProvider';
 import { useAllModules } from '../../../hooks/useAllModules';
 import { useMergedModule } from '../../../hooks/useMergedModule';
 import { useGoBack } from '../../../hooks/useGoBack';
-import { findTopicInTree, getAllFlatTopics } from '../../../services/contentMerge';
+import { findTopicInTree, getAllFlatTopics, topicListKey } from '../../../services/contentMerge';
 import {
   getQuizEditorDataForTopic,
   publishAdminQuizDirectly,
@@ -67,10 +67,15 @@ function createEmptyQuestion(type: QuizQuestionType = 'single'): QuizQuestionDra
 
 interface AdminQuizEditorProps {
   initialTopicId?: string;
+  initialModuleId?: string;
   onBackToCatalog?: () => void;
 }
 
-export function AdminQuizEditor({ initialTopicId, onBackToCatalog }: AdminQuizEditorProps) {
+export function AdminQuizEditor({
+  initialTopicId,
+  initialModuleId,
+  onBackToCatalog,
+}: AdminQuizEditorProps) {
   const { user } = useAuth();
   const navigate = useNavigate();
   const goBack = useGoBack('/admin/quizzes');
@@ -80,6 +85,7 @@ export function AdminQuizEditor({ initialTopicId, onBackToCatalog }: AdminQuizEd
   const [selectedModuleId, setSelectedModuleId] = useState<string>(availableModules[0]?.id ?? 'fundamentals');
   const { module: mergedModule } = useMergedModule(selectedModuleId);
   const [selectedTopicId, setSelectedTopicId] = useState<string>(initialTopicId ?? '');
+  const [selectedTopicPath, setSelectedTopicPath] = useState('');
 
   // Quiz configuration
   const [title, setTitle] = useState('');
@@ -99,39 +105,75 @@ export function AdminQuizEditor({ initialTopicId, onBackToCatalog }: AdminQuizEd
   const [showSimulator, setShowSimulator] = useState(false);
   const [expandedIndex, setExpandedIndex] = useState<number | null>(0);
   const [movingQuestionIndex, setMovingQuestionIndex] = useState<number | null>(null);
+  const quizLoadToken = useRef(0);
+  const appliedRouteTopic = useRef('');
+  const mergedModuleRef = useRef(mergedModule);
+  mergedModuleRef.current = mergedModule;
 
-  // Available leaf topics for selected module
-  const leafTopics = mergedModule
-    ? getAllFlatTopics(mergedModule.topics).filter(
-        ({ topic }) => !topic.children?.length && Boolean(topic.content?.trim() || topic.description?.trim())
-      )
-    : [];
+  // Available leaf topics for selected module. Option keys stay unique even
+  // when two leaves in the same module reused a slug.
+  const leafTopics = useMemo(() => {
+    if (!mergedModule) return [];
+    const seen = new Map<string, number>();
+    return getAllFlatTopics(mergedModule.topics)
+      .filter(({ topic }) => !topic.children?.length && Boolean(topic.content?.trim() || topic.description?.trim()))
+      .map(({ topic, path }) => {
+        const occurrence = seen.get(path.join('/')) ?? 0;
+        seen.set(path.join('/'), occurrence + 1);
+        return {
+          topic,
+          path,
+          optionKey: topicListKey(selectedModuleId, path, occurrence),
+        };
+      });
+  }, [mergedModule, selectedModuleId]);
 
-  // If initialTopicId was provided, resolve which module it belongs to
+  const selectedLeaf = leafTopics.find((item) => item.optionKey === selectedTopicPath) ?? null;
+
+  // If initialTopicId was provided, open that module (the one from the catalog
+  // when moduleId is present) instead of the first module that shares the slug.
   useEffect(() => {
     if (!initialTopicId || availableModules.length === 0) return;
-    for (const mod of availableModules) {
-      const found = getAllFlatTopics(mod.topics).some(({ topic }) => topic.id === initialTopicId);
-      if (found) {
+    const routeKey = `${initialModuleId ?? ''}:${initialTopicId}`;
+    if (appliedRouteTopic.current === routeKey) return;
+    const preferred = initialModuleId
+      ? availableModules.filter((mod) => mod.id === initialModuleId)
+      : [];
+    const rest = availableModules.filter((mod) => mod.id !== initialModuleId);
+    for (const mod of [...preferred, ...rest]) {
+      const match = getAllFlatTopics(mod.topics).find(({ topic }) => topic.id === initialTopicId);
+      if (match) {
         setSelectedModuleId(mod.id);
         setSelectedTopicId(initialTopicId);
+        setSelectedTopicPath(topicListKey(mod.id, match.path, 0));
+        appliedRouteTopic.current = routeKey;
         break;
       }
     }
-  }, [initialTopicId, availableModules]);
+  }, [initialTopicId, initialModuleId, availableModules]);
 
-  // Load quiz data whenever selectedTopicId changes
+  // Keep the dropdown on a real option after the merged tree loads.
+  useEffect(() => {
+    if (!selectedTopicId || leafTopics.length === 0) return;
+    if (leafTopics.some((item) => item.optionKey === selectedTopicPath)) return;
+    const match = leafTopics.find((item) => item.topic.id === selectedTopicId);
+    if (match) setSelectedTopicPath(match.optionKey);
+  }, [leafTopics, selectedTopicId, selectedTopicPath]);
+
+  // Reload only when the selected topic changes. A module-tree refresh must
+  // not refetch and paint the quiz from before a move finished saving.
   useEffect(() => {
     if (!selectedTopicId) return;
 
+    const token = ++quizLoadToken.current;
     let cancelled = false;
     async function loadData() {
       setLoading(true);
       setErrorMessage(null);
       try {
-        const topic = findTopicInTree(mergedModule?.topics ?? [], selectedTopicId);
+        const topic = findTopicInTree(mergedModuleRef.current?.topics ?? [], selectedTopicId);
         const data = await getQuizEditorDataForTopic(selectedTopicId);
-        if (cancelled) return;
+        if (cancelled || token !== quizLoadToken.current) return;
 
         setDataSource(data.source);
         setVersion(data.version);
@@ -156,12 +198,12 @@ export function AdminQuizEditor({ initialTopicId, onBackToCatalog }: AdminQuizEd
           setQuestions([createEmptyQuestion()]);
         }
       } catch (e) {
-        if (!cancelled) {
+        if (!cancelled && token === quizLoadToken.current) {
           console.error(e);
           setErrorMessage('Error al cargar la información del cuestionario.');
         }
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled && token === quizLoadToken.current) setLoading(false);
       }
     }
 
@@ -169,23 +211,25 @@ export function AdminQuizEditor({ initialTopicId, onBackToCatalog }: AdminQuizEd
     return () => {
       cancelled = true;
     };
-  }, [selectedTopicId, mergedModule]);
+  }, [selectedTopicId]);
 
   // Handle module dropdown change
   const handleModuleChange = (newModuleId: string) => {
     setSelectedModuleId(newModuleId);
     setSelectedTopicId('');
+    setSelectedTopicPath('');
     setQuestions([createEmptyQuestion()]);
     setTitle('');
   };
 
-  // Handle topic change
-  const handleTopicChange = (newTopicId: string) => {
-    setSelectedTopicId(newTopicId);
-    const topic = findTopicInTree(mergedModule?.topics ?? [], newTopicId);
-    if (topic) {
-      setTitle(`Evaluación: ${topic.title}`);
-    }
+  // Handle topic change. The option value is the list key, not the slug,
+  // so two leaves that shared an id stay selectable.
+  const handleTopicChange = (optionKey: string) => {
+    const match = leafTopics.find((item) => item.optionKey === optionKey);
+    if (!match) return;
+    setSelectedTopicPath(optionKey);
+    setSelectedTopicId(match.topic.id);
+    setTitle(`Evaluación: ${match.topic.title}`);
   };
 
   // Question mutators
@@ -504,18 +548,22 @@ export function AdminQuizEditor({ initialTopicId, onBackToCatalog }: AdminQuizEd
                 Tema de Estudio (Hoja)
               </label>
               <select
-                value={selectedTopicId}
+                value={selectedTopicPath}
                 onChange={(e) => handleTopicChange(e.target.value)}
                 className="w-full px-3 py-2 rounded-xl text-xs sm:text-sm border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-medium"
               >
                 <option value="">-- Seleccionar tema para evaluar --</option>
-                {leafTopics.map(({ topic, path }) => (
-                  <option key={topic.id} value={topic.id}>
-                    {path.length > 1 ? '↳ '.repeat(path.length - 1) : ''}
+                {leafTopics.map(({ topic, optionKey }) => (
+                  <option key={optionKey} value={optionKey} title={topic.title}>
                     {topic.title}
                   </option>
                 ))}
               </select>
+              {selectedLeaf && (
+                <p className="text-xs font-medium text-slate-700 dark:text-slate-200 mt-2 leading-snug">
+                  {selectedLeaf.topic.title}
+                </p>
+              )}
               <p className="text-[11px] text-slate-400 mt-1">
                 El quiz se asociará a este tema y aparecerá al final de la lección para los alumnos.
               </p>
@@ -940,13 +988,34 @@ export function AdminQuizEditor({ initialTopicId, onBackToCatalog }: AdminQuizEd
         questionIndex={movingQuestionIndex}
         currentModuleId={selectedModuleId}
         currentTopicId={selectedTopicId}
-        onSuccess={(mode, targetTopicId, targetTopicTitle) => {
+        onSuccess={async (mode, _targetTopicId, targetTopicTitle) => {
           if (mode === 'move' && movingQuestionIndex !== null) {
-            setQuestions((prev) => prev.filter((_, i) => i !== movingQuestionIndex));
-            setExpandedIndex(0);
+            if (!user) throw new Error('Sesión no disponible.');
+            if (!selectedTopicId) throw new Error('Selecciona el tema de origen antes de mover.');
+            quizLoadToken.current += 1;
+            const remaining = questions.filter((_, index) => index !== movingQuestionIndex);
+            await publishAdminQuizDirectly({
+              topicId: selectedTopicId,
+              moduleId: selectedModuleId,
+              title: title.trim() || 'Evaluación del tema',
+              passScore,
+              maxAttempts,
+              shuffleQuestions,
+              shuffleOptions,
+              questions: remaining,
+              authorId: user.id,
+            });
+            setQuestions(remaining.length > 0 ? remaining : [createEmptyQuestion()]);
+            setExpandedIndex(
+              remaining.length === 0 ? 0 : Math.min(movingQuestionIndex, remaining.length - 1)
+            );
+            setDataSource('database');
+            setVersion((current) => current + 1);
           }
           setSuccessToast(
-            `¡Pregunta ${mode === 'move' ? 'movida' : 'copiada'} exitosamente al tema: ${targetTopicTitle}!`
+            mode === 'move'
+              ? `Pregunta movida a «${targetTopicTitle}». Esta evaluación ya quedó actualizada en vivo.`
+              : `Pregunta copiada al tema «${targetTopicTitle}».`
           );
           setTimeout(() => setSuccessToast(null), 5000);
         }}

@@ -1646,7 +1646,7 @@ Antes de reportar un resultado anormal, verifica la técnica. La mayoría de los
             'Regla: \"Si es atípico, primero descarta el error técnico.\"',
           ],
         },
-        { id: 'martin-gruber', title: 'Anomalías anatómicas: Martin-Gruber y Riche-Cannieu', content: 'Anastomosis de Martin-Gruber (15-30% de la población): fibras motoras del mediano cruzan al ulnar en el antebrazo. Puede causar: CMAP del mediano en muñeca con componente positivo inicial, CMAP del ulnar mayor en codo que en muñeca. Riche-Cannieu: comunicación palmar entre mediano y ulnar.' },
+        { id: 'martin-gruber-riche-cannieu', title: 'Anomalías anatómicas: Martin-Gruber y Riche-Cannieu', content: 'Anastomosis de Martin-Gruber (15-30% de la población): fibras motoras del mediano cruzan al ulnar en el antebrazo. Puede causar: CMAP del mediano en muñeca con componente positivo inicial, CMAP del ulnar mayor en codo que en muñeca. Riche-Cannieu: comunicación palmar entre mediano y ulnar.' },
       ]
     },
     {

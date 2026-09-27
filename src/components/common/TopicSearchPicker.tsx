@@ -179,12 +179,12 @@ export function TopicSearchPicker({
               : 'No hay hojas en esta lista. Busca por título o por una palabra de la lección.'}
           </p>
         ) : (
-          rows.map((row) => {
+          rows.map((row, rowIndex) => {
             const selected = value?.topicId === row.topicId && value?.moduleId === row.moduleId;
             return (
               <button
                 type="button"
-                key={`${row.moduleId}-${row.topicId}`}
+                key={`${row.moduleId}:${row.topicId}:${row.breadcrumb}:${rowIndex}`}
                 onClick={() =>
                   onChange({
                     moduleId: row.moduleId,

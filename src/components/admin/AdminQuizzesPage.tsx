@@ -20,9 +20,12 @@ export default function AdminQuizzesPage() {
     }
   }, [activeTopicId]);
 
-  const handleSelectTopic = (topicId: string) => {
+  const handleSelectTopic = (topicId: string, moduleId?: string) => {
     setSelectedTopicId(topicId);
-    navigate(`/admin/quizzes/${topicId}`);
+    const params = new URLSearchParams();
+    if (moduleId) params.set('moduleId', moduleId);
+    const search = params.toString();
+    navigate(search ? `/admin/quizzes/${topicId}?${search}` : `/admin/quizzes/${topicId}`);
   };
 
   const handleBackToCatalog = () => {
@@ -42,6 +45,7 @@ export default function AdminQuizzesPage() {
       {selectedTopicId ? (
         <AdminQuizEditor
           initialTopicId={selectedTopicId}
+          initialModuleId={searchParams.get('moduleId') ?? undefined}
           onBackToCatalog={handleBackToCatalog}
         />
       ) : (

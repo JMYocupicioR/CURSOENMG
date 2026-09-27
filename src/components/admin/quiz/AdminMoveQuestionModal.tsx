@@ -26,7 +26,11 @@ interface AdminMoveQuestionModalProps {
   questionIndex: number | null;
   currentModuleId: string;
   currentTopicId: string;
-  onSuccess: (mode: 'move' | 'copy', targetTopicId: string, targetTopicTitle: string) => void;
+  onSuccess: (
+    mode: 'move' | 'copy',
+    targetTopicId: string,
+    targetTopicTitle: string,
+  ) => void | Promise<void>;
 }
 
 export function AdminMoveQuestionModal({
@@ -107,8 +111,8 @@ export function AdminMoveQuestionModal({
         authorId: user.id,
       });
 
-      // 5. Notify parent callback
-      onSuccess(transferMode, targetTopicId, targetTopic?.title || target.title);
+      // 5. Persist the source quiz when moving, then close.
+      await onSuccess(transferMode, targetTopicId, targetTopic?.title || target.title);
       onClose();
     } catch (e) {
       console.error(e);

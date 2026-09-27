@@ -16,7 +16,7 @@ import {
   Layers,
 } from 'lucide-react';
 import { useAllModules } from '../../../hooks/useAllModules';
-import { getAllFlatTopics } from '../../../services/contentMerge';
+import { getAllFlatTopics, topicListKey } from '../../../services/contentMerge';
 import { getAllQuizFlags } from '../../../services/quizService';
 import { getTopicPublicUrl } from '../../../utils/adminUtils';
 import type { QuizTopicFlag } from '../../../types/quiz';
@@ -24,7 +24,7 @@ import { AdminQuizSimulatorModal } from './AdminQuizSimulatorModal';
 import { getQuizEditorDataForTopic } from '../../../services/editorialService';
 
 interface AdminQuizCatalogProps {
-  onSelectTopic: (topicId: string) => void;
+  onSelectTopic: (topicId: string, moduleId: string) => void;
 }
 
 export function AdminQuizCatalog({ onSelectTopic }: AdminQuizCatalogProps) {
@@ -60,16 +60,22 @@ export function AdminQuizCatalog({ onSelectTopic }: AdminQuizCatalogProps) {
   // Flatten all leaf topics from all modules
   const allLeafTopics = useMemo(() => {
     return modules.flatMap((m) => {
-      const flat = getAllFlatTopics(m.topics);
-      return flat
+      const seen = new Map<string, number>();
+      return getAllFlatTopics(m.topics)
         .filter(({ topic }) => !topic.children?.length && Boolean(topic.content?.trim() || topic.description?.trim()))
-        .map(({ topic, path }) => ({
-          topic,
-          path,
-          moduleId: m.id,
-          moduleNumber: m.number,
-          moduleTitle: m.title,
-        }));
+        .map(({ topic, path }) => {
+          const pathKey = path.join('/');
+          const occurrence = seen.get(pathKey) ?? 0;
+          seen.set(pathKey, occurrence + 1);
+          return {
+            topic,
+            path,
+            moduleId: m.id,
+            moduleNumber: m.number,
+            moduleTitle: m.title,
+            listKey: topicListKey(m.id, path, occurrence),
+          };
+        });
     });
   }, [modules]);
 
@@ -307,7 +313,7 @@ export function AdminQuizCatalog({ onSelectTopic }: AdminQuizCatalogProps) {
 
                   return (
                     <tr
-                      key={item.topic.id}
+                      key={item.listKey}
                       className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition"
                     >
                       {/* Topic title & module */}
@@ -379,7 +385,7 @@ export function AdminQuizCatalog({ onSelectTopic }: AdminQuizCatalogProps) {
 
                           <button
                             type="button"
-                            onClick={() => onSelectTopic(item.topic.id)}
+                            onClick={() => onSelectTopic(item.topic.id, item.moduleId)}
                             className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold shadow-xs transition"
                           >
                             <Edit3 className="w-3.5 h-3.5" />
