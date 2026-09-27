@@ -29,24 +29,54 @@ export function isIOS(): boolean {
 }
 
 /**
- * Request persistent storage — critical for iOS 7-day eviction protection.
- * iOS may not guarantee it, but requesting it signals intent and
- * can prevent automatic purges on some WebKit versions.
+ * Ask the browser to keep Cache/IndexedDB data under storage pressure.
+ * Chrome and Safari grant this on their own (installed app, bookmark, or
+ * high site engagement). A refusal is normal in a regular tab and is not
+ * an application error.
  */
-export async function requestPersistentStorage(): Promise<boolean> {
-  if (navigator.storage && navigator.storage.persist) {
-    try {
-      const granted = await navigator.storage.persist();
-      console.log(
-        `[PWA] Persistent storage ${granted ? 'granted ✓' : 'denied ✗'}`
-      );
-      return granted;
-    } catch (error) {
-      console.warn('[PWA] Persistent storage request failed:', error);
-      return false;
-    }
+let persistentStorageRequest: Promise<boolean> | null = null;
+let persistentStorageLogged = false;
+
+export function requestPersistentStorage(): Promise<boolean> {
+  if (!persistentStorageRequest) {
+    persistentStorageRequest = requestPersistentStorageOnce().finally(() => {
+      persistentStorageRequest = null;
+    });
   }
-  return false;
+  return persistentStorageRequest;
+}
+
+async function requestPersistentStorageOnce(): Promise<boolean> {
+  if (!navigator.storage?.persist) return false;
+
+  try {
+    if (navigator.storage.persisted && (await navigator.storage.persisted())) {
+      logPersistentStorage(true);
+      return true;
+    }
+
+    const granted = await navigator.storage.persist();
+    logPersistentStorage(granted);
+    return granted;
+  } catch (error) {
+    if (!persistentStorageLogged) {
+      persistentStorageLogged = true;
+      console.warn('[PWA] Persistent storage request failed:', error);
+    }
+    return false;
+  }
+}
+
+function logPersistentStorage(granted: boolean): void {
+  if (persistentStorageLogged) return;
+  persistentStorageLogged = true;
+  if (granted) {
+    console.log('[PWA] Persistent storage granted');
+    return;
+  }
+  console.debug(
+    '[PWA] Browser did not grant persistent storage. Offline data can still be evicted under storage pressure.'
+  );
 }
 
 /** Estimate storage quota usage */
