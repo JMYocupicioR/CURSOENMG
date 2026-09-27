@@ -374,9 +374,10 @@ export default function StudentDashboard() {
 
   const highlightedModules = useMemo(() => {
     if (!metrics) return [];
-    const inProgress = metrics.moduleStats.filter((m) => m.progressPct > 0 && m.progressPct < 100);
-    const notStarted = metrics.moduleStats.filter((m) => m.progressPct === 0);
-    const done = metrics.moduleStats.filter((m) => m.progressPct === 100);
+    const curriculum = metrics.moduleStats.filter((m) => m.countsTowardCurriculum);
+    const inProgress = curriculum.filter((m) => m.progressPct > 0 && m.progressPct < 100);
+    const notStarted = curriculum.filter((m) => m.progressPct === 0);
+    const done = curriculum.filter((m) => m.progressPct === 100);
     return [...inProgress, ...notStarted, ...done].slice(0, 4);
   }, [metrics]);
 
@@ -1988,14 +1989,18 @@ export default function StudentDashboard() {
                         </span>
                         <span
                           className={`px-2.5 py-1 rounded-full text-xs font-bold ${
-                            mod.progressPct === 100
+                            !mod.countsTowardCurriculum
+                              ? 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
+                              : mod.progressPct === 100
                               ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/80 dark:text-emerald-300'
                               : mod.progressPct > 0
                               ? 'bg-blue-100 text-blue-700 dark:bg-blue-950/80 dark:text-blue-300'
                               : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
                           }`}
                         >
-                          {mod.progressPct === 100
+                          {!mod.countsTowardCurriculum
+                            ? 'Consulta'
+                            : mod.progressPct === 100
                             ? 'Completado'
                             : mod.progressPct > 0
                             ? `${mod.progressPct}% en progreso`
@@ -2008,10 +2013,12 @@ export default function StudentDashboard() {
                       </h3>
 
                       <p className="text-xs text-slate-500 mb-3">
-                        {mod.completedTopics} de {mod.totalTopics} temas completados
-                        {mod.quizPassed && ' · Evaluación aprobada'}
+                        {mod.countsTowardCurriculum
+                          ? `${mod.completedTopics} de ${mod.totalTopics} temas completados${mod.quizPassed ? ' · Evaluación aprobada' : ''}`
+                          : 'Catálogo de consulta. No suma a tu avance ni pide marcar lecciones.'}
                       </p>
 
+                      {mod.countsTowardCurriculum && (
                       <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-2 overflow-hidden mb-4">
                         <div
                           className={`h-full rounded-full transition-all duration-300 ${
@@ -2020,12 +2027,13 @@ export default function StudentDashboard() {
                           style={{ width: `${mod.progressPct}%` }}
                         />
                       </div>
+                      )}
 
                       {/* Temario desplegable del módulo */}
                       {isExpanded && fullModule && (
                         <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800 space-y-2 mb-4">
                           <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                            Lecciones del módulo:
+                            {mod.countsTowardCurriculum ? 'Lecciones del módulo:' : 'Apartados de consulta:'}
                           </p>
                           <ul className="space-y-1.5 max-h-56 overflow-y-auto pr-1">
                             {fullModule.topics.map((t) => {
@@ -2042,6 +2050,7 @@ export default function StudentDashboard() {
                                     >
                                       {t.title}
                                     </Link>
+                                    {mod.countsTowardCurriculum && (
                                     <button
                                       onClick={(e) => handleToggleTopic(t.id, e, childIds.length > 0 ? childIds : undefined)}
                                       className={`shrink-0 p-1 rounded-md transition ${
@@ -2055,6 +2064,7 @@ export default function StudentDashboard() {
                                         className={`w-4 h-4 ${done ? 'fill-emerald-500 text-white' : ''}`}
                                       />
                                     </button>
+                                    )}
                                   </li>
                                   {t.children && t.children.length > 0 && (
                                     <ul className="pl-4 space-y-1 border-l border-slate-200/60 dark:border-slate-700/40 ml-2 my-1">
@@ -2071,6 +2081,7 @@ export default function StudentDashboard() {
                                             >
                                               {sub.title}
                                             </Link>
+                                            {mod.countsTowardCurriculum && (
                                             <button
                                               onClick={(e) => handleToggleTopic(sub.id, e)}
                                               className={`shrink-0 p-0.5 rounded transition ${
@@ -2084,6 +2095,7 @@ export default function StudentDashboard() {
                                                 className={`w-3.5 h-3.5 ${subDone ? 'fill-emerald-500 text-white' : ''}`}
                                               />
                                             </button>
+                                            )}
                                           </li>
                                         );
                                       })}
@@ -2105,7 +2117,9 @@ export default function StudentDashboard() {
                         }
                         className="flex-1 inline-flex items-center justify-center gap-1 px-3 py-2 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-sm transition"
                       >
-                        {mod.progressPct === 100
+                        {!mod.countsTowardCurriculum
+                          ? 'Consultar'
+                          : mod.progressPct === 100
                           ? 'Repasar módulo'
                           : mod.progressPct > 0
                           ? 'Continuar'

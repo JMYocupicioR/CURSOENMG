@@ -1,3 +1,4 @@
+import { isAppendixModule } from '../content/appendixModules';
 import { allModules } from '../content/modules';
 import { supabase, sb } from '../lib/supabase';
 import type { Topic } from '../types/content';
@@ -45,6 +46,8 @@ export interface StudentModuleStats {
   quizAttempted: boolean;
   quizPassed: boolean;
   quizScore?: number;
+  /** False for consultation appendices such as the bibliography module. */
+  countsTowardCurriculum: boolean;
 }
 
 export interface KardexStanding {
@@ -485,13 +488,18 @@ export function calculateStudentMetrics(
   let totalCompletedCurriculumTopics = 0;
 
   const moduleStats: StudentModuleStats[] = allModules.map((m) => {
+    const countsTowardCurriculum = !isAppendixModule(m.id);
     const topicIds = getAllTopicIds(m.topics);
     const totalTopics = topicIds.length;
     const completedCount = topicIds.filter((id) => completed.has(id)).length;
-    const progressPct = totalTopics > 0 ? Math.round((completedCount / totalTopics) * 100) : 0;
+    const progressPct = countsTowardCurriculum && totalTopics > 0
+      ? Math.round((completedCount / totalTopics) * 100)
+      : 0;
 
-    totalCurriculumTopics += totalTopics;
-    totalCompletedCurriculumTopics += completedCount;
+    if (countsTowardCurriculum) {
+      totalCurriculumTopics += totalTopics;
+      totalCompletedCurriculumTopics += completedCount;
+    }
 
     const quizProg = moduleProgressList.find((p) => p.moduleId === m.id);
     const quizAttempted = (quizProg?.quizzesAttempted ?? 0) > 0;
@@ -509,6 +517,7 @@ export function calculateStudentMetrics(
       quizAttempted,
       quizPassed,
       quizScore,
+      countsTowardCurriculum,
     };
   });
 

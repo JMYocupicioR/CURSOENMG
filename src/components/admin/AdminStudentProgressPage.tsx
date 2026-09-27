@@ -60,6 +60,7 @@ import {
   approveExamRetake,
   rejectExamRetake,
 } from '../../services/studentPlanService';
+import { isAppendixModule } from '../../content/appendixModules';
 import { allModules } from '../../content/modules';
 import { getAllTopicIds } from '../../services/studentService';
 import { getModuleLabel, getTopicPublicUrl } from '../../utils/adminUtils';
@@ -99,7 +100,8 @@ function TopicItemRow({
   parentCompleted = false,
 }: TopicItemRowProps) {
   const isLeaf = !topic.children || topic.children.length === 0;
-  const isCompleted = completedTopicSet.has(topic.id) || parentCompleted;
+  const consultation = isAppendixModule(moduleId);
+  const isCompleted = !consultation && (completedTopicSet.has(topic.id) || parentCompleted);
 
   const allLeafIds = useMemo(() => (isLeaf ? [topic.id] : getAllTopicIds(topic.children || [])), [topic, isLeaf]);
   const leafCount = isLeaf ? 1 : allLeafIds.length;
@@ -120,10 +122,10 @@ function TopicItemRow({
 
   if (!searchMatch) return null;
 
-  if (filter === 'completed') {
+  if (!consultation && filter === 'completed') {
     if (isLeaf && !isCompleted) return null;
     if (!isLeaf && completedLeafCount === 0 && !isCompleted) return null;
-  } else if (filter === 'pending') {
+  } else if (!consultation && filter === 'pending') {
     if (isLeaf && isCompleted) return null;
     if (!isLeaf && isSectionComplete) return null;
   }
@@ -151,7 +153,11 @@ function TopicItemRow({
           </div>
 
           <div className="flex items-center gap-1.5 shrink-0">
-            {isSectionComplete ? (
+            {consultation ? (
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-medium bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300">
+                Consulta
+              </span>
+            ) : isSectionComplete ? (
               <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300">
                 <CheckCircle2 className="w-3 h-3" />
                 Sección Completa ({completedLeafCount}/{leafCount})
@@ -230,12 +236,16 @@ function TopicItemRow({
       <div className="flex items-center gap-2 shrink-0">
         <span
           className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
-            isCompleted
+            consultation
+              ? 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'
+              : isCompleted
               ? 'bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300'
               : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'
           }`}
         >
-          {isCompleted ? (
+          {consultation ? (
+            'Consulta'
+          ) : isCompleted ? (
             <>
               <CheckCircle2 className="w-3 h-3" />
               Leído / Completado
@@ -297,6 +307,7 @@ function ModuleTopicsBreakdown({
     [allLeafIds, completedTopicSet]
   );
   const pendingCount = Math.max(0, totalCount - completedCount);
+  const consultation = isAppendixModule(module.id);
 
   return (
     <div className="mt-4 pt-4 border-t border-slate-200/80 dark:border-slate-800 space-y-3">
@@ -315,6 +326,8 @@ function ModuleTopicsBreakdown({
             >
               Todos ({totalCount})
             </button>
+            {!consultation && (
+            <>
             <button
               type="button"
               onClick={() => onFilterChange('completed')}
@@ -338,6 +351,8 @@ function ModuleTopicsBreakdown({
             >
               Pendientes ({pendingCount})
             </button>
+            </>
+            )}
           </div>
         </div>
 
@@ -1046,6 +1061,8 @@ export default function AdminStudentProgressPage() {
                   const searchQuery = moduleSearches[m.id] || '';
 
                   // If global filter is 'completed' and this module has 0 completed topics, optionally don't render or deemphasize
+                  const consultation = isAppendixModule(m.id);
+                  if (consultation && globalTopicFilter !== 'all') return null;
                   if (globalTopicFilter === 'completed' && completedTopics === 0) {
                     return null;
                   }
@@ -1081,14 +1098,22 @@ export default function AdminStudentProgressPage() {
                             </div>
                             <div className="flex flex-wrap items-center gap-3 mt-1">
                               <p className="text-xs text-slate-400">
-                                <span className="font-semibold text-slate-700 dark:text-slate-300">{completedTopics}</span> de {totalTopics} temas leídos · Quizzes: {modProg?.quizzesAvailable ?? 0}
+                                {consultation ? (
+                                  'Material de consulta. No entra en el avance del alumno.'
+                                ) : (
+                                  <>
+                                    <span className="font-semibold text-slate-700 dark:text-slate-300">{completedTopics}</span> de {totalTopics} temas leídos · Quizzes: {modProg?.quizzesAvailable ?? 0}
+                                  </>
+                                )}
                               </p>
+                              {!consultation && (
                               <div className="w-20 bg-slate-200 dark:bg-slate-700 h-1.5 rounded-full overflow-hidden hidden md:block">
                                 <div
                                   className="bg-blue-600 h-full rounded-full transition-all duration-300"
                                   style={{ width: `${progressPct}%` }}
                                 />
                               </div>
+                              )}
                             </div>
                           </div>
                         </div>

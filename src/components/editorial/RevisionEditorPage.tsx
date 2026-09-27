@@ -4,7 +4,8 @@ import { Save, Send, Plus, Trash2 } from 'lucide-react';
 import { allModules, getModuleById } from '../../content/modules';
 import { useAuth } from '../../contexts/AuthProvider';
 import { getRevisionById, saveRevision, submitRevision, getPublishedTopic } from '../../services/editorialService';
-import { findTopicInTree, topicToRevisionPayload, getAllFlatTopics } from '../../services/contentMerge';
+import { findTopicInTree, findTopicPathInTree, topicToRevisionPayload, getAllFlatTopics } from '../../services/contentMerge';
+import { getReferencesForTopic, normalizeReferences } from '../../content/topicReferences';
 import { useAllModules } from '../../hooks/useAllModules';
 import { useMergedModule } from '../../hooks/useMergedModule';
 import { useGoBack } from '../../hooks/useGoBack';
@@ -73,6 +74,12 @@ export default function RevisionEditorPage() {
       const published = await getPublishedTopic(queryTopicId!);
       let payloadFromSource: RevisionPayload;
 
+      const ancestorIds = (() => {
+        const path = mod ? findTopicPathInTree(mod.topics, queryTopicId!) : null;
+        return path ? path.slice(0, -1) : [];
+      })();
+      const inheritedReferences = getReferencesForTopic(queryModuleId!, queryTopicId!, ancestorIds);
+
       if (published) {
         payloadFromSource = {
           id: published.id,
@@ -87,9 +94,13 @@ export default function RevisionEditorPage() {
           imageUrls: published.media?.imageUrls ?? [],
           clinicalPearls: published.clinical_pearls ?? [],
           keyPoints: published.key_points ?? [],
+          references: published.media?.references?.length ? published.media.references : inheritedReferences,
         };
       } else if (staticTopic) {
         payloadFromSource = topicToRevisionPayload(staticTopic);
+        if (!payloadFromSource.references?.length) {
+          payloadFromSource = { ...payloadFromSource, references: inheritedReferences };
+        }
       } else {
         return;
       }
@@ -175,12 +186,23 @@ export default function RevisionEditorPage() {
       const videoMedia = externalListToVideoMedia(resolveExternalVideos(payload));
       const { externalVideos: _discard, ...rest } = payload;
       const slug = payload.slug?.trim() || slugify(payload.title);
+      const references = normalizeReferences(payload.references);
       const normalized: RevisionPayload = {
         ...rest,
         id: action === 'create' ? slug : (targetTopicId ?? payload.id),
         slug: action === 'create' ? slug : payload.slug,
         revisionType: 'topic',
+        references,
         ...videoMedia,
+        media: {
+          videoUrls: videoMedia.videoUrls,
+          youtubeUrls: videoMedia.youtubeUrls,
+          vimeoUrls: videoMedia.vimeoUrls,
+          embedUrls: videoMedia.embedUrls,
+          imageUrls: rest.imageUrls ?? [],
+          pdfUrls: rest.pdfUrls ?? [],
+          references,
+        },
       };
 
       const saved = await saveRevision({
@@ -367,6 +389,39 @@ export default function RevisionEditorPage() {
           ]}
         />
 
+        <div>
+          <MediaEditorSection
+            title="Bibliografía de este tema"
+            items={(payload.references ?? []).map((ref) => ({
+              authors: ref.authors ?? '',
+              title: ref.title ?? '',
+              journal: ref.journal ?? '',
+              year: ref.year === undefined || ref.year === null ? '' : String(ref.year),
+              url: ref.url ?? '',
+            }))}
+            onChange={(items) => updatePayload({
+              references: items.map((item) => ({
+                authors: item.authors,
+                title: item.title,
+                journal: item.journal,
+                year: item.year,
+                url: item.url || undefined,
+              })),
+            })}
+            fields={[
+              { key: 'authors', label: 'Autores' },
+              { key: 'year', label: 'Año' },
+              { key: 'title', label: 'Título' },
+              { key: 'journal', label: 'Revista, editorial o fuente' },
+              { key: 'url', label: 'Enlace (PubMed, DOI o editorial, opcional)' },
+            ]}
+            emptyLabel="Sin citas propias. Al publicar vacío, el tema hereda la bibliografía de su sección."
+          />
+          <p className="mt-2 text-xs text-slate-500">
+            El alumno ve esta lista al final del tema. Si la dejas vacía al publicar, el tema vuelve a heredar la bibliografía de su sección o la del módulo.
+          </p>
+        </div>
+
         <div className="rounded-2xl border border-dashed border-slate-300 dark:border-slate-600 p-4">
           <h2 className="text-sm font-semibold mb-3">Vista previa en tiempo real</h2>
           <MediaPreview payload={payload} />
@@ -403,11 +458,13 @@ function MediaEditorSection<T extends Record<string, string>>({
   items,
   onChange,
   fields,
+  emptyLabel = 'Sin elementos. Solo se almacenan enlaces externos.',
 }: {
   title: string;
   items: T[];
   onChange: (items: T[]) => void;
   fields: { key: keyof T; label: string }[];
+  emptyLabel?: string;
 }) {
   const add = () => onChange([...items, Object.fromEntries(fields.map((f) => [f.key, ''])) as T]);
   const remove = (i: number) => onChange(items.filter((_, idx) => idx !== i));
@@ -425,7 +482,7 @@ function MediaEditorSection<T extends Record<string, string>>({
           <Plus className="w-4 h-4" /> Agregar
         </button>
       </div>
-      {items.length === 0 && <p className="text-xs text-slate-400">Sin elementos. Solo se almacenan enlaces externos.</p>}
+      {items.length === 0 && <p className="text-xs text-slate-400">{emptyLabel}</p>}
       <div className="space-y-3">
         {items.map((item, i) => (
           <div key={i} className="grid gap-2 sm:grid-cols-2 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50">

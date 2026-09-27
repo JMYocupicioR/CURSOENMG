@@ -513,8 +513,37 @@ export function TopicAdoptionInbox({
                         Aún no adoptaste ningún tema. Por favor despliega la sección de «Temas libres» abajo para elegir los temas que impartirás.
                       </div>
                     ) : (
-                      <div className="rounded-xl border border-slate-200/80 dark:border-slate-800 divide-y divide-slate-100 dark:divide-slate-800">
-                        {mine.map((row) => {
+                      <div className="space-y-3">
+                        <div className="flex justify-end">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              askScope(
+                                {
+                                  kind: 'withdraw',
+                                  moduleId: 'all',
+                                  heading: 'Retirar todos mis temas',
+                                  detail: 'Se cancelará tu asignación a todos tus temas actuales.',
+                                  items: mine.map((row) => pathForTopic(row.topic_id, row.module_id)),
+                                  confirmLabel: `Retirar ${mine.length} temas`,
+                                  previewIds: mine.map((row) => row.topic_id),
+                                  busyKey: 'withdraw-all',
+                                  topicIds: [],
+                                  commitmentIds: mine.map((row) => row.id),
+                                },
+                                true
+                              )
+                            }
+                            disabled={busyKey === 'withdraw-all'}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-rose-200 dark:border-rose-900/60 text-xs font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition disabled:opacity-60 cursor-pointer"
+                            title="Retirar todos mis temas"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                            <span>Retirar todos mis temas</span>
+                          </button>
+                        </div>
+                        <div className="rounded-xl border border-slate-200/80 dark:border-slate-800 divide-y divide-slate-100 dark:divide-slate-800">
+                          {mine.map((row) => {
                           const otherTeachers = commitments.filter(
                             (c) =>
                               c.topic_id === row.topic_id &&
@@ -638,10 +667,11 @@ export function TopicAdoptionInbox({
                           );
                         })}
                       </div>
-                    )}
-                  </div>
-                )}
-              </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
 
               {/* ── Subsección 2: Temas libres (Temas sin profesor) ── */}
               <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-2xs">

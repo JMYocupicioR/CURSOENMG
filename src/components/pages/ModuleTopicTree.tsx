@@ -49,6 +49,7 @@ export interface ModuleTopicRowProps {
   lang: 'es' | 'en';
   hasQuiz: (topicId: string) => boolean;
   canProposeContent: boolean;
+  trackProgress?: boolean;
   parentPath?: string[];
   filter?: TopicFilterType;
 }
@@ -62,6 +63,7 @@ function ModuleTopicRow({
   lang,
   hasQuiz,
   canProposeContent,
+  trackProgress = true,
   parentPath = [],
   filter = 'all',
 }: ModuleTopicRowProps) {
@@ -84,9 +86,9 @@ function ModuleTopicRow({
   const topicUrl = `/modulo/${moduleId}/${currentPath.join('/')}`;
 
   // Progress calculations
-  const leafCompleted = isCompleted(topic.id);
-  const leafVisited = isVisited(topic.id);
-  const parentStats = !isLeaf ? getParentTopicStats(topic) : null;
+  const leafCompleted = trackProgress && isCompleted(topic.id);
+  const leafVisited = trackProgress && isVisited(topic.id);
+  const parentStats = trackProgress && !isLeaf ? getParentTopicStats(topic) : null;
   const isSectionDone = parentStats ? parentStats.status === 'completed' : leafCompleted;
 
   // Filter visibility logic
@@ -137,8 +139,8 @@ function ModuleTopicRow({
               : 'bg-white/75 dark:bg-slate-800/50 border-slate-200/70 dark:border-slate-700/50 hover:border-blue-300 dark:hover:border-blue-600'
           }`}
         >
-          {/* Quick interactive toggle button for student */}
           <div className="flex-shrink-0 flex items-center pt-0.5">
+            {trackProgress ? (
             <button
               type="button"
               onClick={handleToggleClick}
@@ -166,6 +168,11 @@ function ModuleTopicRow({
                 </span>
               )}
             </button>
+            ) : (
+              <span className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center bg-slate-100 dark:bg-slate-700/70 font-mono text-xs sm:text-sm font-bold text-slate-600 dark:text-slate-300">
+                {indexPath}
+              </span>
+            )}
           </div>
 
           <div className="flex-1 min-w-0">
@@ -183,8 +190,7 @@ function ModuleTopicRow({
                 {lt.title}
               </Link>
 
-              {/* Status Badge for Leaf Lesson */}
-              {isLeaf && (
+              {trackProgress && isLeaf && (
                 <>
                   {leafCompleted ? (
                     <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300 border border-emerald-300/70 dark:border-emerald-800">
@@ -205,8 +211,7 @@ function ModuleTopicRow({
                 </>
               )}
 
-              {/* Status Badge for Parent Section */}
-              {!isLeaf && parentStats && (
+              {trackProgress && !isLeaf && parentStats && (
                 <span
                   className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold ${
                     parentStats.status === 'completed'
@@ -252,7 +257,7 @@ function ModuleTopicRow({
             )}
 
             {/* Parent Section Progress Bar and Subtopic Count */}
-            {childCount > 0 && parentStats && (
+            {trackProgress && childCount > 0 && parentStats && (
               <div className="mt-2.5 pt-2 border-t border-slate-100 dark:border-slate-700/40">
                 <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
                   <div className="flex items-center gap-2">
@@ -323,6 +328,7 @@ function ModuleTopicRow({
               lang={lang}
               hasQuiz={hasQuiz}
               canProposeContent={canProposeContent}
+              trackProgress={trackProgress}
               parentPath={currentPath}
               filter={filter}
             />

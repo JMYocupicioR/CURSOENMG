@@ -12,7 +12,8 @@ import {
   reviewRevision,
   getProfilesByIds,
 } from '../../services/editorialService';
-import { findTopicInTree, topicToRevisionPayload } from '../../services/contentMerge';
+import { findTopicInTree, findTopicPathInTree, topicToRevisionPayload } from '../../services/contentMerge';
+import { getReferencesForTopic } from '../../content/topicReferences';
 import type { ContentRevision, RevisionPayload, RevisionStatus } from '../../types/database';
 import { MediaPreview } from '../editorial/MediaPreview';
 import { RevisionDiff } from './RevisionDiff';
@@ -59,6 +60,10 @@ async function resolveCurrentPayload(rev: ContentRevision): Promise<RevisionPayl
   const topicId = rev.target_topic_id ?? rev.payload.id;
   if (!topicId) return null;
 
+  const mod = allModules.find((m) => m.id === rev.module_id);
+  const path = mod ? findTopicPathInTree(mod.topics, topicId) : null;
+  const inheritedReferences = getReferencesForTopic(rev.module_id, topicId, path ? path.slice(0, -1) : []);
+
   const published = await getPublishedTopic(topicId);
   if (published) {
     return {
@@ -74,12 +79,15 @@ async function resolveCurrentPayload(rev: ContentRevision): Promise<RevisionPayl
       imageUrls: published.media?.imageUrls ?? [],
       clinicalPearls: published.clinical_pearls ?? [],
       keyPoints: published.key_points ?? [],
+      references: published.media?.references?.length ? published.media.references : inheritedReferences,
     };
   }
 
-  const mod = allModules.find((m) => m.id === rev.module_id);
   const staticTopic = mod ? findTopicInTree(mod.topics, topicId) : null;
-  return staticTopic ? topicToRevisionPayload(staticTopic) : null;
+  if (!staticTopic) return null;
+  const payload = topicToRevisionPayload(staticTopic);
+  if (!payload.references?.length) payload.references = inheritedReferences;
+  return payload;
 }
 
 export default function AdminReviewQueue() {

@@ -1,6 +1,8 @@
 // src/types/content.ts
 // Hierarchical content system for the neurodiagnostic learning platform
 
+import type { Reference } from '../content/topicReferences';
+
 export interface Topic {
   id: string;
   title: string;
@@ -20,6 +22,8 @@ export interface Topic {
   clinicalPearlsEn?: string[];
   keyPoints?: string[];         // Key takeaway summaries (📌)
   keyPointsEn?: string[];
+  /** Bibliographic citations for this topic. When set, they replace inherited references. */
+  references?: Reference[];
   children?: Topic[];      // Recursive sub-topics (unlimited depth)
   tags?: string[];
   keyTerms?: string[];

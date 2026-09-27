@@ -12,6 +12,7 @@ import { ModuleTopicRow, TopicFilterType } from './ModuleTopicTree';
 import { CourseGate } from '../CourseGate';
 import { QuizCatalogReturnBar } from '../admin/quiz/QuizCatalogReturnBar';
 import { useTopicProgress } from '../../hooks/useTopicProgress';
+import { isAppendixModule } from '../../content/appendixModules';
 import { listPendingCurriculumLessons } from '../../services/studentResume';
 
 export default function ModulePage() {
@@ -66,6 +67,7 @@ export default function ModulePage() {
   }
 
   const quizCount = moduleQuizCount(mod.id);
+  const isConsultation = isAppendixModule(mod.id);
 
   return (
     <CourseGate moduleId={mod.id}>
@@ -128,7 +130,19 @@ export default function ModulePage() {
           </div>
         </motion.div>
 
-        {/* Student Progress Card & Filters */}
+        {isConsultation ? (
+          <div className="mb-8 p-5 sm:p-6 rounded-3xl border border-slate-200/80 dark:border-slate-700/60 bg-slate-50/80 dark:bg-slate-900/50">
+            <p className="text-xs font-mono font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-1">
+              {lang === 'en' ? 'Consultation material' : 'Material de consulta'}
+            </p>
+            <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
+              {lang === 'en'
+                ? 'These pages collect shared sources. They do not count as lessons and do not change your course progress. Each topic shows its own references at the end of the text.'
+                : 'Estas páginas reúnen fuentes compartidas. No son lecciones y no cambian tu avance del curso. Cada tema muestra su bibliografía al final del texto.'}
+            </p>
+          </div>
+        ) : (
+        /* Student Progress Card & Filters */
         <motion.div
           initial={{ opacity: 0, y: 15 }}
           animate={{ opacity: 1, y: 0 }}
@@ -255,9 +269,10 @@ export default function ModulePage() {
             </p>
           </div>
         </motion.div>
+        )}
 
         {/* Empty States for Filters */}
-        {filter === 'pending' && stats.pending === 0 && (
+        {!isConsultation && filter === 'pending' && stats.pending === 0 && (
           <div className="p-8 text-center rounded-3xl border border-dashed border-emerald-300 dark:border-emerald-800 bg-emerald-50/40 dark:bg-emerald-950/20 my-6">
             <CheckCircle2 className="w-12 h-12 text-emerald-500 mx-auto mb-3" />
             <h3 className="text-base sm:text-lg font-bold text-slate-800 dark:text-slate-100">
@@ -278,7 +293,7 @@ export default function ModulePage() {
           </div>
         )}
 
-        {filter === 'completed' && stats.completed === 0 && (
+        {!isConsultation && filter === 'completed' && stats.completed === 0 && (
           <div className="p-8 text-center rounded-3xl border border-dashed border-slate-300 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30 my-6">
             <Clock className="w-12 h-12 text-slate-400 mx-auto mb-3" />
             <h3 className="text-base sm:text-lg font-bold text-slate-800 dark:text-slate-100">
@@ -317,7 +332,8 @@ export default function ModulePage() {
               lang={lang}
               hasQuiz={hasQuiz}
               canProposeContent={canProposeContent}
-              filter={filter}
+              trackProgress={!isConsultation}
+              filter={isConsultation ? 'all' : filter}
             />
           ))}
         </motion.div>

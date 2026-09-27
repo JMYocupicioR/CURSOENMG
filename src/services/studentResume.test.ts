@@ -149,4 +149,25 @@ describe('getNextPendingCurriculumLesson', () => {
     expect(next?.topicId).toBe('ncs-intro');
     expect(next?.moduleId).toBe('nerve-conduction');
   });
+
+  it('does not ask the student to complete the bibliography appendix', () => {
+    const withAppendix: Module[] = [
+      ...fakeModules,
+      {
+        id: 'bibliography',
+        number: 12,
+        title: 'Referencias y Bibliografía',
+        titleEn: 'References',
+        emoji: '📖',
+        description: '',
+        descriptionEn: '',
+        color: '',
+        icon: 'BookMarked',
+        topics: [{ id: 'textbooks', title: 'Libros de texto fundamentales' }],
+      },
+    ];
+    const pending = listPendingCurriculumLessons(new Set(), { modules: withAppendix });
+    expect(pending.some((lesson) => lesson.moduleId === 'bibliography')).toBe(false);
+    expect(pending.some((lesson) => lesson.topicId === 'textbooks')).toBe(false);
+  });
 });

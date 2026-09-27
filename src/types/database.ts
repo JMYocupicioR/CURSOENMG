@@ -177,6 +177,7 @@ export interface TopicMedia {
   embedUrls?: { title: string; embedUrl: string }[];
   imageUrls?: { src: string; alt: string; caption?: string }[];
   pdfUrls?: { title: string; url: string; description?: string; author?: string }[];
+  references?: { authors: string; title: string; journal: string; year: number | string; url?: string }[];
 }
 
 import type { QuizQuestionDraft } from './quiz';
@@ -208,6 +209,7 @@ export interface RevisionPayload {
   clinicalPearlsEn?: string[];
   keyPoints?: string[];
   keyPointsEn?: string[];
+  references?: { authors: string; title: string; journal: string; year: number | string; url?: string }[];
   tags?: string[];
   keyTerms?: string[];
   /** Raw video list for editing; normalized to typed arrays on save */

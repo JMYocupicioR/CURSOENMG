@@ -95,9 +95,14 @@ describe('buildTextbookModel', () => {
     const model = buildTextbookModel({ modules: [sample] });
     const chapter = model.chapters[0];
     const withRefs = chapter.lessons.filter((lesson) => lesson.sectionBibliography.length > 0);
-    expect(withRefs).toHaveLength(1);
-    expect(withRefs[0].firstLevelId).toBe('intro-neurodiagnostics');
-    expect(withRefs[0].sectionBibliography[0].authors).toContain('Kimura');
+    const intro = withRefs.find((lesson) => lesson.firstLevelId === 'intro-neurodiagnostics');
+    const draft = withRefs.find((lesson) => lesson.id === 'hidden-draft');
+    expect(withRefs).toHaveLength(2);
+    expect(intro?.id).toBe('ethics');
+    expect(intro?.sectionBibliography[0].authors).toContain('Kimura');
+    expect(intro?.sectionBibliography.some((ref) => ref.authors.includes('Dumitru'))).toBe(false);
+    expect(draft?.sectionBibliography.some((ref) => ref.authors.includes('Dumitru'))).toBe(true);
+    expect(chapter.lessons.find((lesson) => lesson.id === 'history')?.sectionBibliography).toEqual([]);
     expect(chapter.references.length).toBeGreaterThan(0);
     expect(model.appendix.length).toBe(chapter.references.length);
   });

@@ -32,6 +32,13 @@ export const topicReferences: Record<string, Record<string, Reference[]>> = {
       { authors: 'Kimura J', title: 'Electrodiagnosis in Diseases of Nerve and Muscle: Principles and Practice', journal: 'Oxford University Press', year: 2013, url: 'https://global.oup.com/academic/product/electrodiagnosis-in-diseases-of-nerve-and-muscle-9780199738687' },
       { authors: 'Brown WF', title: 'The Physiological and Technical Basis of Electromyography', journal: 'Butterworth', year: 1984 },
     ],
+    '_default': [
+      { authors: 'Preston DC, Shapiro BE', title: 'Electromyography and Neuromuscular Disorders: Clinical-Electrophysiologic Correlations', journal: 'Elsevier', year: 2021, url: 'https://www.elsevier.com/books/electromyography-and-neuromuscular-disorders/preston/978-0-323-66180-5' },
+      { authors: 'Kimura J', title: 'Electrodiagnosis in Diseases of Nerve and Muscle: Principles and Practice', journal: 'Oxford University Press', year: 2013, url: 'https://global.oup.com/academic/product/electrodiagnosis-in-diseases-of-nerve-and-muscle-9780199738687' },
+      { authors: 'Dumitru D, Amato AA, Zwarts MJ', title: 'Electrodiagnostic Medicine (2nd ed)', journal: 'Hanley & Belfus', year: 2002 },
+      { authors: 'Oh SJ', title: 'Clinical Electromyography: Nerve Conduction Studies (3rd ed)', journal: 'Lippincott Williams & Wilkins', year: 2003 },
+      { authors: 'Aminoff MJ', title: 'Electrodiagnosis in Clinical Neurology (6th ed)', journal: 'Churchill Livingstone', year: 2012 },
+    ],
   },
 
   /* ── Module 2: Nerve Conduction ── */
@@ -51,6 +58,8 @@ export const topicReferences: Record<string, Record<string, Reference[]>> = {
       { authors: 'Dumitru D', title: 'Physiologic basis of potentials recorded in electromyography', journal: 'Muscle & Nerve', year: 2000, url: 'https://pubmed.ncbi.nlm.nih.gov/11054745/' },
       { authors: 'Stålberg E, Nandedkar S, Sanders D, Falck B', title: 'Quantitative motor unit potential analysis', journal: 'Journal of Clinical Neurophysiology', year: 1996, url: 'https://pubmed.ncbi.nlm.nih.gov/8897206/' },
       { authors: 'Buchthal F, Rosenfalck P', title: 'Action potential parameters in different human muscles', journal: 'Acta Psychiatrica Scandinavica', year: 1955 },
+      { authors: 'Pease WS, Lew HL, Johnson EW', title: "Johnson's Practical Electromyography (4th ed)", journal: 'Lippincott Williams & Wilkins', year: 2007 },
+      { authors: 'Buschbacher RM, Prahlow ND', title: 'Manual of Nerve Conduction Studies (2nd ed)', journal: 'Demos Medical', year: 2006 },
     ],
   },
 
@@ -157,6 +166,20 @@ export const topicReferences: Record<string, Record<string, Reference[]>> = {
 
   /* ── Module 10: Diagnostic Criteria ── */
   'diagnostic-criteria': {
+    'cidp-criteria': [
+      { authors: 'Van den Bergh PYK, van Doorn PA, Hadden RDM, et al.', title: 'EAN/PNS guideline on diagnosis and treatment of chronic inflammatory demyelinating polyradiculoneuropathy: Second revision', journal: 'European Journal of Neurology', year: 2023, url: 'https://pubmed.ncbi.nlm.nih.gov/38873949/' },
+      { authors: 'Joint Task Force of the EFNS and the PNS', title: 'European Federation of Neurological Societies/Peripheral Nerve Society guideline on management of chronic inflammatory demyelinating polyradiculoneuropathy', journal: 'Journal of the Peripheral Nervous System', year: 2010, url: 'https://pubmed.ncbi.nlm.nih.gov/20456718/' },
+    ],
+    'als-criteria': [
+      { authors: 'Shefner JM, Al-Chalabi A, Baker MR, et al.', title: 'A proposal for new diagnostic criteria for ALS (Gold Coast criteria)', journal: 'Clinical Neurophysiology', year: 2020, url: 'https://pubmed.ncbi.nlm.nih.gov/32387049/' },
+      { authors: 'de Carvalho M, Dengler R, Eisen A, et al.', title: 'Electrodiagnostic criteria for diagnosis of ALS (Awaji criteria)', journal: 'Clinical Neurophysiology', year: 2008, url: 'https://doi.org/10.1016/j.clinph.2007.11.169' },
+      { authors: 'Brooks BR', title: 'El Escorial world federation of neurology criteria for the diagnosis of amyotrophic lateral sclerosis', journal: 'Journal of the Neurological Sciences', year: 1994, url: 'https://doi.org/10.1016/0022-510X(94)90191-0' },
+    ],
+    'gbs-subtypes': [
+      { authors: 'Hadden RD, Cornblath DR, Hughes RA, et al.', title: 'Electrophysiological classification of Guillain-Barré syndrome: Clinical associations and outcome', journal: 'Annals of Neurology', year: 1998, url: 'https://pubmed.ncbi.nlm.nih.gov/9818934/' },
+      { authors: 'Ho TW, Mishu B, Li CY, Gao CY, Cornblath DR, Griffin JW, et al.', title: 'Guillain-Barré syndrome in northern China. Relationship to Campylobacter jejuni infection and anti-glycolipid antibodies', journal: 'Brain', year: 1995, url: 'https://doi.org/10.1093/brain/118.3.597' },
+      { authors: 'Rajabally YA et al.', title: 'Electrophysiological categorization in Guillain-Barré syndrome', journal: 'Journal of the Peripheral Nervous System', year: 2015, url: 'https://pubmed.ncbi.nlm.nih.gov/26309146/' },
+    ],
     '_default': [
       { authors: 'Chen S, Andary M, Buschbacher R, et al.', title: 'Electrodiagnostic reference values for upper and lower limb nerve conduction studies in adult populations', journal: 'Muscle & Nerve', year: 2016, url: 'https://doi.org/10.1002/mus.25203' },
       { authors: 'Dillingham T, Chen S, Andary M, et al.', title: 'Establishing high quality reference values for nerve conduction studies (AANEM Normative Data Task Force)', journal: 'Muscle & Nerve', year: 2016, url: 'https://doi.org/10.1002/mus.25204' },
@@ -184,15 +207,82 @@ export const topicReferences: Record<string, Record<string, Reference[]>> = {
       { authors: 'McClellan C, McLaughlin M', title: 'Quality in Electrodiagnostic Studies: A Guide for Referring Physicians', journal: 'Missouri Medicine', year: 2019 },
     ],
   },
+
+  'pathology-updates': {
+    'cidp-criteria-update': [
+      { authors: 'Van den Bergh PYK, van Doorn PA, Hadden RDM, et al.', title: 'EAN/PNS guideline on diagnosis and treatment of chronic inflammatory demyelinating polyradiculoneuropathy: Second revision', journal: 'European Journal of Neurology', year: 2023, url: 'https://pubmed.ncbi.nlm.nih.gov/38873949/' },
+    ],
+    'als-criteria-update': [
+      { authors: 'Shefner JM, Al-Chalabi A, Baker MR, et al.', title: 'A proposal for new diagnostic criteria for ALS (Gold Coast criteria)', journal: 'Clinical Neurophysiology', year: 2020, url: 'https://pubmed.ncbi.nlm.nih.gov/32387049/' },
+      { authors: 'de Carvalho M, Dengler R, Eisen A, et al.', title: 'Electrodiagnostic criteria for diagnosis of ALS (Awaji criteria)', journal: 'Clinical Neurophysiology', year: 2008, url: 'https://doi.org/10.1016/j.clinph.2007.11.169' },
+    ],
+  },
 };
 
+function specificReferences(moduleId: string, topicId: string): Reference[] {
+  const list = topicReferences[moduleId]?.[topicId];
+  return list?.length ? list : [];
+}
+
+function defaultReferences(moduleId: string): Reference[] {
+  return topicReferences[moduleId]?.['_default'] ?? [];
+}
+
 /**
- * Get references for a given module and topic.
- * Falls back to '_default' if the specific topicId isn't found.
- * Returns empty array if no references are available.
+ * References for a topic.
+ * Order: this topic, then each ancestor from nearest to farthest, then the module default.
+ * `_default` is not used while a more specific list exists.
  */
-export function getReferencesForTopic(moduleId: string, topicId: string): Reference[] {
-  const moduleRefs = topicReferences[moduleId];
-  if (!moduleRefs) return [];
-  return moduleRefs[topicId] || moduleRefs['_default'] || [];
+export function getReferencesForTopic(
+  moduleId: string,
+  topicId: string,
+  ancestorIds: string[] = []
+): Reference[] {
+  return resolveTopicReferences(
+    moduleId,
+    { id: topicId },
+    ancestorIds.map((id) => ({ id }))
+  );
+}
+
+/** Same resolution, but a topic's own `references` (published by a teacher) wins over the static map. */
+export function resolveTopicReferences(
+  moduleId: string,
+  topic: { id: string; references?: Reference[] },
+  ancestors: Array<{ id: string; references?: Reference[] }> = []
+): Reference[] {
+  if (topic.references?.length) return topic.references;
+  const own = specificReferences(moduleId, topic.id);
+  if (own.length) return own;
+
+  for (let i = ancestors.length - 1; i >= 0; i -= 1) {
+    const ancestor = ancestors[i];
+    if (ancestor.references?.length) return ancestor.references;
+    const inherited = specificReferences(moduleId, ancestor.id);
+    if (inherited.length) return inherited;
+  }
+
+  return defaultReferences(moduleId);
+}
+
+/** Drop blank rows. A citation needs author and title. */
+export function normalizeReferences(rows: Array<Partial<Reference>> | undefined): Reference[] {
+  if (!rows?.length) return [];
+  const out: Reference[] = [];
+  for (const row of rows) {
+    const authors = row.authors?.trim() ?? '';
+    const title = row.title?.trim() ?? '';
+    if (!authors || !title) continue;
+    const yearText = row.year === undefined || row.year === null ? '' : String(row.year).trim();
+    const year = /^\d{4}$/.test(yearText) ? Number(yearText) : yearText;
+    const url = row.url?.trim();
+    out.push({
+      authors,
+      title,
+      journal: row.journal?.trim() ?? '',
+      year: year || 's. f.',
+      ...(url ? { url } : {}),
+    });
+  }
+  return out;
 }

@@ -50,6 +50,17 @@ function formatMediaSummary(media: {
   return parts.length > 0 ? parts.join('\n\n') : 'Sin elementos multimedia';
 }
 
+function formatReferences(value: RevisionPayload['references']): string {
+  if (!value?.length) return '—';
+  return value
+    .map((ref, index) => {
+      const source = [ref.journal, ref.year].filter(Boolean).join(', ');
+      const link = ref.url ? ` ${ref.url}` : '';
+      return `${index + 1}. ${ref.authors} ${ref.title}.${source ? ` ${source}.` : ''}${link}`;
+    })
+    .join('\n');
+}
+
 function changed(a: unknown, b: unknown): boolean {
   return JSON.stringify(a ?? null) !== JSON.stringify(b ?? null);
 }
@@ -69,8 +80,9 @@ export function RevisionDiff({
     changed(current.vimeoUrls, proposed.vimeoUrls) ||
     changed(current.embedUrls, proposed.embedUrls) ||
     changed(current.imageUrls, proposed.imageUrls);
+  const referencesChanged = changed(current.references, proposed.references);
 
-  if (diffs.length === 0 && !mediaChanged) {
+  if (diffs.length === 0 && !mediaChanged && !referencesChanged) {
     return (
       <p className="text-sm text-slate-500 italic">Sin cambios detectados respecto a la versión actual.</p>
     );
@@ -98,6 +110,23 @@ export function RevisionDiff({
           </div>
         </div>
       ))}
+
+      {referencesChanged && (
+        <div className="grid gap-3 lg:grid-cols-2">
+          <div className="rounded-xl border border-slate-200 dark:border-slate-700 p-3 bg-slate-50/50 dark:bg-slate-900/30">
+            <p className="text-xs font-semibold uppercase text-slate-400 mb-2">Bibliografía actual</p>
+            <pre className="text-xs whitespace-pre-wrap font-sans text-slate-600 dark:text-slate-300">
+              {formatReferences(current.references)}
+            </pre>
+          </div>
+          <div className="rounded-xl border border-emerald-200 dark:border-emerald-800 p-3 bg-emerald-50/30 dark:bg-emerald-900/10">
+            <p className="text-xs font-semibold uppercase text-emerald-600 mb-2">Bibliografía propuesta</p>
+            <pre className="text-xs whitespace-pre-wrap font-sans text-slate-700 dark:text-slate-200">
+              {formatReferences(proposed.references)}
+            </pre>
+          </div>
+        </div>
+      )}
 
       {mediaChanged && (
         <div className="grid gap-3 lg:grid-cols-2">

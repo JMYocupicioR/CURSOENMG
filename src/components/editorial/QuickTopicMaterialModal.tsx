@@ -224,6 +224,7 @@ export function QuickTopicMaterialModal({
         embedUrls: payload.embedUrls ?? [],
         imageUrls: payload.imageUrls ?? [],
         pdfUrls: payload.pdfUrls ?? [],
+        references: payload.references ?? payload.media?.references ?? [],
       };
 
       // Save revision

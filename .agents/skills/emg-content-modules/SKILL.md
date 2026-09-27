@@ -214,8 +214,9 @@ export const module09: Module = {
 
 `src/content/topicReferences.ts` maps `moduleId` → `topicId` → `Reference[]`.
 
-- Use a first-level topic `id` as key, or `_default` for module-wide refs.
-- `getReferencesForTopic(moduleId, topicId)` falls back to `_default` if topic not found.
+- Key by the topic the student reads (a leaf `id` is valid). `_default` is only the module-wide fallback.
+- Resolution order: the topic's own published `references`, then its static key, then each ancestor, then `_default`.
+- Do not add a bibliography child topic. The bibliography module is a consultation appendix and does not count as lessons.
 
 ```typescript
 'my-module-id': {

@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase';
+import { isAppendixModule } from '../content/appendixModules';
 import { allModules } from '../content/modules';
 import { calculateStudentMetrics, fetchStudentCompletedTopics, getAllTopicIds } from './studentService';
 import { getMyAttempts, getMyProgressByModule } from './quizService';
@@ -159,7 +160,7 @@ export async function calculateStudentKardex(
   const moduleProgressList = await getMyProgressByModule(studentId).catch(() => []);
   const metrics = calculateStudentMetrics(studentId, moduleProgressList, completedTopicsSet);
 
-  const modulesBreakdown = allModules.map((m) => {
+  const modulesBreakdown = allModules.filter((m) => !isAppendixModule(m.id)).map((m) => {
     const tids = getAllTopicIds(m.topics);
     const completed = tids.filter((id) => completedTopicsSet.has(id)).length;
     return {

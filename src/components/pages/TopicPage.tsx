@@ -16,7 +16,8 @@ import type { QuizTopicFlag } from '../../types/quiz';
 import { Topic } from '../../types/content';
 import { ChevronRight, Home, ArrowLeft, ArrowRight, List, X, ChevronUp, BookMarked, ExternalLink, Play, Lightbulb, Target, ImageIcon, CheckCircle2, Clock, ClipboardList, Sparkles, FileText } from 'lucide-react';
 import { QuickTopicMaterialModal } from '../editorial/QuickTopicMaterialModal';
-import { getReferencesForTopic, Reference } from '../../content/topicReferences';
+import { isAppendixModule } from '../../content/appendixModules';
+import { resolveTopicReferences, type Reference } from '../../content/topicReferences';
 import {
   toggleTopicCompleted,
   markMultipleTopics,
@@ -300,6 +301,8 @@ function NestedTopicSections({
   registerRef,
   headingLevel = 3,
   moduleId,
+  referenceModuleId,
+  ancestors = [],
   topicHasQuiz,
   highlightQuery,
 }: {
@@ -309,6 +312,8 @@ function NestedTopicSections({
   registerRef: (id: string, el: HTMLElement | null) => void;
   headingLevel?: 3 | 4;
   moduleId?: string;
+  referenceModuleId?: string;
+  ancestors?: Topic[];
   topicHasQuiz?: (topicId: string) => boolean;
   highlightQuery?: string;
 }) {
@@ -344,6 +349,13 @@ function NestedTopicSections({
                 headingLevel={headingLevel === 3 ? 4 : 5}
                 highlightQuery={highlightQuery}
               />
+              {!nested && referenceModuleId && (
+                <TopicBibliography
+                  references={resolveTopicReferences(referenceModuleId, child, ancestors)}
+                  lang={lang}
+                  compact
+                />
+              )}
             </div>
             {!nested && moduleId && topicHasQuiz && (
               <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-700/40 flex flex-wrap items-center justify-between gap-3">
@@ -367,6 +379,8 @@ function NestedTopicSections({
                   registerRef={registerRef}
                   headingLevel={4}
                   moduleId={moduleId}
+                  referenceModuleId={referenceModuleId}
+                  ancestors={[...ancestors, child]}
                   topicHasQuiz={topicHasQuiz}
                   highlightQuery={highlightQuery}
                 />
@@ -467,59 +481,57 @@ function TocTopicTree({
 }
 
 /* ─── References Section ─── */
-function ReferencesSection({ references }: { references: Reference[] }) {
-  const [isOpen, setIsOpen] = useState(false);
+function TopicBibliography({
+  references,
+  lang,
+  compact = false,
+}: {
+  references: Reference[];
+  lang: 'es' | 'en';
+  compact?: boolean;
+}) {
+  if (!references.length) return null;
 
   return (
-    <div className="mt-10 pt-6 border-t border-slate-200/60 dark:border-slate-700/30">
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2.5 text-sm font-semibold text-slate-700 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors group"
-      >
+    <section className={`${compact ? 'mt-4 pt-4' : 'mt-8 pt-6'} border-t border-slate-200/60 dark:border-slate-700/30`}>
+      <h3 className="flex items-center gap-2.5 text-sm font-semibold text-slate-800 dark:text-slate-100 mb-3">
         <BookMarked className="w-4 h-4 text-blue-500 dark:text-blue-400" />
-        <span>Bibliografía ({references.length})</span>
-        <ChevronRight className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${isOpen ? 'rotate-90' : ''}`} />
-      </button>
-      <AnimatePresence>
-        {isOpen && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.25 }}
-            className="overflow-hidden"
-          >
-            <ol className="mt-4 space-y-3">
-              {references.map((ref, i) => (
-                <li key={i} className="flex items-start gap-2.5 text-[0.85rem] sm:text-sm leading-relaxed">
-                  <span className="text-[0.7rem] font-mono text-slate-400 dark:text-slate-500 mt-1 flex-shrink-0 w-5 text-right">{i + 1}.</span>
-                  <div className="text-slate-600 dark:text-slate-400">
-                    <span className="font-semibold text-slate-800 dark:text-slate-200">{ref.authors}</span>
-                    {' '}
-                    <span className="italic">{ref.title}.</span>
-                    {' '}
-                    <span>{ref.journal}, {ref.year}.</span>
-                    {ref.url && (
-                      <>
-                        {' '}
-                        <a
-                          href={ref.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 text-blue-600 dark:text-blue-400 hover:underline font-medium"
-                        >
-                          Abrir <ExternalLink className="w-3 h-3" />
-                        </a>
-                      </>
-                    )}
-                  </div>
-                </li>
-              ))}
-            </ol>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
+        <span>{lang === 'en' ? 'References' : 'Bibliografía'} ({references.length})</span>
+      </h3>
+      <ol className="space-y-3">
+        {references.map((ref, i) => (
+          <li key={`${ref.authors}-${ref.title}-${i}`} className="flex items-start gap-2.5 text-[0.85rem] sm:text-sm leading-relaxed">
+            <span className="text-[0.7rem] font-mono text-slate-400 dark:text-slate-500 mt-1 flex-shrink-0 w-5 text-right">{i + 1}.</span>
+            <div className="text-slate-600 dark:text-slate-400">
+              <span className="font-semibold text-slate-800 dark:text-slate-200">{ref.authors}</span>
+              {' '}
+              <span className="italic">{ref.title}.</span>
+              {(ref.journal || ref.year) && (
+                <>
+                  {' '}
+                  <span>
+                    {[ref.journal, ref.year].filter(Boolean).join(', ')}.
+                  </span>
+                </>
+              )}
+              {ref.url && (
+                <>
+                  {' '}
+                  <a
+                    href={ref.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-blue-600 dark:text-blue-400 hover:underline font-medium"
+                  >
+                    {lang === 'en' ? 'Open' : 'Abrir'} <ExternalLink className="w-3 h-3" />
+                  </a>
+                </>
+              )}
+            </div>
+          </li>
+        ))}
+      </ol>
+    </section>
   );
 }
 
@@ -837,8 +849,8 @@ export default function TopicPage() {
 
   const hasChildContent = topic.children && topic.children.length > 0;
   const isLeafTopic = !hasChildContent;
-  const firstLevelTopicId = pathParts[0] || topic.id;
-  const references = getReferencesForTopic(mod.id, firstLevelTopicId);
+  const tracksProgress = !isAppendixModule(mod.id);
+  const topicAncestors = breadcrumbs.slice(0, -1);
   const lt = localizedTopic(topic, lang);
   const modTitle = (lang === 'en' && mod.titleEn) || mod.title;
 
@@ -975,6 +987,13 @@ export default function TopicPage() {
             </div>
           )}
 
+          {isLeafTopic && (
+            <TopicBibliography
+              references={resolveTopicReferences(mod.id, topic, topicAncestors)}
+              lang={lang}
+            />
+          )}
+
           {canProposeContent && mod && isLeafTopic && (
             <div className="mb-8 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200/60 dark:border-slate-700/40 bg-white/70 dark:bg-slate-800/40 px-4 py-3">
               <p className="text-xs text-slate-500 dark:text-slate-400">
@@ -1064,6 +1083,13 @@ export default function TopicPage() {
                         <div className="px-5 sm:px-6 pb-5 sm:pb-6">
                           <div className="border-t border-slate-100 dark:border-slate-700/40 pt-4 space-y-5">
                             <TopicBody topic={child} lang={lang} highlightQuery={highlightQuery} />
+                            {!hasGrandchildren && (
+                              <TopicBibliography
+                                references={resolveTopicReferences(mod.id, child, breadcrumbs)}
+                                lang={lang}
+                                compact
+                              />
+                            )}
                             {hasGrandchildren && (
                               <NestedTopicSections
                                 topics={child.children!}
@@ -1071,6 +1097,8 @@ export default function TopicPage() {
                                 parentIndex={String(i + 1)}
                                 registerRef={registerRef}
                                 moduleId={canProposeContent && mod ? mod.id : undefined}
+                                referenceModuleId={mod.id}
+                                ancestors={[...breadcrumbs, child]}
                                 topicHasQuiz={canProposeContent ? topicHasQuiz : undefined}
                                 highlightQuery={highlightQuery}
                               />
@@ -1098,11 +1126,6 @@ export default function TopicPage() {
             </div>
           )}
 
-          {/* ── Per-Topic Bibliography ── */}
-          {references.length > 0 && (
-            <ReferencesSection references={references} />
-          )}
-
           {user && mod && topic && (
             <>
               <TopicDiscussion moduleId={mod.id} topicId={topic.id} />
@@ -1119,7 +1142,7 @@ export default function TopicPage() {
 
 
           {/* Lesson Completion Action Button (Bottom of Topic) */}
-          {user && (
+          {user && tracksProgress && (
             <div className="my-10 p-5 sm:p-6 rounded-3xl border border-slate-200/80 dark:border-slate-700/60 bg-gradient-to-br from-white via-slate-50 to-blue-50/30 dark:from-slate-800/60 dark:via-slate-900/50 dark:to-slate-950/60 backdrop-blur-sm shadow-md flex flex-col sm:flex-row items-center justify-between gap-5">
               <div className="space-y-1.5 text-center sm:text-left">
                 <div className="flex items-center justify-center sm:justify-start gap-2 mb-1">

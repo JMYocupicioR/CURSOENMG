@@ -1,3 +1,4 @@
+import { isAppendixModule } from '../content/appendixModules';
 import { allModules } from '../content/modules';
 import type { Module, Topic } from '../types/content';
 import {
@@ -60,7 +61,7 @@ export function isCurriculumNodeCompleted(
 }
 
 export function getCurriculumLessons(modules: Module[] = allModules): CurriculumLesson[] {
-  return modules.flatMap((mod) =>
+  return modules.filter((mod) => !isAppendixModule(mod.id)).flatMap((mod) =>
     mod.topics.map((topic) => ({
       moduleId: mod.id,
       moduleTitle: mod.title,

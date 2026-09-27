@@ -7,8 +7,8 @@ export const module12: Module = {
   title: 'Referencias y Bibliografía',
   titleEn: 'References and Bibliography',
   emoji: '📖',
-  description: 'Libros de texto, guías AANEM/EFNS, artículos clásicos y recursos digitales',
-  descriptionEn: 'Textbooks, AANEM/EFNS guidelines, classic articles and digital resources',
+  description: 'Catálogo de consulta. Las citas de cada tema están al final de ese tema; este módulo no suma al avance del curso.',
+  descriptionEn: 'Consultation catalog. Each topic lists its own citations; this module does not count toward course progress.',
   color: 'from-stone-500 to-stone-700',
   icon: 'BookMarked',
   topics: [
