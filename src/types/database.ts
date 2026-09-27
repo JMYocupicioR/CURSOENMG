@@ -340,6 +340,30 @@ export interface WorkshopRegistration {
   attended: boolean;
 }
 
+export type TopicTeachingStatus = 'proposed' | 'confirmed' | 'withdrawn';
+
+export interface TopicTeachingCommitment {
+  id: string;
+  cohort_id: string;
+  module_id: string;
+  topic_id: string;
+  teacher_id: string;
+  status: TopicTeachingStatus;
+  milestone_id: string | null;
+  workshop_id: string | null;
+  proposed_at: string;
+  confirmed_by: string | null;
+  confirmed_at: string | null;
+  teacher_name?: string | null;
+}
+
+export interface WorkshopInstructor {
+  workshop_id: string;
+  teacher_id: string;
+  commitment_id: string | null;
+  teacher_name?: string | null;
+}
+
 export interface Database {
   public: {
     Tables: {
@@ -631,6 +655,20 @@ export interface Database {
         };
         Update: { feedback?: string | null; status?: string };
       };
+      topic_teaching_commitments: {
+        Row: TopicTeachingCommitment;
+        Insert: Partial<TopicTeachingCommitment> & {
+          module_id: string;
+          topic_id: string;
+          teacher_id: string;
+        };
+        Update: Partial<TopicTeachingCommitment>;
+      };
+      workshop_instructors: {
+        Row: WorkshopInstructor;
+        Insert: { workshop_id: string; teacher_id: string; commitment_id?: string | null };
+        Update: { commitment_id?: string | null };
+      };
     };
     Functions: {
       is_admin: { Args: { check_user_id?: string }; Returns: boolean };
@@ -846,6 +884,24 @@ export interface Database {
       topic_discussion_directory: {
         Args: { p_topic_id: string };
         Returns: { user_id: string; display_name: string; is_staff: boolean }[];
+      };
+      propose_topic_commitments: {
+        Args: { p_topic_ids: string[]; p_module_id: string; p_cohort_id?: string };
+        Returns: TopicTeachingCommitment[];
+      };
+      confirm_topic_commitment: {
+        Args: {
+          p_commitment_id: string;
+          p_milestone_id: string;
+          p_scheduled_at?: string | null;
+          p_duration_minutes?: number;
+          p_title?: string | null;
+        };
+        Returns: TopicTeachingCommitment;
+      };
+      withdraw_topic_commitment: {
+        Args: { p_commitment_id: string };
+        Returns: TopicTeachingCommitment;
       };
     };
     Views: {

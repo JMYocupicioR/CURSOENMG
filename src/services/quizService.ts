@@ -142,12 +142,17 @@ export async function getMyAttempts(userId: string, limit = 100): Promise<QuizAt
   }));
 }
 
-export async function getAttemptCountForQuiz(quizId: string, userId: string): Promise<number> {
-  const { count, error } = await supabase
+export async function getAttemptCountForQuiz(quizOrTopicId: string, userId: string): Promise<number> {
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(quizOrTopicId);
+  const query = supabase
     .from('quiz_attempts')
     .select('*', { count: 'exact', head: true })
-    .eq('quiz_id', quizId)
     .eq('user_id', userId);
+
+  const { count, error } = isUuid
+    ? await query.eq('quiz_id', quizOrTopicId)
+    : await query.eq('topic_id', quizOrTopicId);
+
   if (error) throw error;
   return count ?? 0;
 }

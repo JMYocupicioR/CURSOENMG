@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ClipboardList, CheckCircle, XCircle, GraduationCap } from 'lucide-react';
+import { ClipboardList, CheckCircle, XCircle, GraduationCap, RotateCcw, Trash2 } from 'lucide-react';
 import { AdminLayout } from './AdminLayout';
 import { getAdminQuizAttempts } from '../../services/editorialService';
 import { getQuestionStats } from '../../services/quizValidationService';
+import { deleteQuizAttempt } from '../../services/quizService';
 import { getModuleLabel, getTopicPublicUrl } from '../../utils/adminUtils';
 import { allModules } from '../../content/modules';
 import type { AdminQuizAttemptRow } from '../../types/admin';
@@ -14,6 +15,23 @@ export default function AdminQuizAttemptsPage() {
   const [moduleFilter, setModuleFilter] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const handleDeleteAttempt = async (attempt: AdminQuizAttemptRow) => {
+    const confirmed = window.confirm(
+      `¿Deseas eliminar este intento de "${attempt.display_name}" (${attempt.score}%)?\n\nAl eliminar este intento, el alumno tendrá la oportunidad de volver a presentar la evaluación.`
+    );
+    if (!confirmed) return;
+    setDeletingId(attempt.id);
+    try {
+      await deleteQuizAttempt(attempt.id, attempt.user_id);
+      setAttempts((prev) => prev.filter((a) => a.id !== attempt.id));
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Error al eliminar el intento.');
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -120,7 +138,7 @@ export default function AdminQuizAttemptsPage() {
                 <th className="px-4 py-3">Módulo / Tema</th>
                 <th className="px-4 py-3">Puntaje</th>
                 <th className="px-4 py-3">Fecha</th>
-                <th className="px-4 py-3">Tema</th>
+                <th className="px-4 py-3">Acciones</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -154,16 +172,34 @@ export default function AdminQuizAttemptsPage() {
                       {row.duration_seconds != null && ` · ${row.duration_seconds}s`}
                     </td>
                     <td className="px-4 py-3">
-                      {topicUrl ? (
+                      <div className="flex flex-wrap items-center gap-2">
+                        {topicUrl && (
+                          <Link
+                            to={topicUrl}
+                            className="inline-flex items-center gap-1 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400"
+                            title="Ir a la lectura del tema"
+                          >
+                            <ClipboardList className="w-3.5 h-3.5" /> Lectura
+                          </Link>
+                        )}
                         <Link
-                          to={topicUrl}
-                          className="inline-flex items-center gap-1 text-indigo-600 hover:underline"
+                          to={`/modulo/${row.module_id}/evaluacion/${row.topic_id}`}
+                          className="inline-flex items-center gap-1 text-xs font-semibold text-indigo-600 hover:text-indigo-700"
+                          title="Ver pantalla de examen del tema"
                         >
-                          <ClipboardList className="w-3.5 h-3.5" /> Ver tema
+                          Evaluación
                         </Link>
-                      ) : (
-                        <span className="text-slate-400">{row.topic_id}</span>
-                      )}
+                        <button
+                          type="button"
+                          disabled={deletingId === row.id}
+                          onClick={() => handleDeleteAttempt(row)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 border border-rose-200 dark:border-rose-900/50 transition disabled:opacity-50"
+                          title="Eliminar este intento para permitir que el alumno vuelva a presentar la evaluación"
+                        >
+                          <RotateCcw className="w-3 h-3" />
+                          <span>{deletingId === row.id ? 'Restableciendo…' : 'Permitir reintento'}</span>
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 );

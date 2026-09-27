@@ -96,9 +96,6 @@ export function buildLessonResumeUrl(
     (child) => !isCurriculumNodeCompleted(child, completed, quizGate)
   );
   if (firstIncompleteChild) return `${base}#section-${firstIncompleteChild.id}`;
-  if (quizGate && !areRequiredQuizzesPassed(topic, quizGate)) {
-    return `${base}#evaluacion`;
-  }
   return base;
 }
 

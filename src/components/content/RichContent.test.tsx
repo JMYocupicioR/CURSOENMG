@@ -76,6 +76,17 @@ describe('RichContent', () => {
     expect(markup).not.toMatch(/velocidad:<\/strong>\s*•/);
   });
 
+  it('wraps a search query in mark tags without changing the lesson when empty', () => {
+    const marked = renderToStaticMarkup(
+      <RichContent text="La gran mayoría son neuropraxia con buen pronóstico." highlightQuery="neuropraxía" />,
+    );
+    expect(marked).toContain('data-search-hit');
+    expect(marked).toContain('neuropraxia');
+
+    const plain = html('La gran mayoría son neuropraxia con buen pronóstico.');
+    expect(plain).not.toContain('data-search-hit');
+  });
+
   it('prints without dark-mode utility classes', () => {
     const markup = renderToStaticMarkup(
       <RichContent

@@ -30,6 +30,12 @@ import {
   setCourseModuleVisible,
   setSyllabusTopicOverrides,
 } from '../services/courseService';
+import {
+  buildCourseDocuments,
+  lessonHrefWithQuery,
+  searchDocuments,
+} from '../search/courseSearch';
+import { HighlightedSearchText } from '../search/HighlightedSearchText';
 
 interface CourseSidebarProps {
   isOpen: boolean;
@@ -37,21 +43,6 @@ interface CourseSidebarProps {
 }
 
 const EDIT_MODE_KEY = 'neurosafe.courseSidebar.editMode';
-
-function flattenForSearch(
-  topics: Topic[],
-  moduleId: string,
-  moduleEmoji: string,
-  parentPath: string[] = []
-): { title: string; moduleId: string; moduleEmoji: string; path: string[] }[] {
-  const results: { title: string; moduleId: string; moduleEmoji: string; path: string[] }[] = [];
-  for (const t of topics) {
-    const path = [...parentPath, t.id];
-    results.push({ title: t.title, moduleId, moduleEmoji, path });
-    if (t.children) results.push(...flattenForSearch(t.children, moduleId, moduleEmoji, path));
-  }
-  return results;
-}
 
 function topicTreeHasQuiz(topic: Topic, hasQuiz: (id: string) => boolean): boolean {
   if (!topic.children?.length) return hasQuiz(topic.id);
@@ -152,15 +143,18 @@ export function CourseSidebar({ isOpen, onClose }: CourseSidebarProps) {
     onClose();
   }, [location.pathname, editMode]);
 
-  const allTopics = useMemo(() => {
-    return modulesForSearch.flatMap((mod) => flattenForSearch(mod.topics, mod.id, mod.emoji));
-  }, [modulesForSearch]);
-
-  const searchResults = useMemo(() => {
-    if (!searchQuery.trim() || searchQuery.length < 2) return [];
-    const q = searchQuery.toLowerCase();
-    return allTopics.filter((t) => t.title.toLowerCase().includes(q)).slice(0, 15);
-  }, [searchQuery, allTopics]);
+  const searchDocumentsIndex = useMemo(
+    () => buildCourseDocuments(modulesForSearch),
+    [modulesForSearch],
+  );
+  const emojiByModule = useMemo(
+    () => new Map(modulesForSearch.map((mod) => [mod.id, mod.emoji])),
+    [modulesForSearch],
+  );
+  const searchResults = useMemo(
+    () => searchDocuments(searchDocumentsIndex, searchQuery, 15),
+    [searchDocumentsIndex, searchQuery],
+  );
 
   const toggleModule = useCallback((moduleId: string) => {
     setExpandedModules((prev) => {
@@ -439,7 +433,7 @@ export function CourseSidebar({ isOpen, onClose }: CourseSidebarProps) {
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Buscar tema..."
+                  placeholder="Buscar en el temario..."
                   className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/40 transition-all placeholder:text-slate-400 dark:placeholder:text-slate-500 text-slate-700 dark:text-slate-200"
                   autoFocus
                 />
@@ -460,14 +454,28 @@ export function CourseSidebar({ isOpen, onClose }: CourseSidebarProps) {
                   {searchResults.length === 0 ? (
                     <p className="text-sm text-slate-400 dark:text-slate-500 text-center py-8">No se encontraron temas</p>
                   ) : (
-                    searchResults.map((r, i) => (
+                    searchResults.map((r) => (
                       <Link
-                        key={`sr-${i}`}
-                        to={`/modulo/${r.moduleId}/${r.path.join('/')}`}
+                        key={r.id}
+                        to={lessonHrefWithQuery(r.href ?? `/modulo/${r.moduleId}`, searchQuery)}
                         className="flex items-start gap-2.5 px-3 py-2.5 rounded-xl text-sm hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors min-h-[44px]"
                       >
-                        <span className="text-base flex-shrink-0 mt-0.5">{r.moduleEmoji}</span>
-                        <span className="text-slate-700 dark:text-slate-300 leading-snug">{r.title}</span>
+                        <span className="text-base flex-shrink-0 mt-0.5">
+                          {emojiByModule.get(r.moduleId ?? '') ?? '📘'}
+                        </span>
+                        <span className="min-w-0">
+                          <span className="block text-slate-700 dark:text-slate-300 leading-snug">{r.title}</span>
+                          {r.breadcrumb && (
+                            <span className="block text-[11px] text-slate-400 dark:text-slate-500 truncate">
+                              {r.breadcrumb}
+                            </span>
+                          )}
+                          {r.snippet && (
+                            <span className="block text-[11px] text-slate-500 dark:text-slate-400 line-clamp-2 mt-0.5">
+                              <HighlightedSearchText text={r.snippet} query={searchQuery} />
+                            </span>
+                          )}
+                        </span>
                       </Link>
                     ))
                   )}

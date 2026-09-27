@@ -28,17 +28,7 @@ export function QuizGate({
 
   const validationStatus = quizFlag.clinical_validation_status ?? 'pending_review';
   if (validationStatus !== 'approved') {
-    return (
-      <LockedCard
-        icon={<ClipboardList className="w-6 h-6 text-indigo-600" />}
-        title="En validación académica"
-        description={
-          validationStatus === 'rejected'
-            ? 'Esta evaluación fue observada por el responsable académico y no está disponible para acreditación.'
-            : 'Los reactivos de este tema están en revisión clínica. Podrá acreditarla cuando el responsable académico la apruebe.'
-        }
-      />
-    );
+    return null;
   }
 
   const loginUrl = `/auth/login?next=${encodeURIComponent(location.pathname)}`;

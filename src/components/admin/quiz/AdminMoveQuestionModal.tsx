@@ -1,23 +1,23 @@
-import { useState, useMemo } from 'react';
+import { useEffect, useState } from 'react';
 import {
   X,
   FolderInput,
-  ArrowRight,
-  GraduationCap,
-  Sparkles,
-  CheckCircle2,
   AlertCircle,
   Copy,
   MoveRight,
 } from 'lucide-react';
 import { useAuth } from '../../../contexts/AuthProvider';
 import { useAllModules } from '../../../hooks/useAllModules';
-import { getAllFlatTopics, findTopicInTree } from '../../../services/contentMerge';
+import { findTopicInTree } from '../../../services/contentMerge';
 import {
   getQuizEditorDataForTopic,
   publishAdminQuizDirectly,
 } from '../../../services/editorialService';
 import type { QuizQuestionDraft } from '../../../types/quiz';
+import {
+  TopicSearchPicker,
+  type TopicSearchSelection,
+} from '../../common/TopicSearchPicker';
 
 interface AdminMoveQuestionModalProps {
   isOpen: boolean;
@@ -41,41 +41,36 @@ export function AdminMoveQuestionModal({
   const { user } = useAuth();
   const { modules } = useAllModules();
 
-  const [targetModuleId, setTargetModuleId] = useState<string>(currentModuleId);
-  const [targetTopicId, setTargetTopicId] = useState<string>('');
+  const [target, setTarget] = useState<TopicSearchSelection | null>(null);
   const [transferMode, setTransferMode] = useState<'move' | 'copy'>('move');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Get current module & topic info
+  useEffect(() => {
+    if (!isOpen) return;
+    setTarget(null);
+    setTransferMode('move');
+    setError(null);
+  }, [isOpen, currentModuleId, currentTopicId]);
+
   const currentModule = modules.find((m) => m.id === currentModuleId);
   const currentTopic = currentModule
     ? findTopicInTree(currentModule.topics, currentTopicId)
     : null;
-
-  // Selected target module
-  const targetModule = modules.find((m) => m.id === targetModuleId);
-
-  // Available target leaf topics (excluding current topic)
-  const targetLeafTopics = useMemo(() => {
-    if (!targetModule) return [];
-    return getAllFlatTopics(targetModule.topics)
-      .filter(
-        ({ topic }) =>
-          !topic.children?.length &&
-          Boolean(topic.content?.trim() || topic.description?.trim()) &&
-          topic.id !== currentTopicId
-      );
-  }, [targetModule, currentTopicId]);
+  const targetModule = target
+    ? modules.find((m) => m.id === target.moduleId)
+    : undefined;
 
   if (!isOpen || !question) return null;
 
   const handleTransfer = async () => {
     if (!user) return;
-    if (!targetTopicId) {
+    if (!target) {
       setError('Por favor selecciona el tema destino.');
       return;
     }
+    const targetTopicId = target.topicId;
+    const targetModuleId = target.moduleId;
 
     setSubmitting(true);
     setError(null);
@@ -113,7 +108,7 @@ export function AdminMoveQuestionModal({
       });
 
       // 5. Notify parent callback
-      onSuccess(transferMode, targetTopicId, targetTopic?.title || targetTopicId);
+      onSuccess(transferMode, targetTopicId, targetTopic?.title || target.title);
       onClose();
     } catch (e) {
       console.error(e);
@@ -125,7 +120,7 @@ export function AdminMoveQuestionModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm overflow-y-auto">
-      <div className="relative w-full max-w-lg rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+      <div className="relative w-full max-w-xl rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-950/50">
           <div className="flex items-center gap-3">
@@ -176,47 +171,13 @@ export function AdminMoveQuestionModal({
             </div>
           </div>
 
-          {/* Target Module & Topic Selectors */}
-          <div className="space-y-3.5">
-            <div>
-              <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1.5">
-                Módulo Académico Destino
-              </label>
-              <select
-                value={targetModuleId}
-                onChange={(e) => {
-                  setTargetModuleId(e.target.value);
-                  setTargetTopicId('');
-                }}
-                className="w-full px-3 py-2.5 rounded-xl text-xs sm:text-sm border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
-              >
-                {modules.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    Módulo {m.number}: {m.title}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1.5">
-                Tema de Estudio Destino (Hoja)
-              </label>
-              <select
-                value={targetTopicId}
-                onChange={(e) => setTargetTopicId(e.target.value)}
-                className="w-full px-3 py-2.5 rounded-xl text-xs sm:text-sm border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-medium"
-              >
-                <option value="">-- Selecciona el tema destino --</option>
-                {targetLeafTopics.map(({ topic, path }) => (
-                  <option key={topic.id} value={topic.id}>
-                    {path.length > 1 ? '↳ '.repeat(path.length - 1) : ''}
-                    {topic.title}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
+          <TopicSearchPicker
+            modules={modules}
+            excludeTopicId={currentTopicId}
+            currentModuleId={currentModuleId}
+            value={target}
+            onChange={setTarget}
+          />
 
           {/* Transfer Mode Options (Move vs Copy) */}
           <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-700/80 space-y-2.5">
@@ -271,7 +232,7 @@ export function AdminMoveQuestionModal({
 
           <button
             type="button"
-            disabled={submitting || !targetTopicId}
+            disabled={submitting || !target}
             onClick={handleTransfer}
             className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white text-xs sm:text-sm font-bold shadow-md shadow-indigo-500/20 transition disabled:opacity-50"
           >

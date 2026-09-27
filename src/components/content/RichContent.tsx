@@ -1,4 +1,5 @@
 import { useMemo, type JSX, type ReactNode } from 'react';
+import { splitHighlightedParts } from '../../search/searchText';
 
 export type RichHeadingLevel = 2 | 3 | 4 | 5;
 export type RichContentTone = 'screen' | 'print';
@@ -60,10 +61,13 @@ function resolveHeadingLevel(mdLevel: number, baseHeadingLevel: RichHeadingLevel
   return Math.min(6, Math.max(2, level)) as 2 | 3 | 4 | 5 | 6;
 }
 
+let activeHighlightQuery = '';
+
 export function renderInline(
   text: string,
   keyPrefix: string,
   tone: RichContentTone = 'screen',
+  highlightQuery?: string,
 ): (string | JSX.Element)[] {
   const parts: (string | JSX.Element)[] = [];
   const linkRegex = /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g;
@@ -95,9 +99,10 @@ export function renderInline(
     parts.push(text.slice(lastIndex));
   }
 
+  const query = highlightQuery ?? activeHighlightQuery;
   return parts.flatMap((part, i) => {
     if (typeof part !== 'string') return [part];
-    return formatTextSegment(part, `${keyPrefix}-${i}`, tone);
+    return formatTextSegment(part, `${keyPrefix}-${i}`, tone, query);
   });
 }
 
@@ -331,7 +336,12 @@ function renderBlockLines(
   return parts;
 }
 
-function formatTextSegment(text: string, keyBase: string, tone: RichContentTone = 'screen'): (string | JSX.Element)[] {
+function formatTextSegment(
+  text: string,
+  keyBase: string,
+  tone: RichContentTone = 'screen',
+  highlightQuery = '',
+): (string | JSX.Element)[] {
   const result: (string | JSX.Element)[] = [];
   const boldRegex = /\*\*([^*]+)\*\*/g;
   let last = 0;
@@ -339,25 +349,30 @@ function formatTextSegment(text: string, keyBase: string, tone: RichContentTone 
 
   while ((match = boldRegex.exec(text)) !== null) {
     if (match.index > last) {
-      result.push(...highlightClinical(text.slice(last, match.index), `${keyBase}-${last}`, tone));
+      result.push(...highlightClinical(text.slice(last, match.index), `${keyBase}-${last}`, tone, highlightQuery));
     }
     result.push(
       <strong
         key={`b-${keyBase}-${match.index}`}
         className={tone === 'print' ? 'font-semibold text-slate-900' : 'font-semibold text-slate-900 dark:text-white'}
       >
-        {match[1]}
+        {wrapSearchHits(match[1], highlightQuery, `${keyBase}-b-${match.index}`, tone)}
       </strong>
     );
     last = match.index + match[0].length;
   }
   if (last < text.length) {
-    result.push(...highlightClinical(text.slice(last), `${keyBase}-${last}`, tone));
+    result.push(...highlightClinical(text.slice(last), `${keyBase}-${last}`, tone, highlightQuery));
   }
   return result;
 }
 
-function highlightClinical(text: string, key: string, tone: RichContentTone = 'screen'): (string | JSX.Element)[] {
+function highlightClinical(
+  text: string,
+  key: string,
+  tone: RichContentTone = 'screen',
+  highlightQuery = '',
+): (string | JSX.Element)[] {
   const clinicalRegex = /([≥≤><]?\s*\d+[\.\d]*\s*(?:ms|mV|µV|m\/s|mm²|Hz|°C|%|m\/seg))/g;
   const parts: (string | JSX.Element)[] = [];
   let last = 0;
@@ -374,14 +389,44 @@ function highlightClinical(text: string, key: string, tone: RichContentTone = 's
             : 'font-mono text-[0.85em] px-1 py-0.5 rounded bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 whitespace-nowrap'
         }
       >
-        {match[1]}
+        {wrapSearchHits(match[1], highlightQuery, `${key}-cv-${match.index}`, tone)}
       </span>
     );
     last = match.index + match[0].length;
   }
   if (last < text.length) parts.push(text.slice(last));
   if (parts.length === 0) parts.push(text);
-  return parts;
+  return parts.flatMap((part, i) =>
+    typeof part === 'string' ? wrapSearchHits(part, highlightQuery, `${key}-t-${i}`, tone) : [part],
+  );
+}
+
+function wrapSearchHits(
+  text: string,
+  query: string,
+  keyBase: string,
+  tone: RichContentTone,
+): (string | JSX.Element)[] {
+  if (!query.trim() || query.trim().length < 2) return [text];
+  const parts = splitHighlightedParts(text, query);
+  if (parts.length === 1 && !parts[0].hit) return [text];
+  return parts.map((part, i) =>
+    part.hit ? (
+      <mark
+        key={`${keyBase}-hit-${i}`}
+        data-search-hit=""
+        className={
+          tone === 'print'
+            ? 'bg-amber-100 text-inherit rounded-sm px-0.5'
+            : 'bg-amber-200/90 dark:bg-amber-400/25 text-inherit rounded-sm px-0.5'
+        }
+      >
+        {part.text}
+      </mark>
+    ) : (
+      part.text
+    ),
+  );
 }
 
 export function RichContent({
@@ -389,22 +434,30 @@ export function RichContent({
   className = '',
   headingLevel = 2,
   tone = 'screen',
+  highlightQuery = '',
 }: {
   text: string;
   className?: string;
   headingLevel?: RichHeadingLevel;
   tone?: RichContentTone;
+  highlightQuery?: string;
 }) {
   const rendered = useMemo(() => {
-    const normalized = text.replace(/\r\n/g, '\n');
-    const blocks = normalized.split(/\n\n+/);
+    const previousQuery = activeHighlightQuery;
+    activeHighlightQuery = highlightQuery;
+    try {
+      const normalized = text.replace(/\r\n/g, '\n');
+      const blocks = normalized.split(/\n\n+/);
 
-    return blocks.flatMap((block, bIdx) => {
-      const trimmed = block.trim();
-      if (!trimmed) return [];
-      return renderBlockLines(trimmed.split('\n'), `b-${bIdx}`, headingLevel, tone);
-    });
-  }, [text, headingLevel, tone]);
+      return blocks.flatMap((block, bIdx) => {
+        const trimmed = block.trim();
+        if (!trimmed) return [];
+        return renderBlockLines(trimmed.split('\n'), `b-${bIdx}`, headingLevel, tone);
+      });
+    } finally {
+      activeHighlightQuery = previousQuery;
+    }
+  }, [text, headingLevel, tone, highlightQuery]);
 
   return (
     <div

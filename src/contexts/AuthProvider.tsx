@@ -470,20 +470,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .upload(path, file, { upsert: true, contentType: file.type });
 
       if (uploadError) {
-        const msg = (uploadError.message || '').toLowerCase();
-        if (msg.includes('bucket not found') || (uploadError as any).status === 400 || (uploadError as any).statusCode === '404') {
+        const storageError = uploadError as { message?: string; statusCode?: string };
+        const msg = (storageError.message || '').toLowerCase();
+        const statusCode = String(storageError.statusCode || '');
+        // Storage responde HTTP 400 para casi cualquier fallo (objeto ausente,
+        // MIME, RLS). Solo el texto "bucket not found" significa que falta el bucket.
+        if (msg.includes('bucket not found')) {
           return {
             url: null,
-            error: 'El bucket de almacenamiento "avatars" no existe en Supabase. Ejecuta el script SQL en el panel de Supabase para crearlo con sus permisos públicos.',
+            error: 'El bucket de almacenamiento "avatars" no existe en Supabase.',
           };
         }
-        if (msg.includes('row-level security') || (uploadError as any).statusCode === '403') {
+        if (
+          msg.includes('row-level security') ||
+          msg.includes('access denied') ||
+          statusCode === '403' ||
+          statusCode === '42501'
+        ) {
           return {
             url: null,
-            error: 'Permiso de almacenamiento restringido en Supabase Storage. Ejecuta el script SQL en Supabase para habilitar permisos en el bucket avatars.',
+            error: 'Permiso de almacenamiento restringido en el bucket avatars.',
           };
         }
-        return { url: null, error: uploadError.message };
+        return { url: null, error: storageError.message || 'No se pudo subir la foto' };
       }
 
       const { data } = supabase.storage.from('avatars').getPublicUrl(path);

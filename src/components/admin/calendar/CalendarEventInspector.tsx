@@ -1,9 +1,10 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Activity, Calendar, ClipboardList, Pencil, UserCheck, Video, X } from 'lucide-react';
 import type { CalendarItem } from '../../../types/academicCalendar';
 import { parseLocalDateKey } from '../../../utils/academicCalendar';
 import { calendarChipStyle, calendarTypeColor, calendarTypeLabel, useCalendarColorLabels } from '../../../utils/calendarColorLabels';
+import { listWorkshopInstructorNames } from '../../../services/topicTeachingService';
 
 function calendarDayDate(iso: string): Date {
   if (/^\d{4}-\d{2}-\d{2}/.test(iso)) return parseLocalDateKey(iso.slice(0, 10));
@@ -28,6 +29,26 @@ export function CalendarEventInspector({
   const { labels } = useCalendarColorLabels();
   const closeRef = useRef<HTMLButtonElement>(null);
   const itemId = item?.id;
+  const workshopId = item?.workshopId ?? null;
+  const [instructorNames, setInstructorNames] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (!workshopId) {
+      setInstructorNames([]);
+      return;
+    }
+    let cancelled = false;
+    void listWorkshopInstructorNames(workshopId)
+      .then((names) => {
+        if (!cancelled) setInstructorNames(names);
+      })
+      .catch(() => {
+        if (!cancelled) setInstructorNames([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [workshopId]);
 
   useEffect(() => {
     if (!itemId) return;
@@ -141,6 +162,14 @@ export function CalendarEventInspector({
               <dt className="text-slate-500 dark:text-slate-400">Modalidad</dt>
               <dd className="font-semibold text-slate-800 dark:text-slate-200">
                 {item.modality === 'online' ? 'En línea' : 'Presencial'}
+              </dd>
+            </div>
+          ) : null}
+          {instructorNames.length > 0 ? (
+            <div className="flex justify-between gap-3">
+              <dt className="text-slate-500 dark:text-slate-400">Profesores</dt>
+              <dd className="font-semibold text-slate-800 dark:text-slate-200 text-right">
+                {instructorNames.join(', ')}
               </dd>
             </div>
           ) : null}

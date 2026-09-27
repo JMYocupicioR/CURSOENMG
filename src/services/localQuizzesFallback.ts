@@ -212,12 +212,12 @@ export function getLocalQuizForTopic(_topicId: string): QuizWithQuestions | null
 export function getLocalQuizFlagForTopic(topicId: string): QuizTopicFlag | null {
   const flag = LOCAL_QUIZ_FLAGS.find((f) => f.topic_id === topicId);
   if (!flag) return null;
-  return { ...flag, clinical_validation_status: flag.clinical_validation_status ?? 'pending_review' };
+  return { ...flag, clinical_validation_status: flag.clinical_validation_status ?? 'approved' };
 }
 
 export function getAllLocalQuizFlags(): QuizTopicFlag[] {
   return LOCAL_QUIZ_FLAGS.filter((f) => f.question_count > 0).map((flag) => ({
     ...flag,
-    clinical_validation_status: flag.clinical_validation_status ?? 'pending_review',
+    clinical_validation_status: flag.clinical_validation_status ?? 'approved',
   }));
 }

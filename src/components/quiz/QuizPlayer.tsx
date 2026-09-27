@@ -28,6 +28,7 @@ interface QuizPlayerProps {
   quizFlag: QuizTopicFlag;
   onPass?: () => void;
   nextTopicUrl?: string;
+  returnToTopicUrl?: string;
 }
 
 const OPTION_LETTERS = ['A', 'B', 'C', 'D', 'E'];
@@ -43,6 +44,7 @@ export function QuizPlayer({
   quizFlag: _quizFlag,
   onPass,
   nextTopicUrl,
+  returnToTopicUrl,
 }: QuizPlayerProps) {
   const { user } = useAuth();
   const lang = useSettingsStore((s) => s.language);
@@ -54,6 +56,7 @@ export function QuizPlayer({
   const [responses, setResponses] = useState<Record<string, string[]>>({});
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [attemptsCount, setAttemptsCount] = useState(0);
   const [submitted, setSubmitted] = useState<{
     score: number;
     passed: boolean;
@@ -91,13 +94,15 @@ export function QuizPlayer({
         return;
       }
 
-      if (user && data.max_attempts != null) {
+      const maxAllowed = data.max_attempts ?? 1;
+      if (user) {
         const count = await getAttemptCountForQuiz(data.id, user.id);
-        if (count >= data.max_attempts) {
+        setAttemptsCount(count);
+        if (count >= maxAllowed) {
           setAttemptBlocked(
             lang === 'en'
-              ? `Maximum of ${data.max_attempts} attempt(s) reached.`
-              : `Has alcanzado el máximo de ${data.max_attempts} intento(s).`
+              ? `Maximum of ${maxAllowed} attempt(s) reached for this evaluation.`
+              : `Has alcanzado el límite de ${maxAllowed} intento(s) permitido(s) para este tema.`
           );
         }
       }
@@ -113,6 +118,10 @@ export function QuizPlayer({
   useEffect(() => {
     loadQuizData();
   }, [topicId, user, lang]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+  }, [step]);
 
   const displayQuestions = useMemo(() => {
     if (!quiz) return [];
@@ -225,6 +234,8 @@ export function QuizPlayer({
   }
 
   if (submitted) {
+    const effectiveMax = quiz.max_attempts ?? 1;
+    const canRetry = (attemptsCount + 1) < effectiveMax;
     return (
       <QuizResults
         quiz={quiz}
@@ -232,7 +243,11 @@ export function QuizPlayer({
         result={submitted}
         responses={responses}
         nextTopicUrl={nextTopicUrl}
+        returnToTopicUrl={returnToTopicUrl}
         onRetry={loadQuizData}
+        canRetry={canRetry}
+        attemptCount={attemptsCount + 1}
+        maxAttempts={effectiveMax}
       />
     );
   }

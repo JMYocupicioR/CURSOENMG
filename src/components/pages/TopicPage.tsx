@@ -5,7 +5,6 @@ import { findTopicByPath, getAllFlatTopics } from '../../services/contentMerge';
 import { useMergedModule } from '../../hooks/useMergedModule';
 import { useAuth } from '../../contexts/AuthProvider';
 import { ContributionBanner, ContributorContentActions, ProposeQuizLink } from '../editorial/TopicContribution';
-import { QuizGate } from '../quiz/QuizGate';
 import { TopicStudyTools } from '../student/TopicStudyTools';
 import { TopicDiscussion } from '../student/TopicDiscussion';
 import { QuizTopicBadge } from '../quiz/QuizTopicBadge';
@@ -164,7 +163,15 @@ function ExternalVideosSection({ topic }: { topic: Topic }) {
 }
 
 /* ─── Clinical Pearls Box ─── */
-function ClinicalPearlsBox({ pearls, lang }: { pearls: string[]; lang?: string }) {
+function ClinicalPearlsBox({
+  pearls,
+  lang,
+  highlightQuery,
+}: {
+  pearls: string[];
+  lang?: string;
+  highlightQuery?: string;
+}) {
   const label = lang === 'en' ? 'Clinical Pearls' : 'Perlas Clínicas';
   return (
     <div className="mt-5 rounded-xl border border-amber-200/60 dark:border-amber-700/30 bg-gradient-to-br from-amber-50/80 to-yellow-50/50 dark:from-amber-900/20 dark:to-yellow-900/10 p-4 sm:p-5">
@@ -178,7 +185,7 @@ function ClinicalPearlsBox({ pearls, lang }: { pearls: string[]; lang?: string }
         {pearls.map((pearl, i) => (
           <li key={i} className="flex items-start gap-2 text-sm leading-relaxed text-amber-900 dark:text-amber-200">
             <span className="text-amber-500 dark:text-amber-400 mt-0.5 flex-shrink-0">💡</span>
-            <span>{renderInline(pearl, `pearl-${i}`)}</span>
+            <span>{renderInline(pearl, `pearl-${i}`, 'screen', highlightQuery)}</span>
           </li>
         ))}
       </ul>
@@ -187,7 +194,15 @@ function ClinicalPearlsBox({ pearls, lang }: { pearls: string[]; lang?: string }
 }
 
 /* ─── Key Points Box ─── */
-function KeyPointsBox({ points, lang }: { points: string[]; lang?: string }) {
+function KeyPointsBox({
+  points,
+  lang,
+  highlightQuery,
+}: {
+  points: string[];
+  lang?: string;
+  highlightQuery?: string;
+}) {
   const label = lang === 'en' ? 'Key Points' : 'Puntos Clave';
   return (
     <div className="mt-5 rounded-xl border border-blue-200/60 dark:border-blue-700/30 bg-gradient-to-br from-blue-50/80 to-indigo-50/50 dark:from-blue-900/20 dark:to-indigo-900/10 p-4 sm:p-5">
@@ -201,7 +216,7 @@ function KeyPointsBox({ points, lang }: { points: string[]; lang?: string }) {
         {points.map((point, i) => (
           <li key={i} className="flex items-start gap-2 text-sm leading-relaxed text-blue-900 dark:text-blue-200">
             <span className="text-blue-500 dark:text-blue-400 mt-0.5 flex-shrink-0">📌</span>
-            <span>{renderInline(point, `kp-${i}`)}</span>
+            <span>{renderInline(point, `kp-${i}`, 'screen', highlightQuery)}</span>
           </li>
         ))}
       </ul>
@@ -237,10 +252,12 @@ function TopicBody({
   topic,
   lang,
   headingLevel = 3,
+  highlightQuery,
 }: {
   topic: Topic;
   lang: 'es' | 'en';
   headingLevel?: RichHeadingLevel;
+  highlightQuery?: string;
 }) {
   const lt = localizedTopic(topic, lang);
   const cleanContent = stripLegacyPdfMarkdown(lt.content);
@@ -257,12 +274,14 @@ function TopicBody({
 
   return (
     <div>
-      {hasContent && <RichContent text={cleanContent} headingLevel={headingLevel} />}
+      {hasContent && (
+        <RichContent text={cleanContent} headingLevel={headingLevel} highlightQuery={highlightQuery} />
+      )}
       {lt.clinicalPearls && lt.clinicalPearls.length > 0 && (
-        <ClinicalPearlsBox pearls={lt.clinicalPearls} lang={lang} />
+        <ClinicalPearlsBox pearls={lt.clinicalPearls} lang={lang} highlightQuery={highlightQuery} />
       )}
       {lt.keyPoints && lt.keyPoints.length > 0 && (
-        <KeyPointsBox points={lt.keyPoints} lang={lang} />
+        <KeyPointsBox points={lt.keyPoints} lang={lang} highlightQuery={highlightQuery} />
       )}
       {topic.imageUrls && topic.imageUrls.length > 0 && (
         <ImageGallery images={topic.imageUrls} />
@@ -281,6 +300,7 @@ function NestedTopicSections({
   headingLevel = 3,
   moduleId,
   topicHasQuiz,
+  highlightQuery,
 }: {
   topics: Topic[];
   lang: 'es' | 'en';
@@ -289,6 +309,7 @@ function NestedTopicSections({
   headingLevel?: 3 | 4;
   moduleId?: string;
   topicHasQuiz?: (topicId: string) => boolean;
+  highlightQuery?: string;
 }) {
   const Heading = headingLevel === 3 ? 'h3' : 'h4';
   return (
@@ -316,7 +337,12 @@ function NestedTopicSections({
               <p className="text-xs text-slate-400 dark:text-slate-500 italic mt-0.5 pl-8">{child.title}</p>
             )}
             <div className="mt-3">
-              <TopicBody topic={child} lang={lang} headingLevel={headingLevel === 3 ? 4 : 5} />
+              <TopicBody
+                topic={child}
+                lang={lang}
+                headingLevel={headingLevel === 3 ? 4 : 5}
+                highlightQuery={highlightQuery}
+              />
             </div>
             {!nested && moduleId && topicHasQuiz && (
               <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-700/40 flex flex-wrap items-center justify-between gap-3">
@@ -341,6 +367,7 @@ function NestedTopicSections({
                   headingLevel={4}
                   moduleId={moduleId}
                   topicHasQuiz={topicHasQuiz}
+                  highlightQuery={highlightQuery}
                 />
               </div>
             )}
@@ -505,6 +532,10 @@ export default function TopicPage() {
   const homeHref = user ? '/portal' : '/';
   const homeLabel = lang === 'en' ? 'Home' : user ? 'Portal' : 'Inicio';
   const { module: mod, loading: moduleLoading, refresh: refreshModule } = useMergedModule(moduleId);
+  const highlightQuery = useMemo(
+    () => new URLSearchParams(location.search).get('q')?.trim() ?? '',
+    [location.search],
+  );
   const [isMaterialModalOpen, setIsMaterialModalOpen] = useState(false);
 
   const [showTOC, setShowTOC] = useState(false);
@@ -540,13 +571,26 @@ export default function TopicPage() {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  // Scroll to top on route change, unless we are jumping to a pending section
+  const resetScrollToTop = useCallback(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+    if (document.documentElement) document.documentElement.scrollTop = 0;
+    if (document.body) document.body.scrollTop = 0;
+  }, []);
+
+  // Scroll to top on route change, unless we are searching for a term or jumping to a hash anchor
   useEffect(() => {
-    if (!location.hash) {
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+    if (!location.hash && !new URLSearchParams(location.search).get('q')) {
+      resetScrollToTop();
+      const rAF = requestAnimationFrame(resetScrollToTop);
+      const timer = window.setTimeout(resetScrollToTop, 50);
+      setShowTOC(false);
+      return () => {
+        cancelAnimationFrame(rAF);
+        window.clearTimeout(timer);
+      };
     }
     setShowTOC(false);
-  }, [location.pathname]);
+  }, [location.pathname, location.key, resetScrollToTop]);
 
   const scrollToSection = useCallback((id: string) => {
     const el = sectionRefs.current.get(id);
@@ -596,6 +640,25 @@ export default function TopicPage() {
     return () => window.clearTimeout(timer);
   }, [location.hash, location.pathname]);
 
+  useEffect(() => {
+    if (location.hash || !highlightQuery || moduleLoading) return;
+    let attempts = 0;
+    let timer = 0;
+    const tryScroll = () => {
+      const el = document.querySelector<HTMLElement>('[data-search-hit]');
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        return;
+      }
+      if (attempts < 16) {
+        attempts += 1;
+        timer = window.setTimeout(tryScroll, 80);
+      }
+    };
+    timer = window.setTimeout(tryScroll, 80);
+    return () => window.clearTimeout(timer);
+  }, [highlightQuery, location.pathname, location.search, moduleLoading]);
+
   const registerRef = useCallback((id: string, el: HTMLElement | null) => {
     if (el) sectionRefs.current.set(id, el);
   }, []);
@@ -605,21 +668,14 @@ export default function TopicPage() {
     const basePath = `/modulo/${moduleId}/`;
     const topicPathStr = location.pathname.replace(basePath, '');
     const pathParts = topicPathStr.split('/').filter(Boolean);
-    const { topic: resolvedTopic, breadcrumbs } = findTopicByPath(mod.topics, pathParts);
+    const { topic: resolvedTopic } = findTopicByPath(mod.topics, pathParts);
     if (!resolvedTopic) return [];
 
-    // Candidates in priority order:
-    // 1. Current resolved topic ID
-    // 2. Nearest ancestors (reverse breadcrumbs)
-    // 3. Child subtopics (if parent container)
+    // Strictly the current topic (and potential URL slug alias)
     const list: string[] = [resolvedTopic.id];
-    for (let i = breadcrumbs.length - 2; i >= 0; i--) {
-      if (breadcrumbs[i]?.id) list.push(breadcrumbs[i].id);
-    }
-    if (resolvedTopic.children && resolvedTopic.children.length > 0) {
-      for (const ch of resolvedTopic.children) {
-        if (ch.id) list.push(ch.id);
-      }
+    const lastPart = pathParts[pathParts.length - 1];
+    if (lastPart && lastPart !== resolvedTopic.id) {
+      list.push(lastPart);
     }
     return Array.from(new Set(list));
   }, [mod, moduleId, location.pathname]);
@@ -634,7 +690,12 @@ export default function TopicPage() {
       for (const tid of currentTopicCandidates) {
         try {
           const flag = await getQuizFlagForTopic(tid);
-          if (flag && flag.question_count > 0 && isMounted) {
+          if (
+            flag &&
+            flag.question_count > 0 &&
+            (flag.clinical_validation_status ?? 'pending_review') === 'approved' &&
+            isMounted
+          ) {
             setQuizFlag(flag);
             return;
           }
@@ -686,7 +747,7 @@ export default function TopicPage() {
     if (nextInModule) {
       return {
         title: localizedTopic(nextInModule.topic, lang).title,
-        url: buildLessonResumeUrl(mod.id, nextInModule.path, nextInModule.topic, completedTopicIds, quizGate),
+        url: `/modulo/${mod.id}/${nextInModule.path.join('/')}`,
       };
     }
     const nextAcross = getNextPendingCurriculumLesson(
@@ -699,21 +760,22 @@ export default function TopicPage() {
       quizGate
     );
     if (!nextAcross) return null;
-    return { title: nextAcross.topicTitle, url: nextAcross.url };
+    return { title: nextAcross.topicTitle, url: nextAcross.url.split('#')[0] };
   }, [allFlat, currentIndex, completedTopicIds, lang, mod, pathParts, quizGate, topic]);
 
   const topicHasQuiz = useCallback(
     (topicId: string) => quizGate.quizTopicIds.has(topicId),
     [quizGate]
   );
-  const hasEvaluation = Boolean(quizFlag && quizFlag.question_count > 0);
+  const hasEvaluation = Boolean(
+    quizFlag &&
+      quizFlag.question_count > 0 &&
+      (quizFlag.clinical_validation_status ?? 'approved') === 'approved'
+  );
   const evaluationPassed = Boolean(
     quizFlag && quizGate.passedQuizTopicIds.has(quizFlag.topic_id)
   );
-
-  const scrollToEvaluation = useCallback(() => {
-    document.getElementById('evaluacion')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }, []);
+  const quizTargetTopicId = quizFlag?.topic_id || topic?.id || '';
 
   useEffect(() => {
     if (user && mod && topic) {
@@ -841,67 +903,6 @@ export default function TopicPage() {
             <p className="text-sm text-slate-400 dark:text-slate-500 italic mb-4">{topic.title}</p>
           )}
 
-          {/* Sticky/Prominent Student Lesson Status Bar */}
-          {user && (
-            <div className="flex flex-wrap items-center justify-between gap-3 mb-6 p-3 sm:p-4 rounded-2xl bg-white/70 dark:bg-slate-800/60 border border-slate-200/70 dark:border-slate-700/50 backdrop-blur-sm shadow-xs">
-              <div className="flex items-center gap-2.5">
-                {isCompleted ? (
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300 border border-emerald-300/70 dark:border-emerald-800">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                    {lang === 'en' ? 'Lesson Completed' : 'Lección Completada'}
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 dark:bg-amber-950/80 dark:text-amber-300 border border-amber-300/70 dark:border-amber-800">
-                    <Clock className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
-                    {lang === 'en' ? 'Lesson Pending' : 'Lección Pendiente'}
-                  </span>
-                )}
-                <span className="text-xs text-slate-500 dark:text-slate-400 hidden sm:inline">
-                  {isCompleted
-                    ? (lang === 'en' ? 'Registered in your study curriculum' : 'Registrada en tu progreso curricular y créditos CME')
-                    : hasEvaluation
-                    ? (lang === 'en' ? 'Pass the assessment at the end of this lesson to complete it' : 'Aprueba la evaluación al final de esta lección para marcarla como completada')
-                    : (lang === 'en' ? 'Mark as completed when you finish studying' : 'Márcala como completada al concluir tu lectura')}
-                </span>
-              </div>
-
-              {hasEvaluation && !isCompleted ? (
-                <button
-                  type="button"
-                  onClick={scrollToEvaluation}
-                  className="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-cyan-600 hover:bg-cyan-700 text-white shadow-xs shadow-cyan-600/20 flex items-center gap-1.5"
-                >
-                  <ClipboardList className="w-3.5 h-3.5" />
-                  {lang === 'en' ? 'Go to assessment' : 'Ir a la evaluación'}
-                </button>
-              ) : hasEvaluation && isCompleted ? (
-                <span className="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300">
-                  {lang === 'en' ? 'Assessment passed' : 'Evaluación aprobada'}
-                </span>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (!user || !topic) return;
-                    const childIds = topic.children ? getAllTopicIds(topic.children) : [];
-                    const nextState = toggleTopicCompleted(user.id, topic.id, childIds);
-                    setIsCompleted(nextState);
-                  }}
-                  className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 ${
-                    isCompleted
-                      ? 'bg-slate-100 dark:bg-slate-700/70 text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-600'
-                      : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/20'
-                  }`}
-                >
-                  <CheckCircle2 className="w-3.5 h-3.5" />
-                  {isCompleted
-                    ? (lang === 'en' ? 'Mark as pending' : 'Marcar como pendiente')
-                    : (lang === 'en' ? 'Mark as completed' : 'Marcar como completada')}
-                </button>
-              )}
-            </div>
-          )}
-
           {topic.contributionMeta && (
             <ContributionBanner meta={topic.contributionMeta} />
           )}
@@ -940,12 +941,16 @@ export default function TopicPage() {
           {/* Main content */}
           {Boolean(stripLegacyPdfMarkdown(lt.content)) && (
             <div className="mb-8 p-5 sm:p-6 rounded-2xl bg-white/80 dark:bg-slate-800/60 backdrop-blur-sm border border-slate-200/50 dark:border-slate-700/30 shadow-sm">
-              <RichContent text={stripLegacyPdfMarkdown(lt.content)} headingLevel={2} />
+              <RichContent
+                text={stripLegacyPdfMarkdown(lt.content)}
+                headingLevel={2}
+                highlightQuery={highlightQuery}
+              />
               {lt.clinicalPearls && lt.clinicalPearls.length > 0 && (
-                <ClinicalPearlsBox pearls={lt.clinicalPearls} lang={lang} />
+                <ClinicalPearlsBox pearls={lt.clinicalPearls} lang={lang} highlightQuery={highlightQuery} />
               )}
               {lt.keyPoints && lt.keyPoints.length > 0 && (
-                <KeyPointsBox points={lt.keyPoints} lang={lang} />
+                <KeyPointsBox points={lt.keyPoints} lang={lang} highlightQuery={highlightQuery} />
               )}
               {topic.imageUrls && topic.imageUrls.length > 0 && (
                 <ImageGallery images={topic.imageUrls} />
@@ -958,10 +963,10 @@ export default function TopicPage() {
           {!stripLegacyPdfMarkdown(lt.content) && (topicHasVideos(topic) || topicPdfList(topic).length > 0 || lt.clinicalPearls?.length || lt.keyPoints?.length) && (
             <div className="mb-8 p-5 sm:p-6 rounded-2xl bg-white/80 dark:bg-slate-800/60 backdrop-blur-sm border border-slate-200/50 dark:border-slate-700/30 shadow-sm">
               {lt.clinicalPearls && lt.clinicalPearls.length > 0 && (
-                <ClinicalPearlsBox pearls={lt.clinicalPearls} lang={lang} />
+                <ClinicalPearlsBox pearls={lt.clinicalPearls} lang={lang} highlightQuery={highlightQuery} />
               )}
               {lt.keyPoints && lt.keyPoints.length > 0 && (
-                <KeyPointsBox points={lt.keyPoints} lang={lang} />
+                <KeyPointsBox points={lt.keyPoints} lang={lang} highlightQuery={highlightQuery} />
               )}
               {topicHasVideos(topic) && <ExternalVideosSection topic={topic} />}
               {topicPdfList(topic).length > 0 && <PdfDocumentsSection topic={topic} />}
@@ -1056,7 +1061,7 @@ export default function TopicPage() {
                         || topicHasVideos(child)) && (
                         <div className="px-5 sm:px-6 pb-5 sm:pb-6">
                           <div className="border-t border-slate-100 dark:border-slate-700/40 pt-4 space-y-5">
-                            <TopicBody topic={child} lang={lang} />
+                            <TopicBody topic={child} lang={lang} highlightQuery={highlightQuery} />
                             {hasGrandchildren && (
                               <NestedTopicSections
                                 topics={child.children!}
@@ -1065,6 +1070,7 @@ export default function TopicPage() {
                                 registerRef={registerRef}
                                 moduleId={canProposeContent && mod ? mod.id : undefined}
                                 topicHasQuiz={canProposeContent ? topicHasQuiz : undefined}
+                                highlightQuery={highlightQuery}
                               />
                             )}
                           </div>
@@ -1109,65 +1115,73 @@ export default function TopicPage() {
             </>
           )}
 
-          {quizFlag && quizFlag.question_count > 0 && mod && (
-            <QuizGate
-              topicId={quizFlag.topic_id}
-              moduleId={mod.id}
-              quizFlag={quizFlag}
-              onPass={() => {
-                if (user && topic) {
-                  const ids = [topic.id, ...(topic.children ? getAllTopicIds(topic.children) : [])];
-                  markMultipleTopics(user.id, ids, true);
-                }
-                setIsCompleted(true);
-              }}
-              nextTopicUrl={nextPendingTarget?.url || (nextTopic ? `/modulo/${mod.id}/${nextTopic.path.join('/')}` : `/modulo/${mod.id}`)}
-            />
-          )}
 
-          {/* Lesson Completion Action Button */}
+          {/* Lesson Completion Action Button (Bottom of Topic) */}
           {user && (
-            <div className="my-8 p-4 sm:p-5 rounded-2xl border border-slate-200/80 dark:border-slate-700/60 bg-gradient-to-r from-blue-50/50 via-slate-50 to-indigo-50/50 dark:from-slate-800/40 dark:to-slate-900/40 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm">
-              <div className="space-y-0.5 text-center sm:text-left">
-                <p className="text-sm font-bold text-slate-800 dark:text-slate-100 flex items-center justify-center sm:justify-start gap-2">
-                  <CheckCircle2 className={`w-4 h-4 ${isCompleted ? 'text-emerald-500 fill-emerald-500 text-white' : 'text-slate-400'}`} />
-                  {isCompleted ? 'Lección completada' : '¿Terminaste de estudiar esta lección?'}
+            <div className="my-10 p-5 sm:p-6 rounded-3xl border border-slate-200/80 dark:border-slate-700/60 bg-gradient-to-br from-white via-slate-50 to-blue-50/30 dark:from-slate-800/60 dark:via-slate-900/50 dark:to-slate-950/60 backdrop-blur-sm shadow-md flex flex-col sm:flex-row items-center justify-between gap-5">
+              <div className="space-y-1.5 text-center sm:text-left">
+                <div className="flex items-center justify-center sm:justify-start gap-2 mb-1">
+                  {isCompleted ? (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300 border border-emerald-300/70 dark:border-emerald-800">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                      {lang === 'en' ? 'Lesson Completed' : 'Lección Completada'}
+                    </span>
+                  ) : hasEvaluation ? (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 dark:bg-amber-950/80 dark:text-amber-300 border border-amber-300/70 dark:border-amber-800">
+                      <Clock className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+                      {lang === 'en' ? 'Lesson Pending · Assessment Required' : 'Lección Pendiente · Evaluación Requerida'}
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 dark:bg-amber-950/80 dark:text-amber-300 border border-amber-300/70 dark:border-amber-800">
+                      <Clock className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+                      {lang === 'en' ? 'Lesson Pending' : 'Lección Pendiente'}
+                    </span>
+                  )}
+                </div>
+                <p className="text-base font-bold text-slate-900 dark:text-white">
+                  {isCompleted
+                    ? (lang === 'en' ? 'Lesson registered in your curriculum' : 'Lección registrada en tu progreso académico')
+                    : hasEvaluation
+                    ? (lang === 'en' ? 'Have you finished studying this topic?' : '¿Concluiste la lectura de este tema?')
+                    : (lang === 'en' ? 'Finished studying this lesson?' : '¿Terminaste de estudiar esta lección?')}
                 </p>
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-slate-600 dark:text-slate-400 max-w-xl leading-relaxed">
                   {isCompleted
                     ? nextPendingTarget
-                      ? `Siguiente tema pendiente: ${nextPendingTarget.title}`
-                      : 'Esta lección ya suma a tu porcentaje de avance y créditos CME en tu portal de alumno.'
+                      ? (lang === 'en' ? `Next pending topic: ${nextPendingTarget.title}` : `Siguiente tema pendiente: ${nextPendingTarget.title}`)
+                      : (lang === 'en' ? 'This lesson counts towards your course completion and CME credits.' : 'Esta lección ya suma a tu porcentaje de avance y créditos CME en tu portal de alumno.')
                     : hasEvaluation
-                    ? 'Debes aprobar la evaluación de este tema para registrarlo como completado.'
-                    : 'Márcala como completada para registrar tu progreso en tu portal de estudiante.'}
+                    ? (lang === 'en' ? 'To credit this lesson in your curriculum, you must complete and pass the topic evaluation.' : 'Para acreditar esta lección en tu historial académico, debes realizar y aprobar el cuestionario de evaluación.')
+                    : (lang === 'en' ? 'Mark as completed when you finish studying to register your progress in the portal.' : 'Márcala como completada al concluir tu lectura para registrar tu avance en el portal de alumno.')}
                 </p>
               </div>
 
-              <div className="flex flex-wrap items-center justify-center gap-2">
-                {isCompleted && nextPendingTarget && (
-                  <Link
-                    to={nextPendingTarget.url}
-                    className="px-4 py-2.5 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-sm shadow-blue-500/25 flex items-center gap-2"
-                  >
-                    Continuar siguiente
-                    <ArrowRight className="w-3.5 h-3.5" />
-                  </Link>
-                )}
+              <div className="flex flex-wrap items-center justify-center gap-2.5 shrink-0">
                 {hasEvaluation && !isCompleted ? (
-                  <button
-                    type="button"
-                    onClick={scrollToEvaluation}
-                    className="px-4 py-2.5 rounded-xl text-xs font-bold bg-cyan-600 hover:bg-cyan-700 text-white shadow-sm flex items-center gap-2"
+                  <Link
+                    to={`/modulo/${mod.id}/evaluacion/${quizTargetTopicId}`}
+                    onClick={resetScrollToTop}
+                    className="px-5 py-3 rounded-xl text-xs font-bold bg-cyan-600 hover:bg-cyan-700 text-white shadow-md shadow-cyan-600/25 flex items-center gap-2 transition-all active:scale-95"
                   >
                     <ClipboardList className="w-4 h-4" />
-                    Ir a la evaluación
-                  </button>
+                    {lang === 'en' ? 'Take Topic Assessment' : 'Realizar evaluación del tema'}
+                    <ArrowRight className="w-4 h-4" />
+                  </Link>
                 ) : hasEvaluation && isCompleted ? (
-                  <span className="px-4 py-2.5 rounded-xl text-xs font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300 flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4" />
-                    Evaluación aprobada
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="px-3.5 py-2 rounded-xl text-xs font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300 flex items-center gap-1.5 border border-emerald-300/60 dark:border-emerald-800">
+                      <CheckCircle2 className="w-4 h-4" />
+                      {lang === 'en' ? 'Assessment passed' : 'Evaluación aprobada'}
+                    </span>
+                    <Link
+                      to={`/modulo/${mod.id}/evaluacion/${quizTargetTopicId}`}
+                      onClick={resetScrollToTop}
+                      className="px-3.5 py-2 rounded-xl text-xs font-semibold text-cyan-700 dark:text-cyan-300 bg-cyan-50 dark:bg-cyan-950/40 hover:bg-cyan-100 dark:hover:bg-cyan-900/50 border border-cyan-200 dark:border-cyan-800 transition-colors flex items-center gap-1.5"
+                    >
+                      <ClipboardList className="w-3.5 h-3.5" />
+                      {lang === 'en' ? 'Review assessment' : 'Revisar evaluación'}
+                    </Link>
+                  </div>
                 ) : (
                   <button
                     type="button"
@@ -1177,15 +1191,27 @@ export default function TopicPage() {
                       const nextState = toggleTopicCompleted(user.id, topic.id, childIds);
                       setIsCompleted(nextState);
                     }}
-                    className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-2 ${
+                    className={`px-5 py-2.5 rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-2 ${
                       isCompleted
-                        ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300 hover:bg-emerald-200'
-                        : 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-500/25'
+                        ? 'bg-slate-100 dark:bg-slate-700/70 text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-600'
+                        : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/20 active:scale-95'
                     }`}
                   >
                     <CheckCircle2 className="w-4 h-4" />
-                    {isCompleted ? 'Completada (desmarcar)' : 'Marcar como completada'}
+                    {isCompleted
+                      ? (lang === 'en' ? 'Completed (unmark)' : 'Completada (desmarcar)')
+                      : (lang === 'en' ? 'Mark as completed' : 'Marcar como completada')}
                   </button>
+                )}
+                {isCompleted && nextPendingTarget && (
+                  <Link
+                    to={nextPendingTarget.url}
+                    onClick={resetScrollToTop}
+                    className="px-4 py-2.5 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-sm shadow-blue-500/25 flex items-center gap-2 active:scale-95"
+                  >
+                    {lang === 'en' ? 'Continue next' : 'Continuar siguiente'}
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </Link>
                 )}
               </div>
             </div>
@@ -1196,6 +1222,7 @@ export default function TopicPage() {
             {prevTopic ? (
               <Link
                 to={`/modulo/${mod.id}/${prevTopic.path.join('/')}`}
+                onClick={resetScrollToTop}
                 className="flex items-center gap-3 px-4 py-3.5 rounded-xl bg-white/70 dark:bg-slate-800/50 border border-slate-200/50 dark:border-slate-700/30 hover:border-blue-300 dark:hover:border-blue-600 transition-all text-sm group flex-1 min-w-0"
               >
                 <ArrowLeft className="w-4 h-4 text-slate-400 group-hover:text-blue-500 transition-colors flex-shrink-0" />
@@ -1208,9 +1235,26 @@ export default function TopicPage() {
               </Link>
             ) : <div className="hidden sm:block flex-1" />}
 
-            {isCompleted && nextPendingTarget ? (
+            {hasEvaluation && !isCompleted ? (
+              <Link
+                to={`/modulo/${mod.id}/evaluacion/${quizTargetTopicId}`}
+                onClick={resetScrollToTop}
+                className="flex items-center justify-end gap-3 px-4 py-3.5 rounded-xl bg-cyan-50/80 dark:bg-cyan-950/30 border border-cyan-200/70 dark:border-cyan-800/50 hover:border-cyan-400 dark:hover:border-cyan-500 transition-all text-sm group flex-1 min-w-0 text-right shadow-xs"
+              >
+                <div className="min-w-0">
+                  <span className="block text-[0.65rem] uppercase tracking-wider text-cyan-700 dark:text-cyan-400 mb-0.5 font-semibold">
+                    {lang === 'en' ? 'Next step' : 'Siguiente paso'}
+                  </span>
+                  <span className="block truncate text-cyan-950 dark:text-cyan-100 group-hover:text-cyan-700 dark:group-hover:text-cyan-300 transition-colors font-bold">
+                    {lang === 'en' ? 'Topic Assessment' : 'Evaluación del tema'}
+                  </span>
+                </div>
+                <ArrowRight className="w-4 h-4 text-cyan-600 group-hover:text-cyan-700 transition-colors flex-shrink-0" />
+              </Link>
+            ) : isCompleted && nextPendingTarget ? (
               <Link
                 to={nextPendingTarget.url}
+                onClick={resetScrollToTop}
                 className="flex items-center justify-end gap-3 px-4 py-3.5 rounded-xl bg-blue-50/80 dark:bg-blue-950/30 border border-blue-200/70 dark:border-blue-800/50 hover:border-blue-400 dark:hover:border-blue-500 transition-all text-sm group flex-1 min-w-0 text-right"
               >
                 <div className="min-w-0">
@@ -1226,6 +1270,7 @@ export default function TopicPage() {
             ) : nextTopic ? (
               <Link
                 to={`/modulo/${mod.id}/${nextTopic.path.join('/')}`}
+                onClick={resetScrollToTop}
                 className="flex items-center justify-end gap-3 px-4 py-3.5 rounded-xl bg-white/70 dark:bg-slate-800/50 border border-slate-200/50 dark:border-slate-700/30 hover:border-blue-300 dark:hover:border-blue-600 transition-all text-sm group flex-1 min-w-0 text-right"
               >
                 <div className="min-w-0">

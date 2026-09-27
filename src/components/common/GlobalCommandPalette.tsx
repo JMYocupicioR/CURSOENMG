@@ -20,6 +20,14 @@ import { useCommandPaletteStore } from '../../stores/commandPaletteStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useAuth } from '../../contexts/AuthProvider';
 import { allModules } from '../../content/modules';
+import {
+  lessonHrefWithQuery,
+  mergeSearchHits,
+  searchCommandItems,
+  searchLabel,
+  searchStaticCourse,
+} from '../../search/courseSearch';
+import { HighlightedSearchText } from '../../search/HighlightedSearchText';
 
 interface CommandItem {
   id: string;
@@ -30,6 +38,9 @@ interface CommandItem {
   to?: string;
   action?: () => void;
   badge?: string;
+  breadcrumb?: string;
+  snippet?: string;
+  resultLabel?: string;
 }
 
 export function GlobalCommandPalette() {
@@ -146,7 +157,6 @@ export function GlobalCommandPalette() {
       },
     ];
 
-    // Módulos y temas del curso
     allModules.forEach((m) => {
       items.push({
         id: `mod-${m.id}`,
@@ -155,17 +165,6 @@ export function GlobalCommandPalette() {
         category: 'Curso',
         icon: BookOpen,
         to: `/modulo/${m.id}`,
-      });
-
-      (m.topics || []).forEach((t) => {
-        items.push({
-          id: `top-${m.id}-${t.id}`,
-          title: t.title,
-          subtitle: `${m.title}`,
-          category: 'Curso',
-          icon: FileText,
-          to: `/modulo/${m.id}/${t.id}`,
-        });
       });
     });
 
@@ -235,24 +234,53 @@ export function GlobalCommandPalette() {
     return items;
   }, [allModules, isDarkMode, toggleDarkMode, isAdmin, isEditor]);
 
-  // Filtered items based on query
   const filteredItems = useMemo(() => {
-    const q = query.trim().toLowerCase();
+    const q = query.trim();
     if (!q) {
-      // Return top priority items when no query
-      return allItems.filter(
-        (item) => item.category === 'Simuladores' || item.category === 'Admin' || item.id === 'user-portal' || item.id.startsWith('mod-')
-      ).slice(0, 15);
+      return allItems
+        .filter(
+          (item) =>
+            item.category === 'Simuladores' ||
+            item.category === 'Admin' ||
+            item.id === 'user-portal' ||
+            item.id.startsWith('mod-'),
+        )
+        .slice(0, 15);
     }
 
-    return allItems
-      .filter(
-        (item) =>
-          item.title.toLowerCase().includes(q) ||
-          (item.subtitle && item.subtitle.toLowerCase().includes(q)) ||
-          item.category.toLowerCase().includes(q)
-      )
-      .slice(0, 20);
+    const commandHits = searchCommandItems(
+      allItems.map((item) => ({
+        id: item.id,
+        title: item.title,
+        subtitle: item.subtitle,
+        category: item.category,
+        href: item.to,
+      })),
+      q,
+      20,
+    );
+    const merged = mergeSearchHits([...commandHits, ...searchStaticCourse(q, 20)], 20);
+    const commands = new Map(allItems.map((item) => [item.id, item]));
+
+    return merged.flatMap((hit): CommandItem[] => {
+      if (hit.kind === 'command') {
+        const item = commands.get(hit.id);
+        return item ? [item] : [];
+      }
+      return [
+        {
+          id: hit.id,
+          title: hit.title,
+          subtitle: hit.breadcrumb,
+          breadcrumb: hit.breadcrumb,
+          snippet: hit.snippet,
+          resultLabel: searchLabel(hit.matchKind),
+          category: 'Curso',
+          icon: FileText,
+          to: lessonHrefWithQuery(hit.href ?? '/', q),
+        },
+      ];
+    });
   }, [allItems, query]);
 
   // Reset selected index when results change
@@ -311,7 +339,7 @@ export function GlobalCommandPalette() {
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Buscar tema, simulador, caso clínico o acción..."
+            placeholder="Buscar en lecciones, simuladores o acciones..."
             className="flex-1 bg-transparent text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 text-sm sm:text-base outline-none font-medium"
           />
           {query && (
@@ -340,7 +368,7 @@ export function GlobalCommandPalette() {
                 No se encontraron resultados
               </p>
               <p className="text-xs text-slate-400 max-w-sm mx-auto">
-                Prueba buscando por palabras clave como "Plexo", "Conducción", "Examen", "Kardex" o "Trazos".
+                Prueba con un término del texto, como "Neuropraxia", "Plexo", "Conducción" o "Kardex".
               </p>
             </div>
           ) : (
@@ -372,15 +400,32 @@ export function GlobalCommandPalette() {
                       <p className="text-xs sm:text-sm font-semibold truncate leading-snug">
                         {item.title}
                       </p>
-                      {item.subtitle && (
+                      {item.breadcrumb && (
                         <p className="text-[11px] text-slate-400 dark:text-slate-500 truncate leading-snug">
-                          {item.subtitle}
+                          {item.breadcrumb}
                         </p>
+                      )}
+                      {item.snippet ? (
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400 line-clamp-2 leading-snug mt-0.5">
+                          <HighlightedSearchText text={item.snippet} query={query} />
+                        </p>
+                      ) : (
+                        item.subtitle &&
+                        !item.breadcrumb && (
+                          <p className="text-[11px] text-slate-400 dark:text-slate-500 truncate leading-snug">
+                            {item.subtitle}
+                          </p>
+                        )
                       )}
                     </div>
                   </div>
 
                   <div className="flex items-center gap-2 shrink-0">
+                    {item.resultLabel && (
+                      <span className="hidden sm:inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200/70 dark:border-indigo-800">
+                        {item.resultLabel}
+                      </span>
+                    )}
                     {item.badge && (
                       <span className="hidden sm:inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
                         {item.badge}

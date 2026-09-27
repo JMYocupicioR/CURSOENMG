@@ -13,11 +13,13 @@ import { AdminStudentModeBanner } from './components/admin/AdminStudentModeBanne
 import { useAuth } from './contexts/AuthProvider';
 import { useStaffViewStore } from './stores/staffViewStore';
 import { shouldRedirectToStaffInbox } from './utils/postLoginPath';
+import { ScrollToTop } from './components/common/ScrollToTop';
 
 const LandingPage = lazy(() => import('./components/pages/LandingPage'));
 const SyllabusPage = lazy(() => import('./components/pages/SyllabusPage'));
 const ModulePage = lazy(() => import('./components/pages/ModulePage'));
 const TopicPage = lazy(() => import('./components/pages/TopicPage'));
+const TopicQuizPage = lazy(() => import('./components/pages/TopicQuizPage'));
 const PlexoCalculatorPage = lazy(() => import('./components/Plexo/PlexoCalculatorPage'));
 const ExerciseMode = lazy(() => import('../ejercicios/src/components/ExerciseMode'));
 const WorkshopsListPage = lazy(() => import('./components/pages/WorkshopsListPage'));
@@ -96,6 +98,7 @@ function App() {
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50 dark:from-slate-950 dark:via-slate-900 dark:to-indigo-950 text-slate-900 dark:text-slate-100 transition-colors duration-300 pb-24 lg:pb-0">
         <SkipLink />
         <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+          <ScrollToTop />
           <Header />
           <AdminStudentModeBanner />
           <AdminEntryGate />
@@ -111,6 +114,7 @@ function App() {
 
               {/* Contenido formativo exclusivo para alumnos con suscripción */}
               <Route path="/modulo/:moduleId" element={<ProtectedRoute mode="enrolled"><ModulePage /></ProtectedRoute>} />
+              <Route path="/modulo/:moduleId/evaluacion/:topicId" element={<ProtectedRoute mode="enrolled"><TopicQuizPage /></ProtectedRoute>} />
               <Route path="/modulo/:moduleId/*" element={<ProtectedRoute mode="enrolled"><TopicPage /></ProtectedRoute>} />
               
               {/* Simuladores y herramientas con candado exclusivo Premium */}

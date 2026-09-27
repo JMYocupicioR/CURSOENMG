@@ -57,7 +57,7 @@ export function useQuizTopicFlags() {
     };
   }, [user?.id]);
 
-  const byTopicId = useMemo(() => {
+  const allByTopicId = useMemo(() => {
     const map = new Map<string, QuizTopicFlag>();
     for (const flag of flags) {
       if (flag.question_count > 0) map.set(flag.topic_id, flag);
@@ -65,10 +65,28 @@ export function useQuizTopicFlags() {
     return map;
   }, [flags]);
 
+  const byTopicId = useMemo(() => {
+    const map = new Map<string, QuizTopicFlag>();
+    for (const flag of flags) {
+      if (
+        flag.question_count > 0 &&
+        (flag.clinical_validation_status ?? 'pending_review') === 'approved'
+      ) {
+        map.set(flag.topic_id, flag);
+      }
+    }
+    return map;
+  }, [flags]);
+
   const byModuleId = useMemo(() => {
     const map = new Map<string, QuizTopicFlag[]>();
     for (const flag of flags) {
-      if (flag.question_count <= 0) continue;
+      if (
+        flag.question_count <= 0 ||
+        (flag.clinical_validation_status ?? 'pending_review') !== 'approved'
+      ) {
+        continue;
+      }
       const list = map.get(flag.module_id) ?? [];
       list.push(flag);
       map.set(flag.module_id, list);
@@ -85,14 +103,17 @@ export function useQuizTopicFlags() {
   );
 
   const hasQuiz = (topicId: string) => byTopicId.has(topicId);
+  const hasAnyQuiz = (topicId: string) => allByTopicId.has(topicId);
   const hasPassedQuiz = (topicId: string) => passedTopicIds.has(topicId);
   const moduleQuizCount = (moduleId: string) => byModuleId.get(moduleId)?.length ?? 0;
 
   return {
     flags,
     byTopicId,
+    allByTopicId,
     byModuleId,
     hasQuiz,
+    hasAnyQuiz,
     hasPassedQuiz,
     passedTopicIds,
     quizGate,

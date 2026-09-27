@@ -60,6 +60,7 @@ import { AssignClinicalCaseModal } from './AssignClinicalCaseModal';
 import AttendanceTrackerModal from './AttendanceTrackerModal';
 import StudentKardexModal from './StudentKardexModal';
 import { CreateLiveClassModal } from './CreateLiveClassModal';
+import { TopicAdoptionInbox } from './TopicAdoptionInbox';
 
 export default function AdminDashboard() {
   const { user, profile, isAdmin } = useAuth();
@@ -1076,6 +1077,8 @@ export default function AdminDashboard() {
             </div>
           )}
         </section>
+
+        <TopicAdoptionInbox onChanged={loadData} />
 
         {/* ── 7. La clase de esta semana (una sola línea del calendario) ── */}
         <section className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
