@@ -9,6 +9,7 @@ import {
   CheckCheck,
   ChevronDown,
   Clock,
+  ExternalLink,
   FileQuestion,
   Layers,
   UserCheck,
@@ -19,6 +20,7 @@ import {
 } from 'lucide-react';
 import { allModules } from '../../content/modules';
 import { useAuth } from '../../contexts/AuthProvider';
+import { getTopicPublicUrl } from '../../utils/adminUtils';
 import { getSyllabusTopicOverrides } from '../../services/courseService';
 import {
   DEFAULT_ACADEMIC_MILESTONES,
@@ -522,6 +524,9 @@ export function TopicAdoptionInbox({
                           const isShared = otherTeachers.length > 0;
                           const topicTitle = titleForTopic(row.topic_id, row.module_id);
                           const topicPath = pathForTopic(row.topic_id, row.module_id);
+                          const topicUrl =
+                            getTopicPublicUrl(row.module_id, row.topic_id) ||
+                            `/modulo/${row.module_id}/${row.topic_id}`;
 
                           return (
                             <div
@@ -531,9 +536,16 @@ export function TopicAdoptionInbox({
                               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                                 <div className="min-w-0">
                                   <div className="flex items-center gap-2 flex-wrap">
-                                    <p className="font-bold text-slate-900 dark:text-white text-sm">
-                                      {topicTitle}
-                                    </p>
+                                    <Link
+                                      to={topicUrl}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      title={`Abrir lección de «${topicTitle}» en nueva pestaña`}
+                                      className="group/topic font-bold text-slate-900 dark:text-white text-sm hover:text-indigo-600 dark:hover:text-indigo-400 hover:underline inline-flex items-center gap-1.5 max-w-full cursor-pointer transition-colors"
+                                    >
+                                      <span className="truncate">{topicTitle}</span>
+                                      <ExternalLink className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500 group-hover/topic:text-indigo-600 dark:group-hover/topic:text-indigo-400 opacity-60 group-hover/topic:opacity-100 transition shrink-0" />
+                                    </Link>
                                     <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 inline-flex items-center gap-1">
                                       <Check className="w-3 h-3" />
                                       Confirmado
@@ -819,6 +831,9 @@ export function TopicAdoptionInbox({
                                     const previewOn =
                                       activePreview?.moduleId === node.moduleId &&
                                       activePreview.ids.includes(node.topicId);
+                                    const topicUrl =
+                                      getTopicPublicUrl(node.moduleId, node.topicId) ||
+                                      `/modulo/${node.moduleId}/${node.topicId}`;
 
                                     return (
                                       <div
@@ -830,10 +845,19 @@ export function TopicAdoptionInbox({
                                         }`}
                                       >
                                         <div className="min-w-0">
-                                          <p className="font-semibold text-slate-900 dark:text-white truncate">
-                                            {node.depth > 0 ? `${'· '.repeat(node.depth)}` : ''}
-                                            {node.topicTitle}
-                                          </p>
+                                          <Link
+                                            to={topicUrl}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            title={`Abrir lección de «${node.topicTitle}» en nueva pestaña`}
+                                            className="group/topic font-semibold text-slate-900 dark:text-white hover:text-indigo-600 dark:hover:text-indigo-400 hover:underline inline-flex items-center gap-1.5 max-w-full cursor-pointer transition-colors"
+                                          >
+                                            <span className="truncate">
+                                              {node.depth > 0 ? `${'· '.repeat(node.depth)}` : ''}
+                                              {node.topicTitle}
+                                            </span>
+                                            <ExternalLink className="w-3 h-3 text-slate-400 dark:text-slate-500 group-hover/topic:text-indigo-600 dark:group-hover/topic:text-indigo-400 opacity-60 group-hover/topic:opacity-100 transition shrink-0" />
+                                          </Link>
                                           {openDescendants.length > 0 ? (
                                             <p className="text-[11px] text-sky-700 dark:text-sky-300">
                                               {pendingDescendants.length === openDescendants.length
@@ -1005,6 +1029,9 @@ export function TopicAdoptionInbox({
                           (row) => row.topic_id === node.topicId && row.teacher_id === userId
                         );
                         const isMine = Boolean(myCommitment);
+                        const topicUrl =
+                          getTopicPublicUrl(node.moduleId, node.topicId) ||
+                          `/modulo/${node.moduleId}/${node.topicId}`;
 
                         return (
                           <div
@@ -1012,7 +1039,16 @@ export function TopicAdoptionInbox({
                             className="px-4 py-2.5 flex items-center justify-between gap-3 text-xs"
                           >
                             <div className="min-w-0">
-                              <p className="font-semibold text-slate-900 dark:text-white truncate">{node.topicTitle}</p>
+                              <Link
+                                to={topicUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                title={`Abrir lección de «${node.topicTitle}» en nueva pestaña`}
+                                className="group/topic font-semibold text-slate-900 dark:text-white hover:text-indigo-600 dark:hover:text-indigo-400 hover:underline inline-flex items-center gap-1.5 max-w-full cursor-pointer transition-colors"
+                              >
+                                <span className="truncate">{node.topicTitle}</span>
+                                <ExternalLink className="w-3 h-3 text-slate-400 dark:text-slate-500 group-hover/topic:text-indigo-600 dark:group-hover/topic:text-indigo-400 opacity-60 group-hover/topic:opacity-100 transition shrink-0" />
+                              </Link>
                               <p className="text-[11px] text-slate-400 truncate">
                                 {node.confirmed.map(teacherLabel).join(', ')}
                                 {node.coverage === 'shared' ? ' · compartido' : ''}
