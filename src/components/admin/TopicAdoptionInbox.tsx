@@ -970,6 +970,8 @@ export function TopicAdoptionInbox({
                     )}
                   </div>
                 )}
+              </div>
+
               {/* ── Subsección 3: Temas con profesor ── */}
               <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-2xs">
                 <button
