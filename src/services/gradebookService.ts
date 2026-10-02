@@ -21,7 +21,9 @@ import type {
   AcademicMilestone,
 } from '../types/academicGradebook';
 import type { AdminProfileRow } from '../types/admin';
-import type { Profile } from '../types/database';
+import type { Profile, LiveWorkshop } from '../types/database';
+import type { QuizAttempt, ModuleQuizProgress } from '../types/quiz';
+import type { StudentAssignment } from '../types/studentPlan';
 
 const KEY_LOCAL_RUBRICS = 'neurosafe_gradebook_rubric_config';
 
@@ -127,13 +129,22 @@ export async function saveGradebookRubrics(config: GradebookRubricConfig): Promi
   }
 }
 
+export interface PreloadedStudentKardexData {
+  attempts?: QuizAttempt[];
+  moduleProgress?: ModuleQuizProgress[];
+  assignments?: StudentAssignment[];
+  completedTopicsSet?: Set<string>;
+  workshops?: LiveWorkshop[];
+}
+
 // ─── Motor de Cálculo de Kardex Académico Oficial por Alumno ──────────────────
 
 export async function calculateStudentKardex(
   studentId: string,
   providedProfile?: Profile | AdminProfileRow | null,
   providedRubrics?: GradebookRubricConfig,
-  providedMilestones?: AcademicMilestone[]
+  providedMilestones?: AcademicMilestone[],
+  preloadedData?: PreloadedStudentKardexData
 ): Promise<StudentKardexData> {
   const rubricConfig = providedRubrics || (await getGradebookRubrics());
 
@@ -156,8 +167,12 @@ export async function calculateStudentKardex(
   const avatarUrl = profile?.avatar_url || null;
 
   // 2. Temas Completados y Progreso Curricular
-  const completedTopicsSet = await fetchStudentCompletedTopics(studentId).catch(() => new Set<string>());
-  const moduleProgressList = await getMyProgressByModule(studentId).catch(() => []);
+  const completedTopicsSet =
+    preloadedData?.completedTopicsSet ??
+    (await fetchStudentCompletedTopics(studentId).catch(() => new Set<string>()));
+  const moduleProgressList =
+    preloadedData?.moduleProgress ??
+    (await getMyProgressByModule(studentId).catch(() => []));
   const metrics = calculateStudentMetrics(studentId, moduleProgressList, completedTopicsSet);
 
   const modulesBreakdown = allModules.filter((m) => !isAppendixModule(m.id)).map((m) => {
@@ -173,7 +188,9 @@ export async function calculateStudentKardex(
   });
 
   // 3. Evaluaciones Teóricas (Exámenes y Quizzes)
-  const rawAttempts = await getMyAttempts(studentId, 100).catch(() => []);
+  const rawAttempts =
+    preloadedData?.attempts ??
+    (await getMyAttempts(studentId, 100).catch(() => []));
   const examDetails = rawAttempts.map((att) => ({
     attemptId: att.id,
     title: att.topic_id ? `Evaluación: ${att.topic_id}` : 'Examen de Módulo',
@@ -186,7 +203,9 @@ export async function calculateStudentKardex(
   const examAverage = meanScore(examDetails.map((exam) => exam.score));
 
   // 4. Tareas y Casos Prácticos
-  const rawAssignments = await getStudentAssignments(studentId).catch(() => []);
+  const rawAssignments =
+    preloadedData?.assignments ??
+    (await getStudentAssignments(studentId).catch(() => []));
   const gradedAssignments = rawAssignments.filter((a) => a.status === 'approved' && typeof a.grade === 'number');
 
   const assignmentDetails = rawAssignments.map((a) => ({
@@ -208,7 +227,8 @@ export async function calculateStudentKardex(
   // 5. Asistencias a Clases y Talleres
   let eligibleSessionsCount = 0;
   try {
-    const workshops = await getWorkshops();
+    const workshops =
+      preloadedData?.workshops ?? (await getWorkshops());
     const nowStr = new Date().toISOString();
     eligibleSessionsCount = workshops.filter((w) =>
       (w.counts_for_kardex ?? true) &&

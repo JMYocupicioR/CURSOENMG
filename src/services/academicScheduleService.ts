@@ -341,7 +341,7 @@ export async function getAcademicMilestones(): Promise<AcademicMilestone[]> {
 
   if (result.length) writeLocalMilestones(result);
   if (hasCustomAdminDates(result) && !hasCustomAdminDates(remoteRaw)) {
-    await persistMilestonesRemote(result);
+    void persistMilestonesRemote(result);
   }
   return result;
 }

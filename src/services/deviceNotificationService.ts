@@ -23,32 +23,79 @@ export function getNotificationPermission(): NotificationPermissionStatus {
 }
 
 /**
- * Checks whether device notifications are enabled for the current student
+ * Detects if the current device is running iOS (iPhone, iPad, iPod)
  */
-export function isDeviceNotificationsEnabled(studentId?: string): boolean {
+export function isIOSDevice(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  return /iPad|iPhone|iPod/.test(navigator.userAgent);
+}
+
+/**
+ * Detects if the web app is running in Standalone (installed PWA) mode
+ */
+export function isStandaloneApp(): boolean {
+  if (typeof window === 'undefined') return false;
+  return (
+    ('standalone' in window.navigator && (window.navigator as any).standalone === true) ||
+    window.matchMedia('(display-mode: standalone)').matches
+  );
+}
+
+/**
+ * Returns comprehensive diagnostic state of notification and PWA readiness
+ */
+export function getNotificationDiagnostics(): {
+  supported: boolean;
+  permission: NotificationPermissionStatus;
+  isIOS: boolean;
+  isStandalone: boolean;
+  needsIOSInstall: boolean;
+} {
+  const supported = isNotificationSupported();
+  const ios = isIOSDevice();
+  const standalone = isStandaloneApp();
+  // On iOS, Web Push & Notification API requires adding to Home Screen (iOS 16.4+)
+  const needsIOSInstall = ios && !standalone;
+
+  return {
+    supported,
+    permission: getNotificationPermission(),
+    isIOS: ios,
+    isStandalone: standalone,
+    needsIOSInstall,
+  };
+}
+
+/**
+ * Checks whether device notifications are enabled for the current user
+ */
+export function isDeviceNotificationsEnabled(userId?: string): boolean {
   if (!isNotificationSupported()) return false;
   if (Notification.permission !== 'granted') return false;
-  if (!studentId) return true;
-  const pref = localStorage.getItem(`${KEY_DEVICE_NOTIFS_ENABLED}${studentId}`);
+  if (!userId) return true;
+  const pref = localStorage.getItem(`${KEY_DEVICE_NOTIFS_ENABLED}${userId}`);
   return pref !== 'false';
 }
 
 /**
  * Requests device notification permissions from the user
  */
-export async function requestNotificationPermission(studentId?: string): Promise<NotificationPermissionStatus> {
+export async function requestNotificationPermission(
+  userId?: string,
+  role?: 'admin' | 'student'
+): Promise<NotificationPermissionStatus> {
   if (!isNotificationSupported()) {
     return 'unsupported';
   }
 
   try {
     const permission = await Notification.requestPermission();
-    if (studentId) {
-      localStorage.setItem(`${KEY_DEVICE_NOTIFS_ENABLED}${studentId}`, permission === 'granted' ? 'true' : 'false');
+    if (userId) {
+      localStorage.setItem(`${KEY_DEVICE_NOTIFS_ENABLED}${userId}`, permission === 'granted' ? 'true' : 'false');
     }
 
     if (permission === 'granted') {
-      await sendTestNotification();
+      await sendTestNotification(role);
     }
 
     return permission as NotificationPermissionStatus;
@@ -126,11 +173,14 @@ export async function sendDeviceNotification({
 /**
  * Sends an instant verification test alert to the device
  */
-export async function sendTestNotification(): Promise<boolean> {
+export async function sendTestNotification(role?: 'admin' | 'student'): Promise<boolean> {
+  const isAdmin = role === 'admin';
   return sendDeviceNotification({
-    title: 'ElectroDx Diplomado 🎓',
-    body: '¡Alertas activadas! Recibirás notificaciones de tus tareas, exámenes y avisos de tus profesores en este dispositivo.',
-    url: '/dashboard?tab=assignments',
+    title: isAdmin ? 'ElectroDx Docente 🩺' : 'ElectroDx Diplomado 🎓',
+    body: isAdmin
+      ? '¡Alertas activadas! Recibirás notificaciones de entregas de alumnos, exámenes y admisiones en este dispositivo.'
+      : '¡Alertas activadas! Recibirás notificaciones de tus tareas, exámenes y avisos de tus profesores en este dispositivo.',
+    url: isAdmin ? '/admin' : '/portal',
     tag: 'test-welcome-alert',
   });
 }
@@ -288,7 +338,11 @@ export function subscribeToRealtimeAssignments(
           }
         }
       )
-      .subscribe();
+      .subscribe((status, err) => {
+        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          console.warn(`[DeviceNotification] Realtime status ${status}:`, err || 'reconnecting in background');
+        }
+      });
 
     return () => {
       try {
@@ -297,6 +351,66 @@ export function subscribeToRealtimeAssignments(
     };
   } catch (error) {
     console.warn('[DeviceNotification] Failed to create realtime channel:', error);
+    return () => {};
+  }
+}
+
+/**
+ * Subscribes teachers/admins to Realtime submissions from all students
+ * Sends a native device notification when any student submits an assignment or exam
+ */
+export function subscribeToAdminRealtimeSubmissions(
+  onSubmissionChange: (assignment: StudentAssignment) => void
+): () => void {
+  if (!supabase) return () => {};
+
+  try {
+    const channelTopic = `admin-asgs-${Math.random().toString(36).slice(2, 7)}`;
+    const channel = supabase
+      .channel(channelTopic)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'student_assignments',
+        },
+        (payload) => {
+          try {
+            const asg = payload.new as StudentAssignment;
+            const oldAsg = payload.old as Partial<StudentAssignment>;
+            if (!asg) return;
+
+            // Trigger when a student status transitions to 'submitted'
+            if (asg.status === 'submitted' && oldAsg?.status !== 'submitted') {
+              onSubmissionChange(asg);
+
+              const displayTitle = asg.type === 'clinical_case' ? 'Caso Clínico' : asg.title;
+              void sendDeviceNotification({
+                title: `📝 Nueva Entrega de Alumno: ${displayTitle}`,
+                body: `Un alumno ha entregado una tarea o caso clínico para su revisión. Toca para calificar.`,
+                url: `/admin/alumnos/tareas`,
+                tag: `admin-asg-${asg.id}`,
+              });
+            }
+          } catch (e) {
+            console.warn('[DeviceNotification] Error handling admin realtime payload:', e);
+          }
+        }
+      )
+      .subscribe((status, err) => {
+        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          console.warn(`[DeviceNotification] Admin Realtime status ${status}:`, err || 'reconnecting in background');
+        }
+      });
+
+    return () => {
+      try {
+        void supabase.removeChannel(channel);
+      } catch {}
+    };
+  } catch (error) {
+    console.warn('[DeviceNotification] Failed to create admin realtime channel:', error);
     return () => {};
   }
 }

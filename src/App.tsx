@@ -5,6 +5,8 @@ import { useSettingsStore } from './stores/settingsStore';
 import { Header } from './Header';
 import { LoadingSpinner } from './components/LoadingSpinner';
 import IOSInstallBanner from './components/IOSInstallBanner';
+import DeviceNotificationPromptBanner from './components/pwa/DeviceNotificationPromptBanner';
+import PWAInstallModal from './components/pwa/PWAInstallModal';
 import { SkipLink } from './components/a11y/SkipLink';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import { GlobalCommandPalette } from './components/common/GlobalCommandPalette';
@@ -73,12 +75,13 @@ function AdminEntryGate() {
   const location = useLocation();
   const view = useStaffViewStore((s) => s.view);
   const hydrated = useStaffViewStore((s) => s.hydrated);
+  const isStaff = Boolean(user && (isAdmin || isEditor));
   const openInbox = shouldRedirectToStaffInbox({
-    isStaff: Boolean(user && (isAdmin || isEditor)),
+    isStaff,
     isAdmin: Boolean(user && isAdmin),
     isLoading,
     hydrated,
-    studentMode: isAdmin && view === 'student',
+    studentMode: isStaff && view === 'student',
     pathname: location.pathname,
   });
   if (!openInbox) return null;
@@ -102,6 +105,7 @@ function App() {
           <ScrollToTop />
           <Header />
           <AdminStudentModeBanner />
+          <DeviceNotificationPromptBanner />
           <AdminEntryGate />
           <GlobalCommandPalette />
           <MobileBottomNav />
@@ -207,6 +211,7 @@ function App() {
           </Suspense>
         </Router>
         <IOSInstallBanner />
+        <PWAInstallModal />
       </div>
     </div>
   );

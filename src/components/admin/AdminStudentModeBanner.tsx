@@ -1,21 +1,31 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Eye, Shield } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthProvider';
 import { useStaffViewStore } from '../../stores/staffViewStore';
 
 export function AdminStudentModeBanner() {
-  const { isAdmin } = useAuth();
+  const { isAdmin, isEditor } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const view = useStaffViewStore((s) => s.view);
   const exitStudentMode = useStaffViewStore((s) => s.exitStudentMode);
-  const inStudentMode = isAdmin && view === 'student';
+  const isStaff = isAdmin || isEditor;
+  const inStudentMode = isStaff && view === 'student';
   const onAdminSurface = location.pathname.startsWith('/admin');
 
+  // Solo salir del modo estudiante si veníamos de una pantalla NO admin y navegamos hacia /admin.
+  // Si el usuario estaba en /admin y activó "Ver como alumno", no debe cancelarse en ese mismo instante.
+  const prevPathRef = useRef(location.pathname);
+
   useEffect(() => {
-    if (inStudentMode && onAdminSurface) exitStudentMode();
-  }, [inStudentMode, onAdminSurface, exitStudentMode]);
+    const prevPath = prevPathRef.current;
+    prevPathRef.current = location.pathname;
+
+    if (inStudentMode && !prevPath.startsWith('/admin') && location.pathname.startsWith('/admin')) {
+      exitStudentMode();
+    }
+  }, [inStudentMode, location.pathname, exitStudentMode]);
 
   if (!inStudentMode || onAdminSurface) return null;
 

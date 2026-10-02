@@ -24,8 +24,10 @@ import {
   Settings,
   LogOut,
   Play,
+  Smartphone,
 } from 'lucide-react';
 import { useCommandPaletteStore } from './stores/commandPaletteStore';
+import { usePWAInstallStore } from './stores/pwaInstallStore';
 import { BrandLogo } from './components/brand/BrandLogo';
 import { CourseSidebar } from './components/CourseSidebar';
 import { BRAND } from './config/brand';
@@ -83,7 +85,10 @@ export function Header() {
   const openCommandPalette = useCommandPaletteStore((s) => s.open);
   const initializeOffline = useOfflineStore((s) => s.initialize);
   const { user, profile, isAdmin, isEditor, isPendingApproval, signOut } = useAuth();
-  const studentMode = useStaffViewStore((s) => s.view) === 'student' && isAdmin;
+  const isStaff = isAdmin || isEditor;
+  const isStandalone = usePWAInstallStore((s) => s.isStandalone);
+  const triggerInstall = usePWAInstallStore((s) => s.triggerInstall);
+  const studentMode = useStaffViewStore((s) => s.view) === 'student' && isStaff;
   const { totalPending } = useAdminPendingCounts();
   const { pendingCount } = useStudentPendingAssignments();
   const location = useLocation();
@@ -93,8 +98,8 @@ export function Header() {
 
   const isLoggedIn = Boolean(user);
   const showPublicNav = !isLoggedIn;
-  const showStudentNav = isLoggedIn && (!isAdmin || studentMode);
-  const homeHref = !isLoggedIn ? '/' : studentMode ? '/portal' : isAdmin || isEditor ? '/admin' : '/portal';
+  const showStudentNav = isLoggedIn && (!isStaff || studentMode);
+  const homeHref = !isLoggedIn ? '/' : studentMode ? '/portal' : isStaff ? '/admin' : '/portal';
   const portalActive = location.pathname === '/portal' || location.pathname === '/dashboard' || location.pathname === '/estudiante';
   const courseActive = location.pathname.startsWith('/modulo');
   const simulatorsActive =
@@ -431,13 +436,31 @@ export function Header() {
                       icon={<GraduationCap className="w-4 h-4 text-blue-500" />}
                       label="Mi cuenta"
                     />
+                    {!isStandalone && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          closeMobileMenu();
+                          void triggerInstall();
+                        }}
+                        className="w-full flex items-center justify-between p-3 rounded-2xl bg-blue-50/70 dark:bg-blue-950/40 border border-blue-200/60 dark:border-blue-900/50 text-blue-700 dark:text-cyan-300 font-bold text-xs transition cursor-pointer mb-1"
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <Smartphone className="w-4 h-4 text-blue-600 dark:text-cyan-400 shrink-0" />
+                          <span>Instalar App en este teléfono</span>
+                        </div>
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-600 text-white font-extrabold uppercase tracking-wider">
+                          Instalar
+                        </span>
+                      </button>
+                    )}
                     <MobileNavRow
                       to="/cuenta/ajustes"
                       onClick={closeMobileMenu}
                       icon={<Settings className="w-4 h-4 text-slate-500" />}
                       label="Ajustes"
                     />
-                    {isAdmin && (
+                    {isStaff && (
                       <MobileNavRow
                         to={studentMode ? '/admin' : '/portal'}
                         onClick={() => {

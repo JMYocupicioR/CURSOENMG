@@ -4,19 +4,22 @@ import {
   Activity,
   AlertTriangle,
   BookOpen,
-  Calendar,
   Check,
-  CheckCheck,
   ChevronDown,
-  Clock,
+  ChevronRight,
   ExternalLink,
   FileQuestion,
   Layers,
+  Plus,
+  Search,
   UserCheck,
   UserPlus,
   Users,
   Video,
   X,
+  Sparkles,
+  Trash2,
+  ArrowRight,
 } from 'lucide-react';
 import { allModules } from '../../content/modules';
 import { useAuth } from '../../contexts/AuthProvider';
@@ -27,8 +30,6 @@ import {
   getAcademicMilestones,
 } from '../../services/academicScheduleService';
 import {
-  autoConfirmAllPendingCommitments,
-  confirmTopicCommitment,
   listTopicTeachingCommitments,
   proposeTopicCommitments,
   withdrawTopicCommitment,
@@ -86,13 +87,7 @@ type ScopePrompt = {
   commitmentIds: string[];
 };
 
-function defaultLocalDatetime(): string {
-  const tomorrow = new Date();
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  tomorrow.setHours(19, 0, 0, 0);
-  const tzOffset = tomorrow.getTimezoneOffset() * 60000;
-  return new Date(tomorrow.getTime() - tzOffset).toISOString().slice(0, 16);
-}
+
 
 function teacherLabel(row: TopicTeachingCommitment): string {
   return row.teacher_name?.trim() || 'Profesor';
@@ -115,7 +110,7 @@ export function TopicAdoptionInbox({
 
   const [overrides, setOverrides] = useState<SyllabusTopicOverride[]>([]);
   const [commitments, setCommitments] = useState<TopicTeachingCommitment[]>([]);
-  const [milestones, setMilestones] = useState<AcademicMilestone[]>([]);
+  const [, setMilestones] = useState<AcademicMilestone[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busyKey, setBusyKey] = useState<string | null>(null);
@@ -143,6 +138,16 @@ export function TopicAdoptionInbox({
     topicId: string;
     title: string;
   } | null>(null);
+  const [planningMultiTopics, setPlanningMultiTopics] = useState<{
+    moduleId: string;
+    topicIds: string[];
+  } | null>(null);
+  const [isWizardOpen, setIsWizardOpen] = useState(false);
+  const [freeTopicSearch, setFreeTopicSearch] = useState('');
+  const [selectedPedagogicalModuleId, setSelectedPedagogicalModuleId] = useState<string>(
+    allModules[0]?.id || 'fundamentals'
+  );
+  const [isPedagogicalSelectorOpen, setIsPedagogicalSelectorOpen] = useState(true);
 
   const load = async () => {
     setLoading(true);
@@ -331,6 +336,557 @@ export function TopicAdoptionInbox({
     });
   };
 
+  const handleQuickAdopt = (moduleId: string, topicId: string) => {
+    proposeIds(moduleId, [topicId], `quick-adopt-${topicId}`);
+  };
+
+  const handleOpenFreeTopics = () => {
+    setSubsectionsOpen((prev) => ({ ...prev, free: true }));
+    const autoOpen: Record<string, boolean> = {};
+    unassignedByModule.slice(0, 4).forEach((g) => {
+      autoOpen[g.moduleId] = true;
+    });
+    setOpenModules((prev) => ({ ...prev, ...autoOpen }));
+  };
+
+  const handleAdoptPresetPackage = (pkg: 'upper' | 'lower' | 'radic' | 'needle') => {
+    let keywords: string[] = [];
+    if (pkg === 'upper') keywords = ['mediano', 'ulnar', 'cubital', 'radial', 'carpian'];
+    else if (pkg === 'lower') keywords = ['perone', 'tibial', 'sural', 'tarso'];
+    else if (pkg === 'radic') keywords = ['radiculopat', 'plexo'];
+    else if (pkg === 'needle') keywords = ['aguja', 'pum', 'espontanea', 'espontánea'];
+
+    const matching = withoutTeacher
+      .filter((n) => {
+        const s = `${n.topicId} ${n.topicTitle}`.toLowerCase();
+        return keywords.some((k) => s.includes(k));
+      })
+      .slice(0, 4);
+
+    if (matching.length === 0) return;
+
+    void runAction(`adopt-package-${pkg}`, async () => {
+      const byModule = new Map<string, string[]>();
+      for (const m of matching) {
+        const arr = byModule.get(m.moduleId) || [];
+        arr.push(m.topicId);
+        byModule.set(m.moduleId, arr);
+      }
+      for (const [modId, ids] of byModule.entries()) {
+        await proposeTopicCommitments(ids, modId);
+      }
+    });
+  };
+
+  const highYieldAdoptionTopics = useMemo(() => {
+    const definitions = [
+      { key: 'mediano', label: 'Conducción Motora Mediano', keywords: ['mediano', 'median'] },
+      { key: 'carpiano', label: 'Síndrome del Túnel Carpiano (CTS)', keywords: ['carpian', 'carpal', 'tunel'] },
+      { key: 'ulnar', label: 'Conducción Nervio Ulnar (Cubital)', keywords: ['ulnar', 'cubital'] },
+      { key: 'peroneo', label: 'Conducción Nervio Peroneo', keywords: ['perone', 'fibular'] },
+      { key: 'tibial', label: 'Conducción Nervio Tibial', keywords: ['tibial'] },
+      { key: 'radic-l5', label: 'Radiculopatía Lumbar L5/S1', keywords: ['radiculopat', 'l5', 's1', 'lumbar'] },
+      { key: 'radic-cervical', label: 'Radiculopatía Cervical C6/C7', keywords: ['cervical', 'c6', 'c7'] },
+      { key: 'aguja', label: 'EMG de Aguja: Potenciales y Espontánea', keywords: ['aguja', 'pum', 'needle', 'espontanea'] },
+      { key: 'polineuro', label: 'Polineuropatía Axonal / Diabética', keywords: ['polineuropat', 'diabetic', 'polineuropatía'] },
+    ];
+
+    const results: { topicId: string; moduleId: string; title: string; isAdoptedByMe: boolean }[] = [];
+    for (const def of definitions) {
+      const node = withoutTeacher.find((n) => {
+        const s = `${n.topicId} ${n.topicTitle}`.toLowerCase();
+        return def.keywords.some((k) => s.includes(k));
+      });
+      if (node) {
+        results.push({
+          topicId: node.topicId,
+          moduleId: node.moduleId,
+          title: node.topicTitle || def.label,
+          isAdoptedByMe: false,
+        });
+      } else {
+        const myRow = mine.find((m) => {
+          const s = `${m.topic_id} ${titleForTopic(m.topic_id, m.module_id)}`.toLowerCase();
+          return def.keywords.some((k) => s.includes(k));
+        });
+        if (myRow) {
+          results.push({
+            topicId: myRow.topic_id,
+            moduleId: myRow.module_id,
+            title: titleForTopic(myRow.topic_id, myRow.module_id) || def.label,
+            isAdoptedByMe: true,
+          });
+        }
+      }
+    }
+    return results;
+  }, [withoutTeacher, mine]);
+
+  const searchResultsFreeTopics = useMemo(() => {
+    const q = freeTopicSearch.trim().toLowerCase();
+    if (!q) return [];
+    return withoutTeacher
+      .filter((n) => {
+        const s = `${n.topicTitle} ${n.topicId} ${n.pathTitles.join(' ')}`.toLowerCase();
+        return s.includes(q);
+      })
+      .slice(0, 25);
+  }, [withoutTeacher, freeTopicSearch]);
+
+  // ── Secuencia Pedagógica Curricular para Selección Docente en Bandeja ──
+  const currentPedagogicalModule = useMemo(() => {
+    return allModules.find((m) => m.id === selectedPedagogicalModuleId) || allModules[0];
+  }, [selectedPedagogicalModuleId]);
+
+  const currentPedagogicalModIndex = useMemo(() => {
+    return allModules.findIndex((m) => m.id === currentPedagogicalModule.id);
+  }, [currentPedagogicalModule]);
+
+  const nextPedagogicalModule = useMemo(() => {
+    return currentPedagogicalModIndex >= 0 && currentPedagogicalModIndex < allModules.length - 1
+      ? allModules[currentPedagogicalModIndex + 1]
+      : null;
+  }, [currentPedagogicalModIndex]);
+
+  const prevPedagogicalModule = useMemo(() => {
+    return currentPedagogicalModIndex > 0 ? allModules[currentPedagogicalModIndex - 1] : null;
+  }, [currentPedagogicalModIndex]);
+
+  const currentPedagogicalSections = useMemo(() => {
+    const extractSubs = (
+      top: Topic,
+      secTitle: string,
+      secId: string
+    ): {
+      id: string;
+      title: string;
+      sectionTitle: string;
+      sectionId: string;
+      description?: string;
+      isAdoptedByMe: boolean;
+      isClosed: boolean;
+    }[] => {
+      if (!top.children || top.children.length === 0) {
+        return [
+          {
+            id: top.id,
+            title: top.title,
+            sectionTitle: secTitle,
+            sectionId: secId,
+            description: top.description,
+            isAdoptedByMe: holdsTopic(top.id),
+            isClosed: isClosedTopic(currentPedagogicalModule.id, top.id),
+          },
+        ];
+      }
+      const list: {
+        id: string;
+        title: string;
+        sectionTitle: string;
+        sectionId: string;
+        description?: string;
+        isAdoptedByMe: boolean;
+        isClosed: boolean;
+      }[] = [];
+      for (const ch of top.children) {
+        list.push(...extractSubs(ch, secTitle, secId));
+      }
+      return list;
+    };
+
+    return currentPedagogicalModule.topics.map((sec) => {
+      const subtopics = extractSubs(sec, sec.title, sec.id);
+      const allSubtopicIds = subtopics.map((s) => s.id);
+      const adoptedCount = allSubtopicIds.filter((id) => holdsTopic(id)).length;
+      const isSectionComplete = allSubtopicIds.length > 0 && adoptedCount === allSubtopicIds.length;
+
+      return {
+        sectionId: sec.id,
+        sectionTitle: sec.title,
+        subtopics,
+        allSubtopicIds,
+        adoptedCount,
+        isSectionComplete,
+      };
+    });
+  }, [currentPedagogicalModule, commitments, userId]);
+
+  const currentModuleAllSubtopicIds = useMemo(() => {
+    return currentPedagogicalSections.flatMap((s) => s.allSubtopicIds);
+  }, [currentPedagogicalSections]);
+
+  const currentModuleAdoptedCount = useMemo(() => {
+    return currentModuleAllSubtopicIds.filter((id) => holdsTopic(id)).length;
+  }, [currentModuleAllSubtopicIds, commitments, userId]);
+
+  const isCurrentModuleComplete =
+    currentModuleAllSubtopicIds.length > 0 &&
+    currentModuleAdoptedCount === currentModuleAllSubtopicIds.length;
+
+  const pedagogicalModuleProgressionStats = useMemo(() => {
+    return allModules.map((m, idx) => {
+      const subtopicIds: string[] = [];
+      const extractLeafIds = (t: Topic) => {
+        if (t.children && t.children.length > 0) {
+          for (const c of t.children) extractLeafIds(c);
+        } else {
+          subtopicIds.push(t.id);
+        }
+      };
+      for (const t of m.topics) {
+        extractLeafIds(t);
+      }
+      const adopted = subtopicIds.filter((id) => holdsTopic(id)).length;
+      const total = subtopicIds.length;
+      const isComplete = total > 0 && adopted === total;
+      return {
+        module: m,
+        index: idx,
+        total,
+        adopted,
+        isComplete,
+        hasSome: adopted > 0 && !isComplete,
+        isActive: m.id === currentPedagogicalModule.id,
+      };
+    });
+  }, [commitments, userId, currentPedagogicalModule.id]);
+
+  const handleTogglePedagogicalSubtopic = (topicId: string, moduleId: string) => {
+    if (holdsTopic(topicId)) {
+      const myCommitment = commitments.find(
+        (c) => c.topic_id === topicId && c.teacher_id === userId && c.status !== 'withdrawn'
+      );
+      if (myCommitment) {
+        withdrawIds([myCommitment.id], `withdraw-${topicId}`);
+      }
+    } else {
+      proposeIds(moduleId, [topicId], `adopt-${topicId}`);
+    }
+  };
+
+  const handleAdoptAllCurrentModule = () => {
+    const unadopted = currentModuleAllSubtopicIds.filter(
+      (id) => !holdsTopic(id) && !isClosedTopic(currentPedagogicalModule.id, id)
+    );
+    if (unadopted.length > 0) {
+      proposeIds(currentPedagogicalModule.id, unadopted, `adopt-module-${currentPedagogicalModule.id}`);
+    }
+  };
+
+  const handleWithdrawAllCurrentModule = () => {
+    const myCommitmentIds = commitments
+      .filter(
+        (c) =>
+          c.module_id === currentPedagogicalModule.id &&
+          currentModuleAllSubtopicIds.includes(c.topic_id) &&
+          c.teacher_id === userId &&
+          c.status !== 'withdrawn'
+      )
+      .map((c) => c.id);
+    if (myCommitmentIds.length > 0) {
+      withdrawIds(myCommitmentIds, `withdraw-module-${currentPedagogicalModule.id}`);
+    }
+  };
+
+  const handleTogglePedagogicalSection = (sectionSubtopicIds: string[]) => {
+    const allAdopted = sectionSubtopicIds.every((id) => holdsTopic(id));
+    if (allAdopted) {
+      const myCommitmentIds = commitments
+        .filter(
+          (c) =>
+            c.module_id === currentPedagogicalModule.id &&
+            sectionSubtopicIds.includes(c.topic_id) &&
+            c.teacher_id === userId &&
+            c.status !== 'withdrawn'
+        )
+        .map((c) => c.id);
+      if (myCommitmentIds.length > 0) {
+        withdrawIds(myCommitmentIds, `withdraw-sec-${currentPedagogicalModule.id}`);
+      }
+    } else {
+      const toAdopt = sectionSubtopicIds.filter(
+        (id) => !holdsTopic(id) && !isClosedTopic(currentPedagogicalModule.id, id)
+      );
+      if (toAdopt.length > 0) {
+        proposeIds(currentPedagogicalModule.id, toAdopt, `adopt-sec-${currentPedagogicalModule.id}`);
+      }
+    }
+  };
+
+  const handleAdvanceToNextPedagogicalModule = () => {
+    if (nextPedagogicalModule) {
+      setSelectedPedagogicalModuleId(nextPedagogicalModule.id);
+    }
+  };
+
+  const renderPedagogicalModuleSelector = () => (
+    <div className="rounded-3xl border border-indigo-200/90 dark:border-indigo-900/60 bg-gradient-to-b from-indigo-50/40 via-white to-slate-50/20 dark:from-indigo-950/20 dark:via-slate-900 dark:to-slate-900/80 p-4 sm:p-5 shadow-xs space-y-4">
+      {/* ── Cabecera del Selector Pedagógico ── */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-2xl bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-bold shrink-0 shadow-2xs">
+            <BookOpen className="w-5 h-5" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h4 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider">
+                📋 Temas Pendientes por Seleccionar para tus Clases
+              </h4>
+              <span
+                className={`px-2.5 py-0.5 rounded-full text-[10px] font-black border ${
+                  currentModuleAdoptedCount > 0
+                    ? 'bg-emerald-50 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800'
+                    : 'bg-indigo-50 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800'
+                }`}
+              >
+                {currentModuleAdoptedCount > 0
+                  ? `• ${currentModuleAdoptedCount} de este módulo en Mis Temas`
+                  : `0 de este módulo adoptados`}
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+              {currentModuleAdoptedCount === 0
+                ? 'Aún no tienes temas adoptados. Elige con 1 clic los temas que deseas impartir en tus clases:'
+                : 'Elige con 1 clic los temas que deseas impartir en tus clases siguiendo el orden pedagógico curricular:'}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 shrink-0 flex-wrap">
+          <button
+            type="button"
+            onClick={() => {
+              const myIdsInMod = currentModuleAllSubtopicIds.filter((id) => holdsTopic(id));
+              setPlanningMultiTopics({
+                moduleId: currentPedagogicalModule.id,
+                topicIds: myIdsInMod.length > 0 ? myIdsInMod : currentModuleAllSubtopicIds.slice(0, 4),
+              });
+              setIsWizardOpen(true);
+            }}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white text-xs font-bold shadow-sm transition cursor-pointer"
+            title="Abrir Asistente de Clases con los temas de este módulo"
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>Planear clase con este módulo</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setIsPedagogicalSelectorOpen((prev) => !prev)}
+            className="p-2 rounded-xl hover:bg-slate-200/60 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition cursor-pointer"
+            aria-label={isPedagogicalSelectorOpen ? 'Ocultar selector' : 'Mostrar selector'}
+            title={isPedagogicalSelectorOpen ? 'Ocultar selector' : 'Mostrar selector'}
+          >
+            <ChevronDown
+              className={`w-4 h-4 transition-transform duration-200 ${
+                isPedagogicalSelectorOpen ? 'rotate-180' : ''
+              }`}
+            />
+          </button>
+        </div>
+      </div>
+
+      {isPedagogicalSelectorOpen && (
+        <div className="space-y-4 pt-1">
+          {/* ── Stepper Secuencial de Módulos (En Orden Curricular) ── */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between text-[11px]">
+              <span className="font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                🧭 Orden Pedagógico por Módulos:
+              </span>
+              <span className="text-slate-400 font-semibold">
+                Módulo {currentPedagogicalModule.number} de {allModules.length} ({currentPedagogicalModule.title.split(':')[0]})
+              </span>
+            </div>
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1.5 scrollbar-thin">
+              {pedagogicalModuleProgressionStats.map((stat) => (
+                <button
+                  key={stat.module.id}
+                  type="button"
+                  onClick={() => setSelectedPedagogicalModuleId(stat.module.id)}
+                  className={`px-3 py-1.5 rounded-xl border text-xs font-bold transition inline-flex items-center gap-1.5 shrink-0 cursor-pointer ${
+                    stat.isActive
+                      ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm ring-2 ring-indigo-500/20'
+                      : stat.isComplete
+                      ? 'bg-emerald-50 dark:bg-emerald-950/50 text-emerald-800 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800 hover:border-emerald-400'
+                      : stat.hasSome
+                      ? 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800 hover:border-indigo-300'
+                      : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-slate-300'
+                  }`}
+                >
+                  <span>{stat.module.emoji || '📘'}</span>
+                  <span>
+                    M{stat.module.number}: {stat.module.title.split(':')[0].replace(/Fundamentos.*/, 'Fundamentos').replace(/Conducción.*/, 'Neuroconducción').replace(/Electromiografía.*/, 'EMG Aguja').slice(0, 16)}
+                  </span>
+                  <span
+                    className={`text-[10px] px-1.5 py-0.5 rounded-md font-black ${
+                      stat.isActive
+                        ? 'bg-white/20 text-white'
+                        : stat.isComplete
+                        ? 'bg-emerald-200 dark:bg-emerald-900 text-emerald-900 dark:text-emerald-200'
+                        : stat.hasSome
+                        ? 'bg-indigo-200 dark:bg-indigo-900 text-indigo-900 dark:text-indigo-200'
+                        : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400'
+                    }`}
+                  >
+                    {stat.isComplete ? `✓ ${stat.total}` : `${stat.adopted}/${stat.total}`}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* ── Tarjeta del Módulo Activo ── */}
+          <div className="p-4 rounded-2xl border border-indigo-100 dark:border-indigo-950 bg-white/90 dark:bg-slate-900/90 space-y-3.5 shadow-2xs">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xl shrink-0">{currentPedagogicalModule.emoji || '📘'}</span>
+                  <span className="px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300">
+                    MÓDULO {currentPedagogicalModule.number}
+                  </span>
+                  <h4 className="text-sm font-bold text-slate-900 dark:text-white">
+                    {currentPedagogicalModule.title}
+                  </h4>
+                </div>
+                {currentPedagogicalModule.description && (
+                  <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2">
+                    {currentPedagogicalModule.description}
+                  </p>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                {isCurrentModuleComplete ? (
+                  <button
+                    type="button"
+                    disabled={busyKey !== null}
+                    onClick={handleWithdrawAllCurrentModule}
+                    className="px-3.5 py-1.5 rounded-xl border border-rose-200 dark:border-rose-900/80 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 text-xs font-bold transition inline-flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Desmarcar módulo completo ({currentModuleAllSubtopicIds.length})</span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={busyKey !== null}
+                    onClick={handleAdoptAllCurrentModule}
+                    className="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition inline-flex items-center gap-1.5 shadow-2xs cursor-pointer transform hover:scale-[1.01]"
+                  >
+                    <Check className="w-3.5 h-3.5" />
+                    <span>✓ Seleccionar todos los subtemas de este módulo ({currentModuleAllSubtopicIds.length})</span>
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Barra de Progreso del Módulo */}
+            <div className="space-y-1">
+              <div className="flex items-center justify-between text-[11px] text-slate-500">
+                <span className="font-semibold">Progreso en este módulo:</span>
+                <span className="font-bold text-slate-800 dark:text-slate-200">
+                  {currentModuleAdoptedCount} de {currentModuleAllSubtopicIds.length} subtemas (
+                  {Math.round((currentModuleAdoptedCount / Math.max(1, currentModuleAllSubtopicIds.length)) * 100)}%)
+                </span>
+              </div>
+              <div className="w-full h-2 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                <div
+                  className={`h-full transition-all duration-300 rounded-full ${
+                    isCurrentModuleComplete
+                      ? 'bg-emerald-500'
+                      : currentModuleAdoptedCount > 0
+                      ? 'bg-gradient-to-r from-indigo-500 to-indigo-600'
+                      : 'bg-transparent'
+                  }`}
+                  style={{
+                    width: `${Math.min(100, Math.round((currentModuleAdoptedCount / Math.max(1, currentModuleAllSubtopicIds.length)) * 100))}%`,
+                  }}
+                />
+              </div>
+            </div>
+
+            {/* Lista de Secciones y Subtemas */}
+            <div className="space-y-3 pt-1">
+              {currentPedagogicalSections.map((sec) => (
+                <div
+                  key={sec.sectionId}
+                  className="p-3 rounded-2xl border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 space-y-2"
+                >
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <div className="flex items-center gap-2">
+                      <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
+                      <h5 className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                        {sec.sectionTitle}
+                      </h5>
+                      <span className="text-[10px] text-slate-400">
+                        ({sec.adoptedCount}/{sec.allSubtopicIds.length} seleccionados)
+                      </span>
+                    </div>
+
+                    <button
+                      type="button"
+                      disabled={busyKey !== null}
+                      onClick={() => handleTogglePedagogicalSection(sec.allSubtopicIds)}
+                      className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
+                    >
+                      {sec.isSectionComplete ? '✓ Sección completa (Desmarcar)' : '+ Seleccionar sección'}
+                    </button>
+                  </div>
+
+                  <div className="flex flex-wrap gap-1.5">
+                    {sec.subtopics.map((sub) => {
+                      const isTakenByOther = sub.isClosed && !sub.isAdoptedByMe;
+                      return (
+                        <button
+                          key={sub.id}
+                          type="button"
+                          disabled={busyKey !== null || isTakenByOther}
+                          onClick={() => !isTakenByOther && handleTogglePedagogicalSubtopic(sub.id, currentPedagogicalModule.id)}
+                          title={isTakenByOther ? 'Este tema ya fue adoptado por otro docente' : sub.title}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition inline-flex items-center gap-1.5 cursor-pointer shadow-2xs ${
+                            isTakenByOther
+                              ? 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 border-slate-200 dark:border-slate-800 cursor-not-allowed opacity-60'
+                              : sub.isAdoptedByMe
+                              ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
+                              : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700 hover:border-indigo-400 hover:text-indigo-600'
+                          }`}
+                        >
+                          {sub.isAdoptedByMe ? (
+                            <Check className="w-3.5 h-3.5 text-white" />
+                          ) : isTakenByOther ? (
+                            <span className="w-3.5 h-3.5 flex items-center justify-center text-[10px]">🔒</span>
+                          ) : (
+                            <Plus className="w-3.5 h-3.5 text-slate-400" />
+                          )}
+                          <span>{sub.title}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Botón de Siguiente Módulo */}
+            {nextPedagogicalModule && (
+              <div className="pt-2 flex justify-end">
+                <button
+                  type="button"
+                  onClick={handleAdvanceToNextPedagogicalModule}
+                  className="px-3.5 py-2 rounded-xl text-xs font-bold bg-slate-100 hover:bg-indigo-50 dark:bg-slate-800 dark:hover:bg-indigo-950/60 text-slate-700 hover:text-indigo-600 dark:text-slate-200 dark:hover:text-indigo-300 border border-slate-200 dark:border-slate-700 transition inline-flex items-center gap-1.5 cursor-pointer"
+                >
+                  <span>Avanzar al Módulo {nextPedagogicalModule.number}: {nextPedagogicalModule.title.split(':')[0]}</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
   const hasNoTopics = mine.length === 0;
 
   return (
@@ -424,14 +980,14 @@ export function TopicAdoptionInbox({
 
           {/* Banner de Recordatorio al Doctor para Clases en vivo / presenciales */}
           {hasNoTopics && !loading ? (
-            <div className="p-4 sm:p-5 rounded-2xl bg-rose-50/90 dark:bg-rose-950/40 border-2 border-rose-300 dark:border-rose-800 shadow-xs">
+            <div className="p-4 sm:p-5 rounded-3xl bg-rose-50/95 dark:bg-rose-950/40 border-2 border-rose-300 dark:border-rose-800 shadow-xs space-y-3.5">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div className="flex items-start gap-3">
-                  <div className="w-9 h-9 rounded-2xl bg-rose-500/20 text-rose-600 dark:text-rose-400 flex items-center justify-center shrink-0 mt-0.5">
+                  <div className="w-10 h-10 rounded-2xl bg-rose-500/20 text-rose-600 dark:text-rose-400 flex items-center justify-center shrink-0 mt-0.5 shadow-2xs">
                     <AlertTriangle className="w-5 h-5 text-rose-600 dark:text-rose-400" />
                   </div>
                   <div>
-                    <h3 className="font-black text-rose-900 dark:text-rose-100 text-sm flex items-center gap-2">
+                    <h3 className="font-black text-rose-900 dark:text-rose-100 text-sm flex items-center gap-2 flex-wrap">
                       <span>¡Atención, Dr(a)! Agenda tus temas para las clases</span>
                       <span className="px-2 py-0.5 rounded-md text-[10px] font-black uppercase bg-rose-200 dark:bg-rose-900 text-rose-800 dark:text-rose-200">
                         Alarma de Pendiente
@@ -443,14 +999,25 @@ export function TopicAdoptionInbox({
                     </p>
                   </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setSubsectionsOpen((prev) => ({ ...prev, free: true }))}
-                  className="shrink-0 inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs shadow-sm transition cursor-pointer"
-                >
-                  <UserPlus className="w-3.5 h-3.5" />
-                  <span>Ver temas libres para adoptar</span>
-                </button>
+
+                <div className="flex items-center gap-2 flex-wrap shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setIsWizardOpen(true)}
+                    className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-bold text-xs shadow-sm transition cursor-pointer"
+                  >
+                    <Sparkles className="w-3.5 h-3.5" />
+                    <span>Planear Clase (Modo Fácil)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleOpenFreeTopics}
+                    className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs shadow-sm transition cursor-pointer"
+                  >
+                    <UserPlus className="w-3.5 h-3.5" />
+                    <span>Ver temas libres ({withoutTeacher.length})</span>
+                  </button>
+                </div>
               </div>
             </div>
           ) : !loading && mine.length > 0 ? (
@@ -468,6 +1035,9 @@ export function TopicAdoptionInbox({
               </span>
             </div>
           ) : null}
+
+          {/* 🧭 Selector Curricular Pedagógico en Bandeja */}
+          {!loading && renderPedagogicalModuleSelector()}
 
           {loading ? (
             <div className="p-4 rounded-2xl border border-dashed border-slate-200 dark:border-slate-800 text-xs text-slate-500 text-center">
@@ -514,7 +1084,22 @@ export function TopicAdoptionInbox({
                       </div>
                     ) : (
                       <div className="space-y-3">
-                        <div className="flex justify-end">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setPlanningMultiTopics({
+                                moduleId: mine[0]?.module_id || allModules[0]?.id || 'module-01',
+                                topicIds: mine.map((r) => r.topic_id),
+                              })
+                            }
+                            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-bold text-xs shadow-2xs transition cursor-pointer"
+                            title="Abrir Asistente para agendar una clase agrupando varios o todos tus temas adoptados"
+                          >
+                            <Sparkles className="w-3.5 h-3.5" />
+                            <span>Planear Clase con Mis Temas (Modo Fácil)</span>
+                          </button>
+
                           <button
                             type="button"
                             onClick={() =>
@@ -706,7 +1291,66 @@ export function TopicAdoptionInbox({
 
                 {subsectionsOpen.free && (
                   <div className="p-3 border-t border-slate-100 dark:border-slate-800 space-y-3">
-                    {canAdopt && (
+                    {/* Buscador de temas libres */}
+                    <div className="space-y-2">
+                      <div className="relative">
+                        <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                        <input
+                          type="text"
+                          value={freeTopicSearch}
+                          onChange={(e) => setFreeTopicSearch(e.target.value)}
+                          placeholder="Buscar entre los temas libres por palabra clave (ej. mediano, ulnar, carpiano, aguja, tibial)..."
+                          className="w-full pl-8 pr-7 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-sky-500/20"
+                        />
+                        {freeTopicSearch && (
+                          <button
+                            type="button"
+                            onClick={() => setFreeTopicSearch('')}
+                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Botones de expandir/colapsar todos */}
+                      {!freeTopicSearch.trim() && unassignedByModule.length > 0 && (
+                        <div className="flex items-center justify-between text-[11px] text-slate-500 px-1">
+                          <span>Catálogo organizado por módulos ({unassignedByModule.length}):</span>
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const allOpen: Record<string, boolean> = {};
+                                unassignedByModule.forEach((g) => {
+                                  allOpen[g.moduleId] = true;
+                                });
+                                setOpenModules((prev) => ({ ...prev, ...allOpen }));
+                              }}
+                              className="text-sky-600 dark:text-sky-400 font-bold hover:underline cursor-pointer"
+                            >
+                              Expandir todos
+                            </button>
+                            <span>•</span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const allClosed: Record<string, boolean> = {};
+                                unassignedByModule.forEach((g) => {
+                                  allClosed[g.moduleId] = false;
+                                });
+                                setOpenModules((prev) => ({ ...prev, ...allClosed }));
+                              }}
+                              className="text-slate-400 hover:text-slate-600 font-medium cursor-pointer"
+                            >
+                              Colapsar todos
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {canAdopt && !freeTopicSearch.trim() && (
                       <p className="text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
                         <span className="font-semibold text-slate-700 dark:text-slate-200">Con subtemas</span> adopta esa fila y los subtemas visibles que aún están libres.{' '}
                         <span className="font-semibold text-slate-700 dark:text-slate-200">Solo este</span> adopta una sola fila.
@@ -714,7 +1358,60 @@ export function TopicAdoptionInbox({
                       </p>
                     )}
 
-                    {unassignedByModule.length === 0 ? (
+                    {/* Vista si el usuario está buscando temas libres */}
+                    {freeTopicSearch.trim() ? (
+                      searchResultsFreeTopics.length === 0 ? (
+                        <div className="p-4 rounded-xl border border-dashed border-slate-200 dark:border-slate-800 text-xs text-slate-500 text-center">
+                          No se encontraron temas libres con «{freeTopicSearch}».
+                        </div>
+                      ) : (
+                        <div className="rounded-xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden divide-y divide-slate-100 dark:divide-slate-800">
+                          {searchResultsFreeTopics.map((node) => (
+                            <div
+                              key={node.topicId}
+                              className="p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 hover:bg-slate-50 dark:hover:bg-slate-800/40 text-xs transition"
+                            >
+                              <div className="min-w-0">
+                                <p className="font-bold text-slate-900 dark:text-white truncate">
+                                  {node.topicTitle}
+                                </p>
+                                <p className="text-[11px] text-slate-400 truncate">
+                                  {node.pathTitles.join(' / ')}
+                                </p>
+                              </div>
+
+                              <div className="flex items-center gap-2 shrink-0">
+                                {canAdopt && (
+                                  <button
+                                    type="button"
+                                    disabled={busyKey === `adopt-${node.topicId}`}
+                                    onClick={() => handleAdopt(node)}
+                                    className="px-2.5 py-1 rounded-lg bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs inline-flex items-center gap-1 transition cursor-pointer"
+                                  >
+                                    <Plus className="w-3 h-3" />
+                                    <span>Adoptar</span>
+                                  </button>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setPlanningTopic({
+                                      moduleId: node.moduleId,
+                                      topicId: node.topicId,
+                                      title: node.topicTitle,
+                                    })
+                                  }
+                                  className="px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 text-slate-700 dark:text-slate-300 font-semibold text-xs inline-flex items-center gap-1 transition cursor-pointer"
+                                >
+                                  <Video className="w-3 h-3 text-indigo-500" />
+                                  <span>Planear Clase</span>
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )
+                    ) : unassignedByModule.length === 0 ? (
                       <div className="p-4 rounded-xl border border-dashed border-slate-200 dark:border-slate-800 bg-white/40 dark:bg-slate-900/40 text-xs text-slate-500">
                         Todos los temas visibles tienen profesor confirmado.
                       </div>
@@ -1147,16 +1844,23 @@ export function TopicAdoptionInbox({
         />
       ) : null}
 
-      {planningTopic && (
+      {(planningTopic || planningMultiTopics || isWizardOpen) && (
         <CreateLiveClassModal
-          isOpen={Boolean(planningTopic)}
-          onClose={() => setPlanningTopic(null)}
-          initialModuleId={planningTopic.moduleId}
-          initialTopicId={planningTopic.topicId}
+          isOpen={Boolean(planningTopic || planningMultiTopics || isWizardOpen)}
+          onClose={() => {
+            setPlanningTopic(null);
+            setPlanningMultiTopics(null);
+            setIsWizardOpen(false);
+          }}
+          initialModuleId={planningTopic?.moduleId || planningMultiTopics?.moduleId}
+          initialTopicId={planningTopic?.topicId || null}
+          initialSelectedTopicIds={planningMultiTopics?.topicIds || (planningTopic ? [planningTopic.topicId] : undefined)}
           onSuccess={async () => {
             await load();
             await onChanged?.();
             setPlanningTopic(null);
+            setPlanningMultiTopics(null);
+            setIsWizardOpen(false);
             return true;
           }}
         />

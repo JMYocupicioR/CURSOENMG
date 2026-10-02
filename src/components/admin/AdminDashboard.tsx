@@ -61,6 +61,12 @@ import AttendanceTrackerModal from './AttendanceTrackerModal';
 import StudentKardexModal from './StudentKardexModal';
 import { CreateLiveClassModal } from './CreateLiveClassModal';
 import { TopicAdoptionInbox, type TopicAdoptionSummary } from './TopicAdoptionInbox';
+import {
+  getAutoOpenClassWizardPref,
+  hasAutoOpenClassWizardBeenSeenThisSession,
+  markAutoOpenClassWizardSessionSeen,
+} from '../../utils/classWizardPreferences';
+import { subscribeToAdminRealtimeSubmissions } from '../../services/deviceNotificationService';
 
 interface CollapsibleDashboardSectionProps {
   id: string;
@@ -162,7 +168,7 @@ function CollapsibleDashboardSection({
 }
 
 export default function AdminDashboard() {
-  const { user, profile, isAdmin } = useAuth();
+  const { user, profile, isAdmin, isEditor, isLoading } = useAuth();
 
   // State for data
   const [waitlistItems, setWaitlistItems] = useState<CourseWaitlistRow[]>([]);
@@ -228,6 +234,31 @@ export default function AdminDashboard() {
       return () => document.removeEventListener('mousedown', handleClickOutside);
     }
   }, [showAssignDropdown]);
+
+  // Apertura automática del Asistente de Clase (Modo Fácil) al iniciar sesión según preferencia del usuario
+  useEffect(() => {
+    if (isLoading || !user) return;
+    if (!isAdmin && !isEditor) return;
+
+    const shouldAutoOpen = getAutoOpenClassWizardPref();
+    if (!shouldAutoOpen) return;
+
+    if (!hasAutoOpenClassWizardBeenSeenThisSession()) {
+      markAutoOpenClassWizardSessionSeen();
+      setShowCreateLiveClassModal(true);
+    }
+  }, [isLoading, user, isAdmin, isEditor]);
+
+  // Alertas en tiempo real para docentes cuando un alumno envía una entrega
+  useEffect(() => {
+    if (!isAdmin && !isEditor) return;
+    const unsubscribe = subscribeToAdminRealtimeSubmissions(() => {
+      void loadData();
+    });
+    return () => {
+      unsubscribe();
+    };
+  }, [isAdmin, isEditor]);
 
   const loadData = async () => {
     try {
@@ -585,14 +616,15 @@ export default function AdminDashboard() {
             )}
           </div>
 
-          {/* 3. Clase en vivo */}
+          {/* 3. Asistente de Clase (Modo Fácil) */}
           <button
             type="button"
             onClick={() => setShowCreateLiveClassModal(true)}
-            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-2xl bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white text-xs font-bold transition shadow-sm shadow-rose-600/20 cursor-pointer"
+            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-2xl bg-gradient-to-r from-indigo-600 via-purple-600 to-rose-600 hover:from-indigo-500 hover:to-rose-500 text-white text-xs font-black transition shadow-sm shadow-indigo-600/20 cursor-pointer"
+            title="Abrir el Asistente Guiado para configurar una clase en 3 minutos"
           >
-            <Video className="w-4 h-4" />
-            <span>Clase en vivo</span>
+            <Sparkles className="w-4 h-4" />
+            <span>Asistente de Clase (Modo Fácil)</span>
           </button>
         </div>
       </div>

@@ -1,16 +1,44 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Globe, Moon, Sun, KeyRound, Check, Eye, EyeOff, Users, Scale, BookOpen, GraduationCap, Home, Shield } from 'lucide-react';
+import {
+  Globe,
+  Moon,
+  Sun,
+  KeyRound,
+  Check,
+  Eye,
+  EyeOff,
+  Users,
+  Scale,
+  BookOpen,
+  GraduationCap,
+  Home,
+  Shield,
+  Bell,
+  Smartphone,
+  Download,
+  Send,
+  AlertTriangle,
+  CheckCircle2,
+} from 'lucide-react';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useAuth } from '../../contexts/AuthProvider';
 import { useStaffViewStore } from '../../stores/staffViewStore';
+import { usePWAInstallStore } from '../../stores/pwaInstallStore';
+import {
+  getNotificationDiagnostics,
+  requestNotificationPermission,
+  sendTestNotification,
+  type NotificationPermissionStatus,
+} from '../../services/deviceNotificationService';
 import { BackButton } from '../common/BackButton';
 
 export default function SettingsPage() {
   const { isDarkMode, toggleDarkMode } = useSettingsStore();
-  const { updatePassword, user, isAdmin } = useAuth();
+  const { updatePassword, user, isAdmin, isEditor } = useAuth();
   const navigate = useNavigate();
-  const studentMode = useStaffViewStore((s) => s.view) === 'student' && isAdmin;
+  const isStaff = isAdmin || isEditor;
+  const studentMode = useStaffViewStore((s) => s.view) === 'student' && isStaff;
   const enterStudentMode = useStaffViewStore((s) => s.enterStudentMode);
   const exitStudentMode = useStaffViewStore((s) => s.exitStudentMode);
 
@@ -22,6 +50,28 @@ export default function SettingsPage() {
   const [savingPass, setSavingPass] = useState(false);
   const [passError, setPassError] = useState<string | null>(null);
   const [passSuccess, setPassSuccess] = useState(false);
+
+  const { isStandalone, isIOS, canInstall, triggerInstall } = usePWAInstallStore();
+  const [notifDiag, setNotifDiag] = useState(() => getNotificationDiagnostics());
+  const [requestingNotifs, setRequestingNotifs] = useState(false);
+  const [testSent, setTestSent] = useState(false);
+
+  const handleToggleNotifications = async () => {
+    if (!user?.id) return;
+    setRequestingNotifs(true);
+    try {
+      await requestNotificationPermission(user.id, isStaff ? 'admin' : 'student');
+      setNotifDiag(getNotificationDiagnostics());
+    } finally {
+      setRequestingNotifs(false);
+    }
+  };
+
+  const handleSendTestNotification = async () => {
+    setTestSent(true);
+    await sendTestNotification(isStaff ? 'admin' : 'student');
+    setTimeout(() => setTestSent(false), 3000);
+  };
 
   const handlePasswordSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -74,7 +124,7 @@ export default function SettingsPage() {
       <h1 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">Ajustes</h1>
       <p className="text-sm text-slate-500 mb-8">Preferencias de la aplicación y seguridad</p>
 
-      {isAdmin && (
+      {isStaff && (
         <>
           <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-3 px-1">
             Vista de la plataforma
@@ -82,11 +132,11 @@ export default function SettingsPage() {
           <section className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white/60 dark:bg-slate-900/30 mb-8 shadow-sm">
             <SettingRow
               icon={studentMode ? Shield : GraduationCap}
-              title={studentMode ? 'Modo estudiante activo' : 'Panel de administración'}
+              title={studentMode ? 'Modo estudiante activo' : isAdmin ? 'Panel de administración' : 'Panel del profesor'}
               description={
                 studentMode
                   ? 'Estás viendo la plataforma como la ve un alumno. El aviso ámbar solo aparece para ti.'
-                  : 'Al entrar, el administrador abre el panel. Desde aquí puedes revisar la experiencia del alumno.'
+                  : 'Al entrar, el panel abre directamente. Desde aquí puedes revisar la experiencia del alumno.'
               }
               action={
                 <button
@@ -246,6 +296,132 @@ export default function SettingsPage() {
             </button>
           </form>
         )}
+      </section>
+
+      {/* ── Notificaciones del dispositivo ── */}
+      <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-3 px-1">
+        Notificaciones y alertas del dispositivo
+      </h2>
+      <section className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white/60 dark:bg-slate-900/30 mb-8 shadow-sm p-4 sm:p-5 space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-start gap-3.5">
+            <div className="w-10 h-10 rounded-2xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200/60 dark:border-blue-800 flex items-center justify-center shrink-0">
+              <Bell className="w-5 h-5 text-blue-600 dark:text-cyan-400" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white">Alertas Push en tiempo real</h3>
+                {notifDiag.permission === 'granted' ? (
+                  <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800">
+                    <CheckCircle2 className="w-3 h-3" /> Activadas
+                  </span>
+                ) : notifDiag.permission === 'denied' ? (
+                  <span className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 px-2 py-0.5 rounded-full border border-rose-200 dark:border-rose-800">
+                    <AlertTriangle className="w-3 h-3" /> Bloqueadas
+                  </span>
+                ) : notifDiag.needsIOSInstall ? (
+                  <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 rounded-full border border-amber-200 dark:border-amber-800">
+                    Requiere PWA en iPhone
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 rounded-full border border-amber-200 dark:border-amber-800">
+                    Sin activar
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-md">
+                {notifDiag.permission === 'granted'
+                  ? 'Este dispositivo está autorizado para recibir avisos de tareas entregadas, calificaciones y clases en vivo.'
+                  : notifDiag.permission === 'denied'
+                  ? 'Las notificaciones fueron bloqueadas en la configuración de tu navegador. Haz clic en el ícono de ajustes o candado junto a la URL para desbloquearlas.'
+                  : notifDiag.needsIOSInstall
+                  ? 'En iPhone, Apple exige agregar la app a tu Pantalla de Inicio (Safari > Compartir > Agregar a Inicio) para habilitar alertas.'
+                  : 'Recibe alertas nativas con sonido y vibración cuando un profesor asigne una tarea o un alumno envíe una entrega.'}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex sm:flex-col items-center gap-2 self-end sm:self-center shrink-0">
+            {notifDiag.permission === 'granted' ? (
+              <button
+                type="button"
+                onClick={handleSendTestNotification}
+                disabled={testSent}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold transition cursor-pointer"
+              >
+                <Send className="w-3.5 h-3.5 text-blue-500" />
+                <span>{testSent ? '¡Alerta enviada!' : 'Probar alerta'}</span>
+              </button>
+            ) : notifDiag.needsIOSInstall ? (
+              <button
+                type="button"
+                onClick={() => void triggerInstall()}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition shadow-sm cursor-pointer"
+              >
+                <Smartphone className="w-3.5 h-3.5" />
+                <span>Guía para iPhone</span>
+              </button>
+            ) : notifDiag.permission !== 'denied' ? (
+              <button
+                type="button"
+                onClick={handleToggleNotifications}
+                disabled={requestingNotifs}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition shadow-sm cursor-pointer disabled:opacity-50"
+              >
+                <Bell className="w-3.5 h-3.5" />
+                <span>{requestingNotifs ? 'Solicitando...' : 'Activar Alertas'}</span>
+              </button>
+            ) : null}
+          </div>
+        </div>
+      </section>
+
+      {/* ── Instalación de la Aplicación (PWA) ── */}
+      <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-3 px-1">
+        Aplicación Móvil y de Escritorio (PWA)
+      </h2>
+      <section className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white/60 dark:bg-slate-900/30 mb-8 shadow-sm p-4 sm:p-5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-start gap-3.5">
+            <div className="w-10 h-10 rounded-2xl bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200/60 dark:border-indigo-800 flex items-center justify-center shrink-0">
+              <Smartphone className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white">Estado de Instalación</h3>
+                {isStandalone ? (
+                  <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800">
+                    <CheckCircle2 className="w-3 h-3" /> Modo App Standalone
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-500 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full">
+                    Navegador web
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-md">
+                {isStandalone
+                  ? 'ElectroDx está instalada como aplicación nativa en tu pantalla de inicio con soporte de caché sin conexión y sin barras de navegador.'
+                  : isIOS
+                  ? 'Instala la app en tu iPhone para disfrutar de la experiencia a pantalla completa y habilitar la recepción de alertas.'
+                  : 'Instala la aplicación en tu Android o computadora para un acceso directo instantáneo y máxima velocidad.'}
+              </p>
+            </div>
+          </div>
+
+          {!isStandalone && (
+            <div className="self-end sm:self-center shrink-0">
+              <button
+                type="button"
+                onClick={() => void triggerInstall()}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-bold transition shadow-sm cursor-pointer"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>{isIOS ? 'Cómo instalar en iPhone' : 'Instalar en este dispositivo'}</span>
+              </button>
+            </div>
+          )}
+        </div>
       </section>
 
       <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-3 px-1">

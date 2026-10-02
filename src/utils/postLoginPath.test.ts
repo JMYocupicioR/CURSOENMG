@@ -67,13 +67,38 @@ describe('shouldRedirectToStaffInbox', () => {
     })).toBe(true);
   });
 
-  it('keeps an admin who chose student mode on the portal', () => {
+  it('keeps an admin who chose student mode on the portal and student homes', () => {
     expect(shouldRedirectToStaffInbox({
       isStaff: true,
+      isAdmin: true,
       isLoading: false,
       hydrated: true,
       studentMode: true,
       pathname: '/portal',
+    })).toBe(false);
+    expect(shouldRedirectToStaffInbox({
+      isStaff: true,
+      isAdmin: false,
+      isLoading: false,
+      hydrated: true,
+      studentMode: true,
+      pathname: '/portal',
+    })).toBe(false);
+    expect(shouldRedirectToStaffInbox({
+      isStaff: true,
+      isAdmin: true,
+      isLoading: false,
+      hydrated: true,
+      studentMode: true,
+      pathname: '/dashboard',
+    })).toBe(false);
+    expect(shouldRedirectToStaffInbox({
+      isStaff: true,
+      isAdmin: true,
+      isLoading: false,
+      hydrated: true,
+      studentMode: true,
+      pathname: '/estudiante',
     })).toBe(false);
   });
 

@@ -62,7 +62,8 @@ export function AdminLayout({
   fullBleed?: boolean;
 }) {
   const location = useLocation();
-  const { isAdmin, user } = useAuth();
+  const { isAdmin, isEditor, user } = useAuth();
+  const isStaff = isAdmin || isEditor;
   const enterStudentMode = useStaffViewStore((s) => s.enterStudentMode);
   const { pendingEnrollments, pendingCourseEnrollments, pendingRevisions, pendingTeacherReviews, pendingQuizzes } = useAdminPendingCounts();
 
@@ -245,7 +246,7 @@ export function AdminLayout({
           </span>
           <Link
             to="/portal"
-            onClick={() => { if (isAdmin) enterStudentMode(); }}
+            onClick={() => { if (isStaff) enterStudentMode(); }}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-cyan-400 bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 transition shadow-2xs"
             title="Abrir la experiencia del alumno en el portal"
           >
@@ -289,7 +290,7 @@ export function AdminLayout({
           </div>
           <Link
             to="/portal"
-            onClick={() => { if (isAdmin) enterStudentMode(); }}
+            onClick={() => { if (isStaff) enterStudentMode(); }}
             className="sm:hidden shrink-0 inline-flex items-center justify-center w-8 h-8 rounded-xl text-indigo-600 dark:text-cyan-400 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700"
             title="Ver como alumno"
             aria-label="Ver como alumno"

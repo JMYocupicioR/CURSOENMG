@@ -291,9 +291,8 @@ export default function StudentDashboard() {
       settleWithTimeout(getStudentActivityAndStreak(user.id), EMPTY_STREAK, 'streak'),
       settleWithTimeout(fetchStudentCompletedTopics(user.id), getCompletedTopics(user.id), 'completedTopics'),
       settleWithTimeout(getStudentLearningPlans(user.id), [], 'plans'),
-      settleWithTimeout(calculateStudentKardex(user.id, profile), null, 'kardex'),
     ])
-      .then(async ([att, modProg, ws, asgs, stk, syncedTopics, plans, nextKardex]) => {
+      .then(async ([att, modProg, ws, asgs, stk, syncedTopics, plans]) => {
         if (cancelled) return;
         setAttempts(att);
         setModuleProgress(modProg);
@@ -302,10 +301,24 @@ export default function StudentDashboard() {
         setStreak(stk);
         setPlanCount(Array.isArray(plans) ? plans.length : 0);
         setLearningPlans(Array.isArray(plans) ? plans : []);
-        setKardex(nextKardex);
         if (syncedTopics) {
           setCompletedTopicsSet(syncedTopics);
         }
+
+        // Calcular kardex con los datos ya obtenidos en memoria (elimina 5 consultas redundantes a Supabase)
+        const nextKardex = await settleWithTimeout(
+          calculateStudentKardex(user.id, profile, undefined, undefined, {
+            attempts: att,
+            moduleProgress: modProg,
+            assignments: asgs,
+            completedTopicsSet: syncedTopics || undefined,
+            workshops: ws,
+          }),
+          null,
+          'kardex'
+        );
+        if (cancelled) return;
+        setKardex(nextKardex);
 
         // Notifications - pass assignments to include teacher tasks
         const localNotifs = getStudentNotifications(user.id, profile, ws, asgs);

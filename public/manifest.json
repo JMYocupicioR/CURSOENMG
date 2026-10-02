@@ -1,7 +1,8 @@
 {
   "name": "ElectroDx Diplomado — Formación en Electrodiagnóstico y Neurofisiología Clínica",
   "short_name": "ElectroDx",
-  "description": "Plataforma interactiva de posgrado y recursos de electrodiagnóstico clínico y electromiografía",
+  "description": "Plataforma interactiva de posgrado y recursos de electrodiagnóstico clínico, electromiografía y neuroconducción",
+  "lang": "es",
   "start_url": "/",
   "scope": "/",
   "id": "/",
@@ -34,7 +35,13 @@
       "src": "/icons/icon-192x192.png",
       "sizes": "192x192",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
     },
     {
       "src": "/icons/icon-384x384.png",
@@ -45,7 +52,43 @@
       "src": "/icons/icon-512x512.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Portal del Alumno",
+      "short_name": "Portal",
+      "description": "Acceso al portal académico y cursos activos",
+      "url": "/portal",
+      "icons": [{ "src": "/icons/icon-192x192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Panel Docente",
+      "short_name": "Admin",
+      "description": "Panel de administración y seguimiento académico",
+      "url": "/admin",
+      "icons": [{ "src": "/icons/icon-192x192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Temario del Curso",
+      "short_name": "Temario",
+      "description": "Explorar los 17 módulos de electrodiagnóstico",
+      "url": "/temario",
+      "icons": [{ "src": "/icons/icon-192x192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Simulador de Trazos",
+      "short_name": "Simulador",
+      "description": "Simulador interactivo de trazos neurofisiológicos EMG/NCS",
+      "url": "/simulador",
+      "icons": [{ "src": "/icons/icon-192x192.png", "sizes": "192x192" }]
     }
   ],
   "categories": ["education", "medical"],

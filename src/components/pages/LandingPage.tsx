@@ -117,8 +117,9 @@ function countTopics(topics: any[]): number {
 
 export default function LandingPage() {
   const { modules } = useAllModules();
-  const { isAdmin, isEnrolledPhysician } = useAuth();
-  const studentMode = useStaffViewStore((s) => s.view) === 'student' && isAdmin;
+  const { isAdmin, isEditor, isEnrolledPhysician } = useAuth();
+  const isStaff = isAdmin || isEditor;
+  const studentMode = useStaffViewStore((s) => s.view) === 'student' && isStaff;
   const [searchQuery, setSearchQuery] = useState('');
   const allTopics = useMemo(() => getAllSearchableTopics(), []);
   const { upcomingWorkshops, load: loadCourse } = useCourseStore();

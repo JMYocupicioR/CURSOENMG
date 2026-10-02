@@ -165,3 +165,42 @@ export async function listWorkshopInstructorNames(workshopId: string): Promise<s
     return [];
   }
 }
+
+export async function assignWorkshopToTopics(
+  workshopId: string,
+  topics: { topicId: string; moduleId: string }[],
+  teacherId: string,
+  cohortId: string = TOPIC_TEACHING_COHORT_ID
+): Promise<void> {
+  if (!workshopId || !topics.length) return;
+  try {
+    for (const item of topics) {
+      try {
+        await proposeTopicCommitments([item.topicId], item.moduleId, cohortId);
+      } catch {
+        // Ignorar si ya estaba propuesto o adoptado
+      }
+    }
+
+    const topicIds = topics.map((t) => t.topicId);
+    await sb
+      .from(COMMITMENTS_TABLE)
+      .update({ workshop_id: workshopId, status: 'confirmed' })
+      .eq('cohort_id', cohortId)
+      .eq('teacher_id', teacherId)
+      .in('topic_id', topicIds);
+
+    try {
+      await sb
+        .from(INSTRUCTORS_TABLE)
+        .upsert(
+          { workshop_id: workshopId, teacher_id: teacherId },
+          { onConflict: 'workshop_id,teacher_id' }
+        );
+    } catch {
+      // Ignorar si la tabla no existe o ya está asociado
+    }
+  } catch (err) {
+    console.warn('[topicTeachingService] assignWorkshopToTopics error:', err);
+  }
+}

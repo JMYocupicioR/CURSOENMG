@@ -13,11 +13,13 @@ import {
   Crown,
   GraduationCap,
   CheckCircle2,
+  Smartphone,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthProvider';
 import { useStaffViewStore } from '../../stores/staffViewStore';
 import { useAdminPendingCounts } from '../../hooks/useAdminPendingCounts';
 import { useSyllabusCatalog } from '../../hooks/useSyllabusCatalog';
+import { usePWAInstallStore } from '../../stores/pwaInstallStore';
 import { courseDisplayTitle, sellableCourses } from '../../content/courseCatalog';
 import {
   ENROLLMENT_META,
@@ -42,7 +44,10 @@ export function UserMenu() {
     signOut,
   } = useAuth();
   const { totalPending } = useAdminPendingCounts();
-  const studentMode = useStaffViewStore((s) => s.view) === 'student' && isAdmin;
+  const isStaff = isAdmin || isEditor;
+  const isStandalone = usePWAInstallStore((s) => s.isStandalone);
+  const triggerInstall = usePWAInstallStore((s) => s.triggerInstall);
+  const studentMode = useStaffViewStore((s) => s.view) === 'student' && isStaff;
   const enterStudentMode = useStaffViewStore((s) => s.enterStudentMode);
   const exitStudentMode = useStaffViewStore((s) => s.exitStudentMode);
   const { courses } = useSyllabusCatalog();
@@ -287,10 +292,10 @@ export function UserMenu() {
             <MenuLink to="/portal?tab=notifications" icon={Bell} onClick={() => setOpen(false)}>
               Notificaciones
             </MenuLink>
-            {isAdmin ? (
+            {isStaff ? (
               studentMode ? (
                 <MenuLink to="/admin" icon={Shield} onClick={() => { exitStudentMode(); setOpen(false); }}>
-                  Volver al panel admin
+                  {isAdmin ? 'Volver al panel admin' : 'Volver al panel'}
                 </MenuLink>
               ) : (
                 <MenuLink to="/portal" icon={GraduationCap} onClick={() => { enterStudentMode(); setOpen(false); }}>
@@ -332,6 +337,25 @@ export function UserMenu() {
               >
                 {isAdmin ? 'Administración' : 'Panel del profesor'}
               </MenuLink>
+            )}
+            {!isStandalone && (
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  setOpen(false);
+                  void triggerInstall();
+                }}
+                className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-sm font-medium text-blue-600 dark:text-cyan-400 hover:bg-blue-50 dark:hover:bg-blue-950/40 transition cursor-pointer"
+              >
+                <div className="flex items-center gap-3">
+                  <Smartphone className="w-4 h-4 shrink-0" />
+                  <span>Instalar App</span>
+                </div>
+                <span className="text-[10px] uppercase font-bold tracking-wider bg-blue-100 dark:bg-blue-900/60 px-1.5 py-0.5 rounded text-blue-700 dark:text-blue-300">
+                  PWA
+                </span>
+              </button>
             )}
             <MenuLink
               to="/cuenta/ajustes"

@@ -31,14 +31,14 @@ type DockItem = {
 export function MobileBottomNav() {
   const location = useLocation();
   const { user, isAdmin, isEditor } = useAuth();
-  const studentMode = useStaffViewStore((s) => s.view) === 'student' && isAdmin;
   const isStaff = isAdmin || isEditor;
+  const studentMode = useStaffViewStore((s) => s.view) === 'student' && isStaff;
   const { pendingCount } = useStudentPendingAssignments();
   const path = location.pathname;
 
   if (
     path.startsWith('/examenes/sesion') ||
-    (isAdmin && !studentMode) ||
+    (isStaff && !studentMode) ||
     (isStaff && path.startsWith('/admin'))
   ) {
     return null;
