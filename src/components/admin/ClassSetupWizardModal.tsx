@@ -26,6 +26,7 @@ import {
   Search,
   Trash2,
   ArrowRight,
+  HelpCircle,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthProvider';
 import { allModules } from '../../content/modules';
@@ -820,61 +821,49 @@ export function ClassSetupWizardModal({
       {/* Modal Window */}
       <div className="relative w-full max-w-4xl bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/90 dark:border-slate-800 shadow-2xl overflow-hidden z-10 flex flex-col max-h-[92vh]">
         {/* ── Fixed Top Header Bar ── */}
-        <div className="p-4 sm:p-5 border-b border-slate-100 dark:border-slate-800 bg-gradient-to-r from-indigo-500/10 via-purple-500/5 to-transparent flex items-center justify-between gap-3 flex-wrap">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-indigo-600 to-violet-600 text-white flex items-center justify-center shadow-md shadow-indigo-500/20 font-bold shrink-0">
-              <Sparkles className="w-5 h-5" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <h2 className="text-base font-black text-slate-900 dark:text-white">
-                  Asistente de Configuración de Clases
-                </h2>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
-                  Modo Guiado · Paso {step} de 5
-                </span>
-              </div>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                Configura tu sesión en pasos sencillos con valores inteligentes.
-              </p>
+        <div className="px-4 py-3 sm:px-5 sm:py-4 border-b border-slate-100 dark:border-slate-800 bg-gradient-to-r from-indigo-500/10 via-purple-500/5 to-transparent flex items-center gap-3">
+          {/* Icon */}
+          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-gradient-to-br from-indigo-600 to-violet-600 text-white flex items-center justify-center shadow-md shadow-indigo-500/20 shrink-0">
+            <Sparkles className="w-4 h-4 sm:w-5 sm:h-5" />
+          </div>
+
+          {/* Title + step badge */}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2">
+              <h2 className="text-sm sm:text-base font-black text-slate-900 dark:text-white truncate">
+                Asistente de Configuración
+              </h2>
+              <span className="shrink-0 px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
+                {step === 0 ? 'Inicio' : `Paso ${step} de 5`}
+              </span>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 ml-auto">
-            {/* Escape / Guardar Borrador */}
-            <button
-              type="button"
-              onClick={() => {
-                saveDraft();
-                onClose();
-              }}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-semibold transition cursor-pointer"
-              title="Guardar progreso y continuar después"
-            >
-              <span>Guardar y salir</span>
-            </button>
-
-            <button
-              onClick={onClose}
-              className="p-2 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
-              aria-label="Cerrar modal"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
+          {/* Single unified exit button — always saves draft */}
+          <button
+            type="button"
+            onClick={() => {
+              saveDraft();
+              onClose();
+            }}
+            className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-semibold transition cursor-pointer"
+            title="Guardar borrador y cerrar"
+          >
+            <span className="hidden sm:inline">Guardar y salir</span>
+            <X className="w-4 h-4" />
+          </button>
         </div>
 
-        {/* ── Visual Progress Indicator with Color Semáforo (Guía Visual de Pendientes y Completados) ── */}
-        {mode === 'wizard' && (
-          <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-800/80 bg-slate-50/70 dark:bg-slate-900/60">
-            <div className="flex items-center justify-between gap-1 overflow-x-auto pb-1 sm:pb-0 select-none">
+        {/* ── Visual Progress Indicator — hidden on step 0 (welcome screen) ── */}
+        {mode === 'wizard' && step > 0 && (
+          <div className="px-3 sm:px-4 py-2.5 border-b border-slate-100 dark:border-slate-800/80 bg-slate-50/70 dark:bg-slate-900/60">
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 select-none scrollbar-none">
               {[
-                { s: 0, label: '0. Plantilla', state: 'done' },
-                { s: 1, label: '1. Temario', state: stepStatus[1] },
-                { s: 2, label: '2. Horario', state: stepStatus[2] },
-                { s: 3, label: '3. Prácticas', state: stepStatus[3] },
-                { s: 4, label: '4. Alumnos', state: stepStatus[4] },
-                { s: 5, label: '5. Lanzamiento', state: stepStatus[5] },
+                { s: 1, label: 'Temario', state: stepStatus[1] },
+                { s: 2, label: 'Horario', state: stepStatus[2] },
+                { s: 3, label: 'Prácticas', state: stepStatus[3] },
+                { s: 4, label: 'Alumnos', state: stepStatus[4] },
+                { s: 5, label: 'Lanzamiento', state: stepStatus[5] },
               ].map((item) => {
                 const isCurrent = step === item.s;
                 const isDone = item.state === 'done';
@@ -900,40 +889,40 @@ export function ClassSetupWizardModal({
                     key={item.s}
                     type="button"
                     onClick={() => setStep(item.s)}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition cursor-pointer shrink-0 ${
-                      isCurrent ? 'ring-2 ring-indigo-500/30 font-black shadow-xs ' + badgeColor : badgeColor
+                    className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold border transition cursor-pointer shrink-0 ${
+                      isCurrent ? 'ring-2 ring-indigo-500/40 shadow-xs ' + badgeColor : badgeColor
                     }`}
                   >
-                    <span className={`w-2 h-2 rounded-full ${dotColor}`} />
+                    {isDone
+                      ? <Check className="w-2.5 h-2.5 text-emerald-600 dark:text-emerald-400" />
+                      : <span className={`w-1.5 h-1.5 rounded-full ${dotColor}`} />}
                     <span>{item.label}</span>
-                    {isDone && <Check className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />}
                   </button>
                 );
               })}
-            </div>
 
-            {/* Visual Color Legend */}
-            <div className="flex items-center justify-between text-[11px] text-slate-400 mt-2 px-1 flex-wrap gap-2">
-              <div className="flex items-center gap-3">
-                <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-semibold">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500" /> Verde = Listo
+              {/* Compact legend tooltip */}
+              <button
+                type="button"
+                title="Verde = Listo · Rojo = Pendiente · Ámbar = Opcional"
+                className="ml-auto shrink-0 p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-200/60 dark:hover:bg-slate-700/60 transition cursor-pointer"
+                aria-label="Leyenda de estados"
+              >
+                <HelpCircle className="w-3.5 h-3.5" />
+              </button>
+
+              {/* Topic count inline */}
+              {selectedTopicIds.length > 0 && (
+                <span className="shrink-0 text-[10px] font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 px-2 py-0.5 rounded-full">
+                  {selectedTopicIds.length} {selectedTopicIds.length === 1 ? 'tema' : 'temas'}
                 </span>
-                <span className="inline-flex items-center gap-1 text-rose-600 dark:text-rose-400 font-semibold">
-                  <span className="w-2 h-2 rounded-full bg-rose-500" /> Rojo = Pendiente
-                </span>
-                <span className="inline-flex items-center gap-1 text-amber-600 dark:text-amber-400 font-semibold">
-                  <span className="w-2 h-2 rounded-full bg-amber-500" /> Ámbar = Opcional
-                </span>
-              </div>
-              <span className="font-semibold text-slate-500 dark:text-slate-400">
-                {selectedTopicIds.length} {selectedTopicIds.length === 1 ? 'tema seleccionado' : 'temas seleccionados'}
-              </span>
+              )}
             </div>
           </div>
         )}
 
         {/* ── Main Scrollable Body ── */}
-        <div className="p-4 sm:p-6 overflow-y-auto flex-1 space-y-4">
+        <div className="p-4 sm:p-6 overflow-y-auto flex-1 space-y-4 pb-6">
           {error && (
             <div className="p-3.5 rounded-2xl bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-900 text-rose-700 dark:text-rose-300 text-xs font-semibold flex items-center gap-2 shadow-xs">
               <AlertCircle className="w-4 h-4 shrink-0 text-rose-500" />
@@ -2407,45 +2396,20 @@ export function ClassSetupWizardModal({
         </div>
 
         {/* ── Fixed Bottom Actions Bar ── */}
-        <div className="p-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/80 flex items-center justify-between gap-3 flex-wrap">
+        <div className="px-4 py-3 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/80 flex items-center justify-between gap-3">
           {mode === 'wizard' ? (
             <>
-              <div className="flex items-center gap-3 flex-wrap">
+              <div className="flex items-center gap-2">
                 {step > 0 && (
                   <button
                     type="button"
                     onClick={() => setStep((s) => Math.max(0, s - 1))}
-                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-bold hover:bg-slate-50 dark:hover:bg-slate-700 transition cursor-pointer"
+                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-bold hover:bg-slate-50 dark:hover:bg-slate-700 transition cursor-pointer"
                   >
                     <ChevronLeft className="w-4 h-4" />
-                    <span>Atrás</span>
+                    <span className="hidden sm:inline">Atrás</span>
                   </button>
                 )}
-
-                {/* Checklist Botón: Ver esta pantalla al inicio */}
-                <label
-                  className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:border-slate-300 dark:hover:border-slate-700 transition cursor-pointer select-none shadow-2xs group text-xs"
-                  title="Activa o desactiva la apertura automática del Asistente de Clase al iniciar sesión"
-                >
-                  <input
-                    type="checkbox"
-                    checked={autoOpenOnLogin}
-                    onChange={(e) => handleToggleAutoOpen(e.target.checked)}
-                    className="sr-only"
-                  />
-                  <div
-                    className={`w-4 h-4 rounded-md border flex items-center justify-center transition-all ${
-                      autoOpenOnLogin
-                        ? 'bg-indigo-600 border-indigo-600 text-white shadow-2xs'
-                        : 'border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 group-hover:border-indigo-400'
-                    }`}
-                  >
-                    {autoOpenOnLogin && <Check className="w-3 h-3 stroke-[3]" />}
-                  </div>
-                  <span className="font-semibold">
-                    Ver esta pantalla al inicio
-                  </span>
-                </label>
               </div>
 
               <div className="flex items-center gap-2">
