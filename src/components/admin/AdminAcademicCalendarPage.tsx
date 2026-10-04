@@ -14,6 +14,7 @@ import GradebookConfigModal from './GradebookConfigModal';
 import AttendanceTrackerModal from './AttendanceTrackerModal';
 import { loadAcademicCalendarFeed } from '../../services/academicCalendarService';
 import { getAdminProfiles } from '../../services/editorialService';
+import { deleteWorkshop } from '../../services/courseService';
 import { filterGradeableStudents } from '../../utils/adminUtils';
 import {
   calendarTypesForFilter,
@@ -68,7 +69,7 @@ export default function AdminAcademicCalendarPage() {
       setRubric(feed.rubric);
       setWorkshops(feed.workshops);
       setFeedWarnings(feed.warnings);
-      setSelected((current) => (current ? feed.items.find((item) => item.id === current.id) ?? current : null));
+      setSelected((current) => (current ? feed.items.find((item) => item.id === current.id) ?? null : null));
       return { ok: feed.warnings.length === 0, warnings: feed.warnings };
     } catch (error) {
       const message = error instanceof Error ? error.message : 'No se pudo actualizar el calendario.';
@@ -125,6 +126,18 @@ export default function AdminAcademicCalendarPage() {
   const selectedWorkshop = selected?.workshopId
     ? workshops.find((workshop) => workshop.id === selected.workshopId) ?? null
     : null;
+
+  const handleDeleteSession = async (workshopId: string) => {
+    try {
+      await deleteWorkshop(workshopId);
+      setSelected(null);
+      await refreshAfterWrite('talleres');
+    } catch (error) {
+      console.error('[handleDeleteSession] error:', error);
+      alert(error instanceof Error ? error.message : 'Error al eliminar la clase');
+      throw error;
+    }
+  };
 
   return (
     <AdminLayout fullBleed title="Calendario académico">
@@ -194,6 +207,7 @@ export default function AdminAcademicCalendarPage() {
           } else setShowCase(true);
         }}
         onEditMilestone={() => setShowMilestone(true)}
+        onDeleteSession={handleDeleteSession}
       />
 
       {createDay ? (

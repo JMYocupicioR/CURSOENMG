@@ -31,7 +31,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthProvider';
 import { allModules } from '../../content/modules';
-import { createWorkshop, getWorkshops, updateWorkshop } from '../../services/courseService';
+import { createWorkshop, getWorkshops, updateWorkshop, deleteWorkshop } from '../../services/courseService';
 import {
   listTopicTeachingCommitments,
   assignWorkshopToTopics,
@@ -730,39 +730,58 @@ export function ClassSetupWizardModal({
         .filter(Boolean)
         .join('\n\n');
 
-      // 3. Create Workshop in live_workshops
-      const newWorkshop = await createWorkshop({
-        title: title.trim(),
-        module_id: primaryModuleId,
-        topic_id: primaryTopicId,
-        description: fullDescription || null,
-        scheduled_at: new Date(scheduledAt).toISOString(),
-        duration_minutes: durationMinutes,
-        stream_url: streamUrl.trim() || null,
-        recording_url: recordingUrl.trim() || null,
-        max_capacity: 100,
-        clinical_case_revision_id: null,
-        clinical_case_json: selectedCaseIds.length > 0 ? { case_ids: selectedCaseIds, difficulty: caseDifficulty } : null,
-        status: 'scheduled',
-        session_modality: sessionModality,
-        session_type: sessionModality === 'online' ? 'masterclass' : 'hands_on_presencial',
-        counts_for_kardex: countsForKardex,
-        created_by: user.id,
-      });
+      // 3. Create or Update Workshop in live_workshops
+      let workshopId = initialWorkshop?.id;
+      if (workshopId) {
+        await updateWorkshop(workshopId, {
+          title: title.trim(),
+          module_id: primaryModuleId,
+          topic_id: primaryTopicId,
+          description: fullDescription || null,
+          scheduled_at: new Date(scheduledAt).toISOString(),
+          duration_minutes: durationMinutes,
+          stream_url: streamUrl.trim() || null,
+          recording_url: recordingUrl.trim() || null,
+          clinical_case_json: selectedCaseIds.length > 0 ? { case_ids: selectedCaseIds, difficulty: caseDifficulty } : null,
+          session_modality: sessionModality,
+          session_type: sessionModality === 'online' ? 'masterclass' : 'hands_on_presencial',
+          counts_for_kardex: countsForKardex,
+        });
+      } else {
+        const newWorkshop = await createWorkshop({
+          title: title.trim(),
+          module_id: primaryModuleId,
+          topic_id: primaryTopicId,
+          description: fullDescription || null,
+          scheduled_at: new Date(scheduledAt).toISOString(),
+          duration_minutes: durationMinutes,
+          stream_url: streamUrl.trim() || null,
+          recording_url: recordingUrl.trim() || null,
+          max_capacity: 100,
+          clinical_case_revision_id: null,
+          clinical_case_json: selectedCaseIds.length > 0 ? { case_ids: selectedCaseIds, difficulty: caseDifficulty } : null,
+          status: 'scheduled',
+          session_modality: sessionModality,
+          session_type: sessionModality === 'online' ? 'masterclass' : 'hands_on_presencial',
+          counts_for_kardex: countsForKardex,
+          created_by: user.id,
+        });
+        workshopId = newWorkshop.id;
+      }
 
       // 4. Link ALL selected topics from "MIS TEMAS" to this workshop
       const topicsPayload = selectedTopicsDetails.map((t) => ({
         topicId: t.topic.id,
         moduleId: t.moduleId,
       }));
-      await assignWorkshopToTopics(newWorkshop.id, topicsPayload, user.id);
+      await assignWorkshopToTopics(workshopId, topicsPayload, user.id);
 
       // 5. Clear draft
       try {
         localStorage.removeItem(STORAGE_DRAFT_KEY);
       } catch {}
 
-      setSuccess('¡Clase activada y publicada con éxito! Los temas de "Mis Temas" han sido asociados.');
+      setSuccess('¡Clase guardada con éxito! Los temas de "Mis Temas" han sido asociados.');
 
       await onSuccess?.();
 
@@ -770,8 +789,28 @@ export function ClassSetupWizardModal({
         onClose();
       }, 1600);
     } catch (err: any) {
-      setError(err?.message || 'Error al publicar la clase.');
+      setError(err?.message || 'Error al guardar la clase.');
     } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleDeleteClass = async () => {
+    if (!initialWorkshop?.id) return;
+    if (!window.confirm('¿Estás seguro de que deseas eliminar esta clase? Se cancelará la sesión y se removerá del calendario.')) {
+      return;
+    }
+    setSubmitting(true);
+    setError(null);
+    try {
+      await deleteWorkshop(initialWorkshop.id);
+      setSuccess('Clase eliminada correctamente.');
+      await onSuccess?.();
+      setTimeout(() => {
+        onClose();
+      }, 800);
+    } catch (err: any) {
+      setError(err?.message || 'Error al eliminar la clase.');
       setSubmitting(false);
     }
   };
@@ -807,19 +846,33 @@ export function ClassSetupWizardModal({
             </div>
           </div>
 
-          {/* Single unified exit button — always saves draft */}
-          <button
-            type="button"
-            onClick={() => {
-              saveDraft();
-              onClose();
-            }}
-            className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-semibold transition cursor-pointer"
-            title="Guardar borrador y cerrar"
-          >
-            <span className="hidden sm:inline">Guardar y salir</span>
-            <X className="w-4 h-4" />
-          </button>
+          {/* Actions on header: Delete (if editing) & Exit */}
+          <div className="flex items-center gap-2">
+            {initialWorkshop?.id && (
+              <button
+                type="button"
+                onClick={handleDeleteClass}
+                disabled={submitting}
+                className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-rose-200 dark:border-rose-900/60 bg-rose-50/70 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-900/60 text-xs font-bold transition cursor-pointer"
+                title="Eliminar esta clase definitivamente"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Eliminar clase</span>
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => {
+                saveDraft();
+                onClose();
+              }}
+              className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-semibold transition cursor-pointer"
+              title="Guardar borrador y cerrar"
+            >
+              <span className="hidden sm:inline">Guardar y salir</span>
+              <X className="w-4 h-4" />
+            </button>
+          </div>
         </div>
 
         {/* ── Visual Progress Indicator — hidden on step 0 (welcome screen) ── */}

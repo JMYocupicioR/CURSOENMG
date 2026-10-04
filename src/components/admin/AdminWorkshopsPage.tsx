@@ -11,12 +11,14 @@ import {
   Lock,
   Unlock,
   BookOpen,
+  Trash2,
 } from 'lucide-react';
 import { AdminLayout } from './AdminLayout';
 import {
   getWorkshops,
   createWorkshop,
   updateWorkshop,
+  deleteWorkshop,
   setWorkshopAttendanceClosed,
 } from '../../services/courseService';
 import { sendAcademicPush } from '../../services/studentToolsService';
@@ -178,6 +180,18 @@ export default function AdminWorkshopsPage() {
       load();
     } catch (e) {
       alert('Error al cambiar cierre de lista');
+    }
+  };
+
+  const handleDeleteWorkshop = async (id: string) => {
+    if (!window.confirm('¿Estás seguro de que deseas eliminar esta clase/taller? Se removerá permanentemente de la plataforma.')) {
+      return;
+    }
+    try {
+      await deleteWorkshop(id);
+      load();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Error al eliminar la clase');
     }
   };
 
@@ -552,6 +566,15 @@ export default function AdminWorkshopsPage() {
                       title={isClosed ? 'Reabrir lista para edición' : 'Cerrar lista oficialmente'}
                     >
                       {isClosed ? <Unlock className="w-3.5 h-3.5" /> : <Lock className="w-3.5 h-3.5" />}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteWorkshop(w.id)}
+                      className="p-2 rounded-xl border border-rose-200 dark:border-rose-900/60 hover:bg-rose-50 dark:hover:bg-rose-950/50 text-rose-500 transition cursor-pointer"
+                      title="Eliminar clase definitivamente"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
                     </button>
                   </div>
 

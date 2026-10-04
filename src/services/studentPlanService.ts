@@ -532,6 +532,7 @@ export async function startAssignedExam(
     expiresAt,
     timeLimitMinutes,
     selectedQuestionIds: meta?.selectedQuestionIds,
+    customQuestions: meta?.customQuestions,
     config: meta?.config || {},
     moduleId: meta?.moduleId,
     topicTitle: meta?.topicTitle,
@@ -583,12 +584,15 @@ export function buildAssignedExamConfig(
   const merged = { ...raw, ...lockCfg } as NonNullable<StudentAssignment['target_exam_config']> & ExamConfig;
   const timeLimitMinutes = Number(merged.timeLimitMinutes || lock?.timeLimitMinutes || 20);
   const selectedIds = merged.selectedQuestionIds || lock?.selectedQuestionIds;
-  const questionCount = merged.questionCount || selectedIds?.length || 10;
+  const customQuestions = merged.customQuestions || lock?.customQuestions;
+  const questionCount = merged.questionCount || customQuestions?.length || selectedIds?.length || 10;
 
   return {
     mode:
       merged.mode ||
-      (merged.topicNames?.length || merged.moduleId || assignment.target_module_id
+      (customQuestions && customQuestions.length > 0
+        ? 'CUSTOM'
+        : merged.topicNames?.length || merged.moduleId || assignment.target_module_id
         ? 'TOPIC_SPECIFIC'
         : 'FULL_SIMULATION'),
     moduleId: merged.moduleId || assignment.target_module_id || lock?.moduleId || undefined,
@@ -605,6 +609,8 @@ export function assignedExamLocationState(assignment: StudentAssignment, lock?: 
     assignment.target_exam_config?.timeLimitMinutes || lock?.timeLimitMinutes || 20;
   const selectedQuestionIds =
     assignment.target_exam_config?.selectedQuestionIds || lock?.selectedQuestionIds;
+  const customQuestions =
+    assignment.target_exam_config?.customQuestions || lock?.customQuestions;
 
   return {
     assignmentId: assignment.id,
@@ -618,6 +624,7 @@ export function assignedExamLocationState(assignment: StudentAssignment, lock?: 
     expiresAt: lock?.expiresAt,
     strictLock: true as const,
     selectedQuestionIds,
+    customQuestions,
     assignmentTitle: assignment.title || lock?.assignmentTitle || 'Examen Asignado',
   };
 }

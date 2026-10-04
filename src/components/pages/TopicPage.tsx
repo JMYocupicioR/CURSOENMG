@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useParams, Link, useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { findTopicByPath, getAllFlatTopics } from '../../services/contentMerge';
+import { findTopicByPath, findTopicInTree, getAllFlatTopics } from '../../services/contentMerge';
 import { useMergedModule } from '../../hooks/useMergedModule';
 import { useAuth } from '../../contexts/AuthProvider';
 import { ContributionBanner, ContributorContentActions, ProposeQuizLink } from '../editorial/TopicContribution';
@@ -22,6 +22,8 @@ import {
   toggleTopicCompleted,
   setLastVisitedTopic,
   getCompletedTopics,
+  markTopicCompleted,
+  fetchStudentCompletedTopics,
   TOPIC_PROGRESS_EVENT,
   getAllTopicIds,
 } from '../../services/studentService';
@@ -29,8 +31,9 @@ import { getPassedQuizTopicIdsSync } from '../../services/quizCompletionGate';
 import {
   findNextIncompleteFlatTopic,
   getNextPendingCurriculumLesson,
-  isCurriculumNodeCompleted,
+  isLessonRead,
 } from '../../services/studentResume';
+import { sectionHasBeenRead } from '../../utils/readingProgress';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { localizedTopic } from '../../hooks/useLocalizedContent';
 import { getVideoEmbedSrc, parseVideoUrl, videoMediaToExternalList } from '../../utils/mediaValidation';
@@ -401,6 +404,8 @@ function TocTopicTree({
   canProposeContent,
   moduleId,
   topicHasQuiz,
+  linkBase,
+  onNavigate,
 }: {
   topics: Topic[];
   lang: 'es' | 'en';
@@ -411,6 +416,8 @@ function TocTopicTree({
   canProposeContent?: boolean;
   moduleId?: string;
   topicHasQuiz?: (topicId: string) => boolean;
+  linkBase?: string;
+  onNavigate?: () => void;
 }) {
   return (
     <nav className={depth === 0 ? 'space-y-1' : 'mt-0.5 ml-3 space-y-0.5 border-l border-slate-200/70 dark:border-slate-700/40 pl-2'}>
@@ -418,37 +425,50 @@ function TocTopicTree({
         const childDone = isTopicDone(child.id);
         const isActive = activeSection === child.id;
         const hasKids = Boolean(child.children?.length);
+        const href = linkBase ? `${linkBase}/${child.id}` : undefined;
+        const itemClass = `w-full text-left rounded-xl transition-all duration-200 flex items-start gap-2 ${
+          depth === 0 ? 'px-3 py-2 text-sm' : 'px-2 py-1.5 text-xs'
+        } ${
+          isActive
+            ? childDone
+              ? 'bg-emerald-100/70 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-200 font-medium border-l-2 border-emerald-500 shadow-xs'
+              : 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 font-medium border-l-2 border-blue-500 shadow-xs'
+            : childDone
+              ? 'text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50/50 dark:hover:bg-emerald-950/30 font-medium'
+              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700/30 hover:text-slate-800 dark:hover:text-slate-200'
+        }`;
+        const itemBody = (
+          <>
+            {childDone ? (
+              <CheckCircle2 className={`${depth === 0 ? 'w-3.5 h-3.5' : 'w-3 h-3'} text-emerald-500 flex-shrink-0 mt-0.5`} />
+            ) : (
+              <span className="font-mono text-[0.65rem] text-slate-400 dark:text-slate-500 mt-0.5 flex-shrink-0">
+                {i + 1}
+              </span>
+            )}
+            <span className="line-clamp-2 leading-snug flex-1">{localizedTopic(child, lang).title}</span>
+            {childDone && depth === 0 && (
+              <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 flex-shrink-0 mt-0.5">
+                ✓
+              </span>
+            )}
+          </>
+        );
         return (
           <div key={child.id}>
+            {href ? (
+              <Link to={href} onClick={onNavigate} className={itemClass}>
+                {itemBody}
+              </Link>
+            ) : (
             <button
               type="button"
               onClick={() => scrollToSection(child.id)}
-              className={`w-full text-left rounded-xl transition-all duration-200 flex items-start gap-2 ${
-                depth === 0 ? 'px-3 py-2 text-sm' : 'px-2 py-1.5 text-xs'
-              } ${
-                isActive
-                  ? childDone
-                    ? 'bg-emerald-100/70 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-200 font-medium border-l-2 border-emerald-500 shadow-xs'
-                    : 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 font-medium border-l-2 border-blue-500 shadow-xs'
-                  : childDone
-                    ? 'text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50/50 dark:hover:bg-emerald-950/30 font-medium'
-                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700/30 hover:text-slate-800 dark:hover:text-slate-200'
-              }`}
+              className={itemClass}
             >
-              {childDone ? (
-                <CheckCircle2 className={`${depth === 0 ? 'w-3.5 h-3.5' : 'w-3 h-3'} text-emerald-500 flex-shrink-0 mt-0.5`} />
-              ) : (
-                <span className="font-mono text-[0.65rem] text-slate-400 dark:text-slate-500 mt-0.5 flex-shrink-0">
-                  {i + 1}
-                </span>
-              )}
-              <span className="line-clamp-2 leading-snug flex-1">{localizedTopic(child, lang).title}</span>
-              {childDone && depth === 0 && (
-                <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 flex-shrink-0 mt-0.5">
-                  ✓
-                </span>
-              )}
+              {itemBody}
             </button>
+            )}
             {canProposeContent && moduleId && !hasKids && (
               <div className="pl-7 pr-1 pb-1">
                 <ProposeQuizLink
@@ -469,6 +489,8 @@ function TocTopicTree({
                 canProposeContent={canProposeContent}
                 moduleId={moduleId}
                 topicHasQuiz={topicHasQuiz}
+                linkBase={href}
+                onNavigate={onNavigate}
               />
             )}
           </div>
@@ -552,7 +574,6 @@ export default function TopicPage() {
   const [showTOC, setShowTOC] = useState(false);
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [activeSection, setActiveSection] = useState('');
-  const [readingProgress, setReadingProgress] = useState(0);
   const [quizFlag, setQuizFlag] = useState<QuizTopicFlag | null>(null);
   const [isCompleted, setIsCompleted] = useState(false);
   const sectionRefs = useRef<Map<string, HTMLElement>>(new Map());
@@ -562,12 +583,6 @@ export default function TopicPage() {
   useEffect(() => {
     const handleScroll = () => {
       setShowScrollTop(window.scrollY > 400);
-
-      // Reading progress
-      const docHeight = document.documentElement.scrollHeight - window.innerHeight;
-      if (docHeight > 0) {
-        setReadingProgress(Math.min(100, Math.round((window.scrollY / docHeight) * 100)));
-      }
 
       // Determine active section
       const entries = Array.from(sectionRefs.current.entries());
@@ -746,7 +761,13 @@ export default function TopicPage() {
   const prevTopic = currentIndex > 0 ? allFlat[currentIndex - 1] : null;
   const nextTopic = currentIndex >= 0 && currentIndex < allFlat.length - 1 ? allFlat[currentIndex + 1] : null;
 
-  const { isCompleted: isTopicDoneHook, getModuleStats, completedTopicIds, quizGate } = useTopicProgress();
+  const { getModuleStats, completedTopicIds, quizGate, reload } = useTopicProgress();
+  const isTopicRead = useCallback((topicId: string) => {
+    if (!topic) return completedTopicIds.has(topicId);
+    const node = topicId === topic.id ? topic : findTopicInTree([topic], topicId);
+    if (!node) return completedTopicIds.has(topicId);
+    return isLessonRead(node, completedTopicIds);
+  }, [topic, completedTopicIds]);
   const modStats = useMemo(() => {
     return mod ? getModuleStats(mod.topics) : null;
   }, [mod, getModuleStats]);
@@ -801,7 +822,7 @@ export default function TopicPage() {
       if (hasEvaluation) {
         setIsCompleted(evaluationPassed);
       } else {
-        setIsCompleted(isCurriculumNodeCompleted(topic, getCompletedTopics(user.id), quizGate));
+        setIsCompleted(isLessonRead(topic, getCompletedTopics(user.id)));
       }
     }
   }, [user, mod, topic, location.pathname, lang, quizGate, hasEvaluation, evaluationPassed]);
@@ -812,12 +833,64 @@ export default function TopicPage() {
       if (hasEvaluation) {
         setIsCompleted(Boolean(quizFlag && getPassedQuizTopicIdsSync(user.id).has(quizFlag.topic_id)));
       } else {
-        setIsCompleted(isCurriculumNodeCompleted(topic, getCompletedTopics(user.id), quizGate));
+        setIsCompleted(isLessonRead(topic, getCompletedTopics(user.id)));
       }
     };
     window.addEventListener(TOPIC_PROGRESS_EVENT, handleProgress);
     return () => window.removeEventListener(TOPIC_PROGRESS_EVENT, handleProgress);
   }, [user, topic, quizGate, hasEvaluation, quizFlag]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    let cancelled = false;
+    fetchStudentCompletedTopics(user.id).then(() => {
+      if (!cancelled) reload();
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id, reload]);
+
+  useEffect(() => {
+    if (!user?.id || !mod || !topic || isAppendixModule(mod.id)) return;
+    const userId = user.id;
+    const recorded = new Set<string>();
+
+    const persistRead = (id: string) => {
+      if (recorded.has(id)) return;
+      const node = id === topic.id ? topic : findTopicInTree(topic.children ?? [], id);
+      if (!node || node.children?.length) return;
+      recorded.add(id);
+      if (!getCompletedTopics(userId).has(id)) {
+        markTopicCompleted(userId, id);
+      }
+    };
+
+    const evaluate = () => {
+      const viewport = window.innerHeight;
+      if (!topic.children?.length) {
+        const docHeight = document.documentElement.scrollHeight - viewport;
+        const ratio = docHeight <= 80 ? 1 : window.scrollY / Math.max(docHeight, 1);
+        if (ratio >= 0.9) persistRead(topic.id);
+        return;
+      }
+      sectionRefs.current.forEach((el, id) => {
+        const rect = el.getBoundingClientRect();
+        if (sectionHasBeenRead(rect.top, rect.bottom, viewport)) persistRead(id);
+      });
+    };
+
+    const observer = new IntersectionObserver(evaluate, { threshold: [0, 0.25, 0.5, 1] });
+    sectionRefs.current.forEach((el) => observer.observe(el));
+    evaluate();
+    document.addEventListener('scroll', evaluate, { passive: true, capture: true });
+    window.addEventListener('scroll', evaluate, { passive: true });
+    return () => {
+      observer.disconnect();
+      document.removeEventListener('scroll', evaluate, true);
+      window.removeEventListener('scroll', evaluate);
+    };
+  }, [user?.id, mod, topic]);
 
   if (moduleLoading && !mod) {
     return (
@@ -847,6 +920,13 @@ export default function TopicPage() {
 
   const hasChildContent = topic.children && topic.children.length > 0;
   const isLeafTopic = !hasChildContent;
+  const tocParent = !hasChildContent && breadcrumbs.length > 1 ? breadcrumbs[breadcrumbs.length - 2] : null;
+  const tocTopics = hasChildContent ? (topic.children ?? []) : (tocParent?.children ?? []);
+  const showToc = tocTopics.length > 0;
+  const tocActiveId = hasChildContent ? activeSection : topic.id;
+  const tocLinkBase = !hasChildContent && tocParent
+    ? `/modulo/${mod.id}/${pathParts.slice(0, -1).join('/')}`
+    : undefined;
   const tracksProgress = !isAppendixModule(mod.id);
   const topicAncestors = breadcrumbs.slice(0, -1);
   const lt = localizedTopic(topic, lang);
@@ -857,7 +937,7 @@ export default function TopicPage() {
       <main ref={mainRef} id="contenido-principal" className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-10 xl:px-16 pt-20 sm:pt-24 pb-24">
         <QuizCatalogReturnBar kind="topic" />
         {/* Grid layout: content + sidebar */}
-        <div className="lg:grid lg:grid-cols-[1fr_280px] xl:grid-cols-[1fr_300px] lg:gap-10 xl:gap-14">
+        <div className="lg:grid lg:grid-cols-[1fr_280px] xl:grid-cols-[1fr_300px] lg:items-start lg:gap-10 xl:gap-14">
         {/* Content Column */}
         <div className="min-w-0">
         {/* Breadcrumbs */}
@@ -1310,16 +1390,13 @@ export default function TopicPage() {
         </div>{/* End Content Column */}
 
         {/* ── Desktop TOC Sidebar (sticky in grid) ── */}
-        {hasChildContent && (
-          <aside className="hidden lg:block">
-            <div className="sticky top-24 max-h-[calc(var(--app-height,100vh)-8rem)] overflow-y-auto">
+        {showToc && (
+          <aside className="hidden lg:block lg:sticky lg:top-24 lg:self-start lg:max-h-[calc(var(--app-height,100dvh)-7rem)] lg:overflow-y-auto">
               <div className="bg-white/80 dark:bg-slate-800/70 backdrop-blur-xl rounded-2xl border border-slate-200/50 dark:border-slate-700/30 shadow-lg p-4">
                 {/* Progress bar in TOC */}
                 {(() => {
-                  const completedChildrenCount = topic.children
-                    ? topic.children.filter((c) => isTopicDoneHook(c.id)).length
-                    : 0;
-                  const totalChildrenCount = topic.children?.length ?? 0;
+                  const completedChildrenCount = tocTopics.filter((c) => isTopicRead(c.id)).length;
+                  const totalChildrenCount = tocTopics.length;
                   const childrenCompletionPct = totalChildrenCount > 0
                     ? Math.round((completedChildrenCount / totalChildrenCount) * 100)
                     : 0;
@@ -1335,7 +1412,7 @@ export default function TopicPage() {
                                 ? 'bg-emerald-500 shadow-sm shadow-emerald-500/40'
                                 : 'bg-gradient-to-r from-blue-500 to-indigo-500'
                             }`}
-                            style={{ width: `${Math.max(readingProgress, childrenCompletionPct)}%` }}
+                            style={{ width: `${childrenCompletionPct}%` }}
                           />
                         </div>
                         <span className={`text-[0.65rem] font-mono tabular-nums font-bold ${
@@ -1355,14 +1432,15 @@ export default function TopicPage() {
                         )}
                       </h4>
                       <TocTopicTree
-                        topics={topic.children!}
+                        topics={tocTopics}
                         lang={lang}
-                        activeSection={activeSection}
-                        isTopicDone={isTopicDoneHook}
+                        activeSection={tocActiveId}
+                        isTopicDone={isTopicRead}
                         scrollToSection={scrollToSection}
                         canProposeContent={canProposeContent}
                         moduleId={mod?.id}
                         topicHasQuiz={topicHasQuiz}
+                        linkBase={tocLinkBase}
                       />
                     </>
                   );
@@ -1389,7 +1467,6 @@ export default function TopicPage() {
                   </Link>
                 </div>
               </div>
-            </div>
           </aside>
         )}
         </div>{/* End Grid */}
@@ -1398,7 +1475,7 @@ export default function TopicPage() {
       {/* Desktop TOC is now in the grid above — removed fixed sidebar */}
 
       {/* ── Mobile TOC Button ── */}
-      {hasChildContent && (
+      {showToc && (
         <button
           onClick={() => setShowTOC(true)}
           className="lg:hidden fixed bottom-20 right-4 z-40 w-12 h-12 rounded-full bg-blue-600 dark:bg-blue-500 text-white shadow-lg shadow-blue-500/30 flex items-center justify-center hover:scale-110 active:scale-95 transition-transform"
@@ -1410,7 +1487,7 @@ export default function TopicPage() {
 
       {/* ── Mobile TOC Bottom Sheet ── */}
       <AnimatePresence>
-        {showTOC && hasChildContent && (
+        {showTOC && showToc && (
           <>
             <motion.div
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
@@ -1432,11 +1509,16 @@ export default function TopicPage() {
               </div>
               <div className="overflow-y-auto max-h-[calc(70vh-4rem)] p-4">
                 <TocTopicTree
-                  topics={topic.children!}
+                  topics={tocTopics}
                   lang={lang}
-                  activeSection={activeSection}
-                  isTopicDone={isTopicDoneHook}
-                  scrollToSection={scrollToSection}
+                  activeSection={tocActiveId}
+                  isTopicDone={isTopicRead}
+                  scrollToSection={(id) => {
+                    scrollToSection(id);
+                    setShowTOC(false);
+                  }}
+                  linkBase={tocLinkBase}
+                  onNavigate={() => setShowTOC(false)}
                 />
               </div>
             </motion.div>

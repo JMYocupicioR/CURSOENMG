@@ -680,6 +680,7 @@ export default function StudentDashboard() {
       const lock = await startAssignedExam(examAssignment.id, user.id, timeLimitMinutes, {
         assignmentTitle: examAssignment.title,
         selectedQuestionIds: examAssignment.target_exam_config?.selectedQuestionIds,
+        customQuestions: examAssignment.target_exam_config?.customQuestions,
         config: examConfig,
         moduleId: examConfig.moduleId,
         topicTitle: examAssignment.target_exam_config?.subtopicTitle,

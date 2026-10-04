@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Module } from '../types/content';
 import {
   getNextPendingCurriculumLesson,
+  isLessonRead,
   listPendingCurriculumLessons,
   resolveResumeLesson,
 } from './studentResume';
@@ -169,5 +170,16 @@ describe('getNextPendingCurriculumLesson', () => {
     const pending = listPendingCurriculumLessons(new Set(), { modules: withAppendix });
     expect(pending.some((lesson) => lesson.moduleId === 'bibliography')).toBe(false);
     expect(pending.some((lesson) => lesson.topicId === 'textbooks')).toBe(false);
+  });
+});
+
+describe('isLessonRead', () => {
+  const lesson = fakeModules[0].topics[0];
+
+  it('keeps a read topic marked even when its quiz is still pending', () => {
+    const read = new Set(['history', 'clinical-role', 'laboratory', 'ethics']);
+    expect(isLessonRead(lesson, read)).toBe(true);
+    expect(isLessonRead(lesson.children![0], read)).toBe(true);
+    expect(isLessonRead(lesson.children![2], new Set(['clinical-role', 'ethics']))).toBe(false);
   });
 });

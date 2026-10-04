@@ -18,11 +18,13 @@ import {
 import { allModules } from '../../content/modules';
 import { loadExamQuestions } from '../../services/examService';
 import { createBatchAssignments } from '../../services/studentPlanService';
-import { getAdminProfiles } from '../../services/editorialService';
+import { getAdminProfiles, getQuizEditorDataForTopic } from '../../services/editorialService';
 import { filterGradeableStudents } from '../../utils/adminUtils';
+import { useSyllabusCatalog } from '../../hooks/useSyllabusCatalog';
 import type { AdminProfileRow } from '../../types/admin';
 import type { ExamQuestion } from '../../types/exam';
 import type { AssignmentPriority } from '../../types/studentPlan';
+import { Plus, Trash2, Download } from 'lucide-react';
 
 interface AssignExamModalProps {
   isOpen: boolean;
@@ -32,6 +34,10 @@ interface AssignExamModalProps {
   initialStudentName?: string;
   initialDueDate?: string;
   profiles?: AdminProfileRow[];
+  initialCourseId?: string;
+  initialModuleId?: string;
+  initialTopicId?: string;
+  initialSubtopicId?: string;
 }
 
 export default function AssignExamModal({
@@ -42,7 +48,13 @@ export default function AssignExamModal({
   initialStudentName,
   initialDueDate,
   profiles: initialProfiles,
+  initialCourseId,
+  initialModuleId,
+  initialTopicId,
+  initialSubtopicId,
 }: AssignExamModalProps) {
+  const { courses, assignments: courseModuleAssignments } = useSyllabusCatalog();
+
   // ─── Estado de Alumnos ───────────────────────────────────────────────────────
   const [profiles, setProfiles] = useState<AdminProfileRow[]>(initialProfiles || []);
   const [loadingProfiles, setLoadingProfiles] = useState(false);
@@ -70,12 +82,30 @@ export default function AssignExamModal({
   const [maxAttempts, setMaxAttempts] = useState<number>(1);
   const [allowRetakeRequest, setAllowRetakeRequest] = useState<boolean>(true);
 
-  // ─── Configuración Curricular: Módulo, Tema, Subtema ─────────────────────────
-  const [selectedModuleId, setSelectedModuleId] = useState<string>('');
-  const [selectedTopicId, setSelectedTopicId] = useState<string>('');
-  const [selectedSubtopicId, setSelectedSubtopicId] = useState<string>('');
+  // ─── Configuración Curricular: Curso, Módulo, Tema, Subtema ──────────────────
+  const [selectedCourseId, setSelectedCourseId] = useState<string>(initialCourseId || '');
+  const [selectedModuleId, setSelectedModuleId] = useState<string>(initialModuleId || '');
+  const [selectedTopicId, setSelectedTopicId] = useState<string>(initialTopicId || '');
+  const [selectedSubtopicId, setSelectedSubtopicId] = useState<string>(initialSubtopicId || '');
 
-  // ─── Preguntas del Banco ────────────────────────────────────────────────────
+  // ─── Modo de Preguntas: 'topic_quiz' | 'custom' | 'bank' ─────────────────────
+  const [questionSource, setQuestionSource] = useState<'topic_quiz' | 'custom' | 'bank'>('topic_quiz');
+  const [customQuestions, setCustomQuestions] = useState<ExamQuestion[]>([]);
+  const [loadingTopicQuiz, setLoadingTopicQuiz] = useState(false);
+  const [topicQuizImportMessage, setTopicQuizImportMessage] = useState<string | null>(null);
+
+  // Formulario rápido para redactar pregunta personalizada
+  const [isAddingQuestion, setIsAddingQuestion] = useState(false);
+  const [newStem, setNewStem] = useState('');
+  const [newOptions, setNewOptions] = useState([
+    { text: '', isCorrect: true, feedback: '' },
+    { text: '', isCorrect: false, feedback: '' },
+    { text: '', isCorrect: false, feedback: '' },
+    { text: '', isCorrect: false, feedback: '' },
+  ]);
+  const [newExplanation, setNewExplanation] = useState('');
+
+  // ─── Preguntas del Banco General ────────────────────────────────────────────
   const [allBankQuestions, setAllBankQuestions] = useState<ExamQuestion[]>([]);
   const [loadingQuestions, setLoadingQuestions] = useState(false);
   const [questionSelectionMode, setQuestionSelectionMode] = useState<'auto' | 'manual'>('auto');
@@ -107,8 +137,12 @@ export default function AssignExamModal({
       if (initialDueDate) {
         setDueDate(initialDueDate);
       }
+      if (initialCourseId) setSelectedCourseId(initialCourseId);
+      if (initialModuleId) setSelectedModuleId(initialModuleId);
+      if (initialTopicId) setSelectedTopicId(initialTopicId);
+      if (initialSubtopicId) setSelectedSubtopicId(initialSubtopicId);
     }
-  }, [isOpen, initialProfiles, initialStudentId, initialDueDate]);
+  }, [isOpen, initialProfiles, initialStudentId, initialDueDate, initialCourseId, initialModuleId, initialTopicId, initialSubtopicId]);
 
   // Cargar banco de preguntas de examen
   useEffect(() => {
@@ -121,10 +155,25 @@ export default function AssignExamModal({
     }
   }, [isOpen, allBankQuestions.length]);
 
+  // Filtrar módulos asignados al curso seleccionado
+  const courseAssignedModuleIds = useMemo(() => {
+    if (!selectedCourseId) return null;
+    return new Set(
+      courseModuleAssignments
+        .filter((a) => a.course_id === selectedCourseId)
+        .map((a) => a.module_id)
+    );
+  }, [selectedCourseId, courseModuleAssignments]);
+
+  const availableModules = useMemo(() => {
+    if (!courseAssignedModuleIds) return allModules;
+    return allModules.filter((m) => courseAssignedModuleIds.has(m.id));
+  }, [courseAssignedModuleIds]);
+
   // Módulo seleccionado y sus temas
   const currentModule = useMemo(() => {
-    return allModules.find((m) => m.id === selectedModuleId);
-  }, [selectedModuleId]);
+    return availableModules.find((m) => m.id === selectedModuleId);
+  }, [availableModules, selectedModuleId]);
 
   const availableTopics = useMemo(() => {
     return currentModule ? currentModule.topics : [];
@@ -146,13 +195,114 @@ export default function AssignExamModal({
   // Auto-sugerir título al cambiar módulo, tema o subtema si está vacío o es genérico
   useEffect(() => {
     if (currentSubtopic) {
-      setTitle(`Evaluación de Refuerzo: ${currentSubtopic.title}`);
+      setTitle(`Examen Final: ${currentSubtopic.title}`);
     } else if (currentTopic) {
-      setTitle(`Evaluación de Refuerzo: ${currentTopic.title}`);
+      setTitle(`Examen Final: ${currentTopic.title}`);
     } else if (currentModule) {
-      setTitle(`Examen: Módulo ${currentModule.number} - ${currentModule.title}`);
+      setTitle(`Examen Final: Módulo ${currentModule.number} - ${currentModule.title}`);
     }
   }, [currentModule, currentTopic, currentSubtopic]);
+
+  // Función para importar preguntas del Quiz del tema seleccionado
+  const handleImportTopicQuiz = async (topicIdToFetch?: string) => {
+    const targetId = topicIdToFetch || selectedTopicId || selectedSubtopicId;
+    if (!targetId) {
+      setTopicQuizImportMessage('Selecciona primero un tema o subtema en el paso curricular anterior.');
+      return;
+    }
+
+    setLoadingTopicQuiz(true);
+    setTopicQuizImportMessage(null);
+    try {
+      const data = await getQuizEditorDataForTopic(targetId);
+      if (data && data.questions && data.questions.length > 0) {
+        const topicLabel = currentSubtopic?.title || currentTopic?.title || 'Tema';
+        const converted: ExamQuestion[] = data.questions.map((q, idx) => ({
+          id: q.id || `topic_q_${Date.now()}_${idx}`,
+          island_name: 'EMG',
+          module_id: selectedModuleId || 'general',
+          topic_name: topicLabel,
+          stem: q.stem,
+          findings: [],
+          options: q.options.map((opt) => ({
+            text: opt.text,
+            is_correct: Boolean(opt.isCorrect),
+            feedback: opt.feedback || q.explanation || '',
+          })),
+          difficulty: q.difficulty === 'advanced' ? 3 : q.difficulty === 'intermediate' ? 2 : 1,
+          is_critical: false,
+          pearl: q.explanation || '',
+          tags: [topicLabel],
+          status: 'PUBLISHED',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        }));
+        setCustomQuestions(converted);
+        setTopicQuizImportMessage(`¡Se importaron ${converted.length} preguntas del quiz del tema!`);
+      } else {
+        setTopicQuizImportMessage('Este tema aún no tiene preguntas publicadas en su cuestionario. Puedes redactarlas aquí.');
+      }
+    } catch (err) {
+      console.warn('Error loading quiz editor data for topic:', err);
+      setTopicQuizImportMessage('No se pudieron importar preguntas. Puedes redactarlas directamente.');
+    } finally {
+      setLoadingTopicQuiz(false);
+    }
+  };
+
+  // Agregar pregunta personalizada redactada manualmente
+  const handleSaveCustomQuestion = () => {
+    if (!newStem.trim()) {
+      alert('La viñeta o enunciado de la pregunta no puede estar vacía.');
+      return;
+    }
+    const validOptions = newOptions.filter((o) => o.text.trim());
+    if (validOptions.length < 2) {
+      alert('Debes agregar al menos 2 opciones de respuesta con texto.');
+      return;
+    }
+    if (!validOptions.some((o) => o.isCorrect)) {
+      alert('Debes marcar al menos una opción como la respuesta correcta.');
+      return;
+    }
+
+    const topicLabel = currentSubtopic?.title || currentTopic?.title || 'Evaluación Especial';
+    const newQ: ExamQuestion = {
+      id: `custom_exam_q_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      island_name: 'EMG',
+      module_id: selectedModuleId || 'general',
+      topic_name: topicLabel,
+      stem: newStem.trim(),
+      findings: [],
+      options: validOptions.map((o) => ({
+        text: o.text.trim(),
+        is_correct: o.isCorrect,
+        feedback: o.feedback || newExplanation.trim() || '',
+      })),
+      difficulty: 2,
+      is_critical: false,
+      pearl: newExplanation.trim() || undefined,
+      tags: [topicLabel],
+      status: 'PUBLISHED',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    setCustomQuestions((prev) => [...prev, newQ]);
+    setIsAddingQuestion(false);
+    setNewStem('');
+    setNewOptions([
+      { text: '', isCorrect: true, feedback: '' },
+      { text: '', isCorrect: false, feedback: '' },
+      { text: '', isCorrect: false, feedback: '' },
+      { text: '', isCorrect: false, feedback: '' },
+    ]);
+    setNewExplanation('');
+  };
+
+  const handleRemoveCustomQuestion = (qId: string) => {
+    setCustomQuestions((prev) => prev.filter((q) => q.id !== qId));
+  };
 
   // Filtrar preguntas del banco según la selección curricular
   const filteredBankQuestions = useMemo(() => {
@@ -277,11 +427,14 @@ export default function AssignExamModal({
 
   // Preguntas seleccionadas finales
   const finalQuestionCount = useMemo(() => {
+    if (questionSource === 'topic_quiz' || questionSource === 'custom') {
+      return customQuestions.length;
+    }
     if (questionSelectionMode === 'manual') {
       return manualSelectedQuestionIds.size;
     }
     return Math.min(autoQuestionCount, filteredBankQuestions.length || autoQuestionCount);
-  }, [questionSelectionMode, manualSelectedQuestionIds.size, autoQuestionCount, filteredBankQuestions.length]);
+  }, [questionSource, customQuestions.length, questionSelectionMode, manualSelectedQuestionIds.size, autoQuestionCount, filteredBankQuestions.length]);
 
   // Envío del Formulario
   const handleSubmit = async (e: React.FormEvent) => {
@@ -294,24 +447,31 @@ export default function AssignExamModal({
       alert('Por favor especifica un título para la evaluación.');
       return;
     }
-    if (questionSelectionMode === 'manual' && manualSelectedQuestionIds.size === 0) {
+    if ((questionSource === 'topic_quiz' || questionSource === 'custom') && customQuestions.length === 0) {
+      alert('Debes tener al menos una pregunta en el examen. Importa las preguntas del quiz o redacta una nueva.');
+      return;
+    }
+    if (questionSource === 'bank' && questionSelectionMode === 'manual' && manualSelectedQuestionIds.size === 0) {
       alert('Has elegido el modo de selección manual pero no has seleccionado ninguna pregunta.');
       return;
     }
 
     const effectiveTimeLimit = timeLimitMinutes === -1 ? Number(customMinutes) || 30 : timeLimitMinutes;
+    const selectedCourseObj = courses.find((c) => c.id === selectedCourseId);
 
     setSubmitting(true);
     try {
       const manualIdsArray =
-        questionSelectionMode === 'manual' ? Array.from(manualSelectedQuestionIds) : undefined;
+        questionSource === 'bank' && questionSelectionMode === 'manual'
+          ? Array.from(manualSelectedQuestionIds)
+          : undefined;
 
       await createBatchAssignments(finalRecipientIds, {
         title: title.trim(),
         type: 'exam',
         description:
           description.trim() ||
-          `Evaluación asignada de ElectroDx Diplomado. ${
+          `Examen Final Asignado. ${selectedCourseObj ? `Curso: ${selectedCourseObj.title}. ` : ''}${
             currentTopic ? `Tema: ${currentTopic.title}.` : ''
           } ${currentSubtopic ? `Subtema: ${currentSubtopic.title}.` : ''} Límite: ${effectiveTimeLimit} min.`,
         target_module_id: selectedModuleId || null,
@@ -319,11 +479,14 @@ export default function AssignExamModal({
         target_subtopic_id: selectedSubtopicId || null,
         target_subtopic_title: currentSubtopic?.title || null,
         target_exam_config: {
+          courseId: selectedCourseId || undefined,
+          courseTitle: selectedCourseObj?.title || undefined,
           moduleId: selectedModuleId || undefined,
           topicNames: currentTopic ? [currentTopic.title] : undefined,
           subtopicId: selectedSubtopicId || undefined,
           subtopicTitle: currentSubtopic?.title || undefined,
           selectedQuestionIds: manualIdsArray,
+          customQuestions: (questionSource === 'topic_quiz' || questionSource === 'custom') ? customQuestions : undefined,
           questionCount: finalQuestionCount,
           timeLimitMinutes: effectiveTimeLimit,
           strictLock: strictLock,
@@ -332,7 +495,9 @@ export default function AssignExamModal({
           allowRetakeRequest: allowRetakeRequest,
           retakeStatus: 'none',
           minPassingScore: minScore,
-          mode: manualIdsArray && manualIdsArray.length > 0 ? 'CUSTOM' : 'TOPIC_SPECIFIC',
+          mode: (questionSource === 'topic_quiz' || questionSource === 'custom')
+            ? 'CUSTOM'
+            : (manualIdsArray && manualIdsArray.length > 0 ? 'CUSTOM' : 'TOPIC_SPECIFIC'),
         },
         due_date: new Date(dueDate).toISOString(),
         status: 'pending',
@@ -556,7 +721,7 @@ export default function AssignExamModal({
             )}
           </div>
 
-          {/* ─── SECCIÓN 2: PERSONALIZACIÓN CURRICULAR (MÓDULO, TEMA, SUBTEMA) ─── */}
+          {/* ─── SECCIÓN 2: PERSONALIZACIÓN CURRICULAR (CURSO, MÓDULO, TEMA, SUBTEMA) ─── */}
           <div className="p-4 rounded-2xl bg-slate-50/80 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/60 space-y-3">
             <div className="flex items-center gap-2">
               <BookOpen className="w-4 h-4 text-violet-600 dark:text-violet-400" />
@@ -565,11 +730,35 @@ export default function AssignExamModal({
               </span>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              {/* Selector de Curso */}
+              <div>
+                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Curso / Programa
+                </label>
+                <select
+                  value={selectedCourseId}
+                  onChange={(e) => {
+                    setSelectedCourseId(e.target.value);
+                    setSelectedModuleId('');
+                    setSelectedTopicId('');
+                    setSelectedSubtopicId('');
+                  }}
+                  className="w-full p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-semibold"
+                >
+                  <option value="">Todos los Cursos (Catálogo Global)</option>
+                  {courses.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.title}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
               {/* Selector de Módulo */}
               <div>
                 <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  Módulo de Referencia
+                  Módulo {selectedCourseId ? 'del Curso' : 'de Referencia'}
                 </label>
                 <select
                   value={selectedModuleId}
@@ -580,8 +769,8 @@ export default function AssignExamModal({
                   }}
                   className="w-full p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs"
                 >
-                  <option value="">Todos los Módulos (Global)</option>
-                  {allModules.map((m) => (
+                  <option value="">Todos los Módulos</option>
+                  {availableModules.map((m) => (
                     <option key={m.id} value={m.id}>
                       Módulo {m.number}: {m.title}
                     </option>
@@ -600,6 +789,8 @@ export default function AssignExamModal({
                   onChange={(e) => {
                     setSelectedTopicId(e.target.value);
                     setSelectedSubtopicId('');
+                    setCustomQuestions([]);
+                    setTopicQuizImportMessage(null);
                   }}
                   className="w-full p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs disabled:opacity-50"
                 >
@@ -622,7 +813,11 @@ export default function AssignExamModal({
                 <select
                   disabled={!selectedTopicId || availableSubtopics.length === 0}
                   value={selectedSubtopicId}
-                  onChange={(e) => setSelectedSubtopicId(e.target.value)}
+                  onChange={(e) => {
+                    setSelectedSubtopicId(e.target.value);
+                    setCustomQuestions([]);
+                    setTopicQuizImportMessage(null);
+                  }}
                   className="w-full p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs disabled:opacity-50"
                 >
                   <option value="">
@@ -641,58 +836,339 @@ export default function AssignExamModal({
               </div>
             </div>
 
-            {/* Resumen del filtro */}
-            <div className="flex items-center justify-between text-[11px] text-slate-500 pt-1">
-              <span>
-                Banco disponible con este filtro:{' '}
-                <strong className="text-indigo-600 dark:text-indigo-400">
-                  {filteredBankQuestions.length} preguntas
-                </strong>
+            {/* Resumen del filtro curricular */}
+            <div className="flex flex-wrap items-center justify-between text-[11px] text-slate-500 pt-1 gap-2">
+              <span className="flex items-center gap-1.5">
+                {selectedCourseId ? (
+                  <span className="font-semibold text-indigo-600 dark:text-indigo-400">
+                    Curso: {courses.find((c) => c.id === selectedCourseId)?.title}
+                  </span>
+                ) : (
+                  <span>Ámbito global de diplomado</span>
+                )}
               </span>
-              {currentSubtopic && (
+              {currentSubtopic ? (
                 <span className="text-purple-600 dark:text-purple-400 font-bold flex items-center gap-1">
-                  <Layers className="w-3 h-3" /> Subtema: {currentSubtopic.title}
+                  <Layers className="w-3 h-3" /> Subtema seleccionado: {currentSubtopic.title}
                 </span>
-              )}
+              ) : currentTopic ? (
+                <span className="text-blue-600 dark:text-cyan-400 font-bold flex items-center gap-1">
+                  Tema seleccionado: {currentTopic.title}
+                </span>
+              ) : null}
             </div>
           </div>
 
-          {/* ─── SECCIÓN 3: PREGUNTAS (AUTO VS MANUAL) ─── */}
+          {/* ─── SECCIÓN 3: PREGUNTAS (QUIZ DEL TEMA VS REDACTAR VS BANCO) ─── */}
           <div className="p-4 rounded-2xl bg-slate-50/80 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/60 space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-2">
                 <FileQuestion className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
                 <span className="font-bold text-slate-800 dark:text-slate-200 text-sm">
-                  3. Selección de Preguntas
+                  3. Preguntas del Examen Final
                 </span>
               </div>
 
-              {/* Selector de modo de preguntas */}
-              <div className="flex items-center gap-1 bg-white dark:bg-slate-900 p-1 rounded-xl border border-slate-200 dark:border-slate-700 text-xs">
+              {/* Selector de Fuente de Preguntas */}
+              <div className="flex items-center gap-1 bg-white dark:bg-slate-900 p-1 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold">
                 <button
                   type="button"
-                  onClick={() => setQuestionSelectionMode('auto')}
-                  className={`px-3 py-1 rounded-lg font-semibold transition ${
-                    questionSelectionMode === 'auto'
-                      ? 'bg-emerald-600 text-white shadow-xs'
+                  onClick={() => setQuestionSource('topic_quiz')}
+                  className={`px-3 py-1.5 rounded-lg transition flex items-center gap-1.5 ${
+                    questionSource === 'topic_quiz'
+                      ? 'bg-blue-600 text-white shadow-xs'
                       : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
                   }`}
                 >
-                  🎲 Automática / Aleatoria
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Importar Quiz del Tema</span>
                 </button>
                 <button
                   type="button"
-                  onClick={() => setQuestionSelectionMode('manual')}
-                  className={`px-3 py-1 rounded-lg font-semibold transition ${
-                    questionSelectionMode === 'manual'
+                  onClick={() => setQuestionSource('custom')}
+                  className={`px-3 py-1.5 rounded-lg transition flex items-center gap-1.5 ${
+                    questionSource === 'custom'
+                      ? 'bg-purple-600 text-white shadow-xs'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                  }`}
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Redactar Especiales ({customQuestions.length})</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setQuestionSource('bank')}
+                  className={`px-3 py-1.5 rounded-lg transition flex items-center gap-1.5 ${
+                    questionSource === 'bank'
                       ? 'bg-emerald-600 text-white shadow-xs'
                       : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
                   }`}
                 >
-                  🎯 Selección Manual Específica ({manualSelectedQuestionIds.size})
+                  <span>Banco General</span>
                 </button>
               </div>
             </div>
+
+            {/* MODO 1: IMPORTAR DEL QUIZ DEL TEMA */}
+            {questionSource === 'topic_quiz' && (
+              <div className="space-y-3 bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-700">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
+                  <div className="space-y-0.5">
+                    <h4 className="font-bold text-slate-800 dark:text-slate-200 text-xs">
+                      Preguntas del Cuestionario de este Tema
+                    </h4>
+                    <p className="text-[11px] text-slate-500">
+                      Importa y reutiliza las preguntas que ya pertenecen a este tema o subtema para incluirlas en este examen final.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={(!selectedTopicId && !selectedSubtopicId) || loadingTopicQuiz}
+                    onClick={() => handleImportTopicQuiz()}
+                    className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-xs disabled:opacity-40 transition flex items-center gap-1.5 shrink-0 cursor-pointer"
+                  >
+                    {loadingTopicQuiz ? (
+                      <span>Cargando...</span>
+                    ) : (
+                      <>
+                        <Download className="w-3.5 h-3.5" />
+                        <span>Cargar Preguntas del Tema</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                {topicQuizImportMessage && (
+                  <div className="p-3 rounded-xl bg-blue-50 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-900 text-blue-700 dark:text-cyan-300 text-xs flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 shrink-0 text-blue-600 dark:text-cyan-400" />
+                    <span>{topicQuizImportMessage}</span>
+                  </div>
+                )}
+
+                {customQuestions.length > 0 ? (
+                  <div className="space-y-2 max-h-60 overflow-y-auto pr-1 divide-y divide-slate-100 dark:divide-slate-800">
+                    {customQuestions.map((q, qIdx) => (
+                      <div key={q.id} className="pt-2 flex items-start justify-between gap-3 text-xs">
+                        <div className="space-y-1 min-w-0 flex-1">
+                          <p className="font-bold text-slate-800 dark:text-slate-200">
+                            {qIdx + 1}. {q.stem}
+                          </p>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 pt-1">
+                            {q.options.map((opt, optIdx) => (
+                              <span
+                                key={optIdx}
+                                className={`px-2 py-1 rounded-lg text-[11px] font-medium block truncate ${
+                                  opt.is_correct
+                                    ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 font-bold'
+                                    : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                                }`}
+                              >
+                                {String.fromCharCode(65 + optIdx)}) {opt.text}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveCustomQuestion(q.id)}
+                          className="p-1 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 dark:hover:bg-slate-800 transition"
+                          title="Quitar pregunta de este examen"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-center py-4 text-slate-400 text-xs">
+                    {selectedTopicId || selectedSubtopicId
+                      ? 'Haz clic en "Cargar Preguntas del Tema" para traer los reactivos.'
+                      : 'Selecciona un tema o subtema arriba para importar sus preguntas.'}
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* MODO 2: REDACTAR PREGUNTAS ESPECIALES DESDE CERO */}
+            {questionSource === 'custom' && (
+              <div className="space-y-3 bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-700">
+                <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+                  <div>
+                    <h4 className="font-bold text-slate-800 dark:text-slate-200 text-xs">
+                      Preguntas Redactadas Especialmente para este Examen ({customQuestions.length})
+                    </h4>
+                    <p className="text-[11px] text-slate-500">
+                      Redacta viñetas clínicas y opciones de respuesta exclusivas para esta asignación.
+                    </p>
+                  </div>
+                  {!isAddingQuestion && (
+                    <button
+                      type="button"
+                      onClick={() => setIsAddingQuestion(true)}
+                      className="px-3.5 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs shadow-xs transition flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>+ Nueva Pregunta</span>
+                    </button>
+                  )}
+                </div>
+
+                {/* Formulario Inline para Nueva Pregunta */}
+                {isAddingQuestion && (
+                  <div className="p-3.5 rounded-xl bg-purple-50/60 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-800/60 space-y-3">
+                    <div>
+                      <label className="block font-bold text-slate-700 dark:text-slate-300 text-xs mb-1">
+                        Viñeta Clínica / Enunciado del Reactivo
+                      </label>
+                      <textarea
+                        rows={2}
+                        value={newStem}
+                        onChange={(e) => setNewStem(e.target.value)}
+                        placeholder="Ej: Paciente masculino de 48 años con parestesias nocturnas en 1er a 3er dedo..."
+                        className="w-full p-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-medium"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="block font-bold text-slate-700 dark:text-slate-300 text-xs">
+                        Opciones de Respuesta (Marca la casilla de la respuesta correcta)
+                      </label>
+                      {newOptions.map((opt, oIdx) => (
+                        <div key={oIdx} className="flex items-center gap-2">
+                          <input
+                            type="radio"
+                            name="correct_option_radio"
+                            checked={opt.isCorrect}
+                            onChange={() => {
+                              setNewOptions((prev) =>
+                                prev.map((o, idx) => ({ ...o, isCorrect: idx === oIdx }))
+                              );
+                            }}
+                            className="w-4 h-4 text-purple-600"
+                            title="Marcar como respuesta correcta"
+                          />
+                          <span className="font-bold text-slate-600 text-xs w-4">
+                            {String.fromCharCode(65 + oIdx)})
+                          </span>
+                          <input
+                            type="text"
+                            placeholder={`Opción ${String.fromCharCode(65 + oIdx)}...`}
+                            value={opt.text}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setNewOptions((prev) =>
+                                prev.map((o, idx) => (idx === oIdx ? { ...o, text: val } : o))
+                              );
+                            }}
+                            className="flex-1 p-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs"
+                          />
+                        </div>
+                      ))}
+                    </div>
+
+                    <div>
+                      <label className="block font-bold text-slate-700 dark:text-slate-300 text-xs mb-1">
+                        Explicación / Perla Clínica Retroalimentativa (Opcional)
+                      </label>
+                      <input
+                        type="text"
+                        value={newExplanation}
+                        onChange={(e) => setNewExplanation(e.target.value)}
+                        placeholder="Fundamento médico de por qué la respuesta correcta es esa..."
+                        className="w-full p-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs"
+                      />
+                    </div>
+
+                    <div className="flex items-center justify-end gap-2 pt-1">
+                      <button
+                        type="button"
+                        onClick={() => setIsAddingQuestion(false)}
+                        className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-xs font-semibold hover:bg-slate-100"
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleSaveCustomQuestion}
+                        className="px-4 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs"
+                      >
+                        Guardar Pregunta
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Lista de preguntas redactadas */}
+                {customQuestions.length > 0 ? (
+                  <div className="space-y-2 max-h-56 overflow-y-auto pr-1 divide-y divide-slate-100 dark:divide-slate-800">
+                    {customQuestions.map((q, qIdx) => (
+                      <div key={q.id} className="pt-2 flex items-start justify-between gap-3 text-xs">
+                        <div className="space-y-1 min-w-0 flex-1">
+                          <p className="font-bold text-slate-800 dark:text-slate-200">
+                            {qIdx + 1}. {q.stem}
+                          </p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {q.options.map((opt, optIdx) => (
+                              <span
+                                key={optIdx}
+                                className={`px-2 py-0.5 rounded text-[10px] ${
+                                  opt.is_correct
+                                    ? 'bg-emerald-100 text-emerald-800 font-bold'
+                                    : 'bg-slate-100 text-slate-600'
+                                }`}
+                              >
+                                {String.fromCharCode(65 + optIdx)}) {opt.text}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveCustomQuestion(q.id)}
+                          className="p-1 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  !isAddingQuestion && (
+                    <p className="text-center py-4 text-slate-400 text-xs">
+                      No has redactado preguntas aún. Haz clic en "+ Nueva Pregunta" para redactar la primera.
+                    </p>
+                  )
+                )}
+              </div>
+            )}
+
+            {/* MODO 3: BANCO GENERAL (AUTO O MANUAL) */}
+            {questionSource === 'bank' && (
+              <div className="space-y-3">
+                <div className="flex items-center gap-1 bg-white dark:bg-slate-900 p-1 rounded-xl border border-slate-200 dark:border-slate-700 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setQuestionSelectionMode('auto')}
+                    className={`px-3 py-1 rounded-lg font-semibold transition ${
+                      questionSelectionMode === 'auto'
+                        ? 'bg-emerald-600 text-white shadow-xs'
+                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                    }`}
+                  >
+                    🎲 Automática / Aleatoria
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setQuestionSelectionMode('manual')}
+                    className={`px-3 py-1 rounded-lg font-semibold transition ${
+                      questionSelectionMode === 'manual'
+                        ? 'bg-emerald-600 text-white shadow-xs'
+                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                    }`}
+                  >
+                    🎯 Selección Manual Específica ({manualSelectedQuestionIds.size})
+                  </button>
+                </div>
 
             {questionSelectionMode === 'auto' ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-white dark:bg-slate-900 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700">
@@ -847,6 +1323,8 @@ export default function AssignExamModal({
                   <span>Disponibles: {manualVisibleQuestions.length}</span>
                 </div>
               </div>
+            )}
+            </div>
             )}
           </div>
 

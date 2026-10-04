@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { Activity, Calendar, ClipboardList, Pencil, UserCheck, Video, X, BookOpen } from 'lucide-react';
+import { Activity, Calendar, ClipboardList, Pencil, UserCheck, Video, X, BookOpen, Trash2, Loader2 } from 'lucide-react';
 import type { CalendarItem } from '../../../types/academicCalendar';
 import { calendarItemStartDate } from '../../../utils/academicCalendar';
 import { calendarChipStyle, calendarEventColor, calendarTypeLabel, useCalendarColorLabels } from '../../../utils/calendarColorLabels';
@@ -15,6 +15,7 @@ export function CalendarEventInspector({
   onTakeAttendance,
   onAssignAnother,
   onEditMilestone,
+  onDeleteSession,
 }: {
   item: CalendarItem | null;
   onClose: () => void;
@@ -22,12 +23,15 @@ export function CalendarEventInspector({
   onTakeAttendance: () => void;
   onAssignAnother: () => void;
   onEditMilestone: () => void;
+  onDeleteSession?: (workshopId: string) => void | Promise<void>;
 }) {
   const { labels } = useCalendarColorLabels();
   const closeRef = useRef<HTMLButtonElement>(null);
   const itemId = item?.id;
   const workshopId = item?.workshopId ?? null;
   const [instructorNames, setInstructorNames] = useState<string[]>([]);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const topicTitle = useMemo(() => {
     if (!item?.topicId) return null;
@@ -81,6 +85,11 @@ export function CalendarEventInspector({
       previous?.focus();
     };
   }, [itemId, onClose]);
+
+  useEffect(() => {
+    setConfirmDelete(false);
+    setIsDeleting(false);
+  }, [itemId]);
 
   if (!item) return null;
 
@@ -219,11 +228,60 @@ export function CalendarEventInspector({
               </button>
               <Link
                 to="/admin/talleres"
-                className="w-full inline-flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-xs font-bold text-indigo-600 dark:text-indigo-300"
+                className="w-full inline-flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-xs font-bold text-indigo-600 dark:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-950/40"
               >
                 <Video className="w-3.5 h-3.5" />
                 Ver talleres
               </Link>
+              {onDeleteSession && (
+                confirmDelete ? (
+                  <div className="p-3 rounded-2xl border border-rose-200 dark:border-rose-900/60 bg-rose-50/70 dark:bg-rose-950/40 space-y-2 animate-in fade-in zoom-in-95 duration-150">
+                    <p className="text-xs font-bold text-rose-800 dark:text-rose-200 text-center">
+                      ¿Seguro que deseas eliminar esta clase?
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        disabled={isDeleting}
+                        onClick={async () => {
+                          const idToDelete = item.workshopId || (item.id.startsWith('ws_') ? item.id.replace(/^ws_/, '') : item.id);
+                          if (!idToDelete) return;
+                          setIsDeleting(true);
+                          try {
+                            await onDeleteSession(idToDelete);
+                          } catch (e) {
+                            console.error('Error al eliminar clase:', e);
+                          } finally {
+                            setIsDeleting(false);
+                            setConfirmDelete(false);
+                          }
+                        }}
+                        className="flex-1 py-2 px-3 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+                      >
+                        {isDeleting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                        <span>{isDeleting ? 'Eliminando...' : 'Sí, eliminar'}</span>
+                      </button>
+                      <button
+                        type="button"
+                        disabled={isDeleting}
+                        onClick={() => setConfirmDelete(false)}
+                        className="py-2 px-3 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-xs font-bold hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+                      >
+                        Cancelar
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setConfirmDelete(true)}
+                    className="w-full inline-flex items-center justify-center gap-2 px-3 py-2 rounded-xl border border-rose-200 dark:border-rose-900/60 bg-rose-50/60 dark:bg-rose-950/30 text-rose-600 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-900/50 text-xs font-bold transition cursor-pointer"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    Eliminar clase
+                  </button>
+                )
+              )}
             </>
           ) : null}
 

@@ -43,6 +43,13 @@ export function getAllLeafTopicIds(topics: Topic[]): string[] {
   return topics.flatMap(getLeafTopicIds);
 }
 
+/** The student finished the lesson text. A pending quiz does not erase that mark. */
+export function isLessonRead(topic: Topic, completed: Set<string>): boolean {
+  if (!topic.children?.length) return completed.has(topic.id);
+  const leaves = getLeafTopicIds(topic);
+  return leaves.length > 0 && leaves.every((id) => completed.has(id));
+}
+
 export function isCurriculumNodeCompleted(
   topic: Topic,
   completed: Set<string>,

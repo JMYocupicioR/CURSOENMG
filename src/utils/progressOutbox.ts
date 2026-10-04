@@ -86,10 +86,31 @@ export function enqueueProgressOutbox(
   return merged;
 }
 
-export function removeProgressOutboxItems(userId: string, topicIds: string[]): ProgressOutboxItem[] {
+/**
+ * Drop flushed writes, but keep a newer local write that arrived while the request was in flight.
+ */
+export function outboxAfterFlush(
+  current: ProgressOutboxItem[],
+  flushed: ProgressOutboxItem[]
+): ProgressOutboxItem[] {
+  const flushedAt = new Map(flushed.map((item) => [item.topicId, item.at]));
+  return current.filter((item) => {
+    const at = flushedAt.get(item.topicId);
+    if (!at) return true;
+    return item.at > at;
+  });
+}
+
+export function removeProgressOutboxItems(
+  userId: string,
+  topicIds: string[],
+  flushed?: ProgressOutboxItem[]
+): ProgressOutboxItem[] {
   if (!userId) return [];
-  const remove = new Set(topicIds);
-  const remaining = readProgressOutbox(userId).filter((item) => !remove.has(item.topicId));
+  const current = readProgressOutbox(userId);
+  const remaining = flushed
+    ? outboxAfterFlush(current, flushed.filter((item) => topicIds.includes(item.topicId)))
+    : current.filter((item) => !topicIds.includes(item.topicId));
   writeProgressOutbox(userId, remaining);
   return remaining;
 }

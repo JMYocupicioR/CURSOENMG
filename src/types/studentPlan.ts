@@ -94,6 +94,9 @@ export interface StudentAssignment {
     retakeReviewNotes?: string;
     clinicalSnapshot?: ClinicalCaseSnapshot;
     lastClinicalAttempt?: ClinicalCaseAttemptRecord;
+    customQuestions?: import('./exam').ExamQuestion[];
+    courseId?: string;
+    courseTitle?: string;
   } | null;
   due_date: string; // ISO date string
   status: AssignmentStatus;
@@ -121,6 +124,7 @@ export interface ActiveExamLock {
   expiresAt: string;
   timeLimitMinutes: number;
   selectedQuestionIds?: string[];
+  customQuestions?: import('./exam').ExamQuestion[];
   config: any;
   moduleId?: string;
   topicTitle?: string;

@@ -178,6 +178,8 @@ export default function ExamSessionPage() {
         ? `neurosafe_exam_qs_att_${state.resumeAttemptId}`
         : null;
 
+      const targetCustomQuestions = (state as any)?.customQuestions || (savedLock as any)?.customQuestions;
+
       if (sessionCacheKey) {
         const cached = readQuestionCache(sessionCacheKey);
         if (cached) {
@@ -188,15 +190,23 @@ export default function ExamSessionPage() {
         }
       }
 
-      const { questions: allQs } = await loadExamQuestions({
-        topicNames: cfg.topicNames,
-        moduleId: cfg.moduleId,
-      });
+      let allQs: ExamQuestion[] = [];
+      if (targetCustomQuestions && Array.isArray(targetCustomQuestions) && targetCustomQuestions.length > 0) {
+        allQs = targetCustomQuestions;
+      } else {
+        const { questions: fetchedQs } = await loadExamQuestions({
+          topicNames: cfg.topicNames,
+          moduleId: cfg.moduleId,
+        });
+        allQs = fetchedQs;
+      }
 
       let prepared: { questions: ExamQuestion[]; optionOrder: ExamOptionOrder };
 
-      // Si el profesor seleccionó preguntas específicas, mezclar preguntas y mezclar opciones
-      if (targetQuestionIds && targetQuestionIds.length > 0) {
+      // Si el profesor seleccionó preguntas específicas o cargó personalizadas
+      if (targetCustomQuestions && targetCustomQuestions.length > 0) {
+        prepared = withRandomOptionOrder(allQs);
+      } else if (targetQuestionIds && targetQuestionIds.length > 0) {
         const qMap = new Map(allQs.map(q => [q.id, q]));
         const exact = targetQuestionIds.map(id => qMap.get(id)).filter(Boolean) as ExamQuestion[];
         const base = exact.length > 0 ? exact : allQs;

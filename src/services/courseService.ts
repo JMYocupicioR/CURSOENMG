@@ -201,6 +201,27 @@ export async function setWorkshopAttendanceClosed(
   return updateWorkshop(id, { attendance_closed: closed });
 }
 
+export async function deleteWorkshop(id: string): Promise<void> {
+  // 1. Intentar primero con la función RPC que limpia en cascada y garantiza permisos
+  const { data: rpcData, error: rpcError } = await (supabase.rpc as any)('admin_delete_live_workshop', {
+    p_workshop_id: id,
+  });
+
+  if (!rpcError && (rpcData as any)?.success) {
+    return;
+  }
+
+  // 2. Si la RPC falló o no estaba disponible, intentar eliminación directa
+  const { error } = await supabase
+    .from('live_workshops')
+    .delete()
+    .eq('id', id);
+
+  if (error) {
+    throw new Error(error.message || rpcError?.message || 'No se pudo eliminar la clase.');
+  }
+}
+
 
 // ─── Workshop Registrations ─────────────────────────────────────────────────
 

@@ -1,6 +1,8 @@
 import { isAppendixModule } from '../content/appendixModules';
 import { allModules } from '../content/modules';
 import { supabase, sb } from '../lib/supabase';
+import { findTopicInTree, findTopicPathInTree } from './contentMerge';
+import { getLeafTopicIds } from './studentResume';
 import type { Topic } from '../types/content';
 import type { LiveWorkshop, Profile } from '../types/database';
 import type { ModuleQuizProgress } from '../types/quiz';
@@ -102,6 +104,115 @@ export function getAllTopicIds(topics: Topic[]): string[] {
   return ids;
 }
 
+export function findModuleIdByTopicId(topicId: string): string | null {
+  for (const mod of allModules) {
+    if (findTopicPathInTree(mod.topics, topicId)) return mod.id;
+  }
+  return null;
+}
+
+function topicLocation(topicId: string): { moduleTopics: Topic[]; path: string[] } | null {
+  for (const mod of allModules) {
+    const path = findTopicPathInTree(mod.topics, topicId);
+    if (path) return { moduleTopics: mod.topics, path };
+  }
+  return null;
+}
+
+function ancestorTopicIds(topicId: string): string[] {
+  const located = topicLocation(topicId);
+  if (!located || located.path.length < 2) return [];
+  return located.path.slice(0, -1);
+}
+
+/** Mark a parent lesson only after every lesson inside it has been read. */
+function closeCompletedAncestors(current: Set<string>, topicId: string): string[] {
+  const located = topicLocation(topicId);
+  if (!located) return [];
+  const added: string[] = [];
+  const ancestors = located.path.slice(0, -1);
+  for (let index = ancestors.length - 1; index >= 0; index -= 1) {
+    const ancestorId = ancestors[index];
+    const ancestor = findTopicInTree(located.moduleTopics, ancestorId);
+    if (!ancestor) continue;
+    const leaves = getLeafTopicIds(ancestor);
+    if (leaves.length === 0 || !leaves.every((id) => current.has(id))) continue;
+    if (!current.has(ancestorId)) {
+      current.add(ancestorId);
+      added.push(ancestorId);
+    }
+  }
+  return added;
+}
+
+function propagateStoredCompletion(merged: Set<string>): void {
+  const walk = (topic: Topic) => {
+    if (!topic.children?.length) return;
+    topic.children.forEach(walk);
+    const childIds = getAllTopicIds(topic.children);
+    if (merged.has(topic.id)) {
+      childIds.forEach((id) => merged.add(id));
+      return;
+    }
+    if (childIds.length > 0 && childIds.every((id) => merged.has(id))) {
+      merged.add(topic.id);
+    }
+  };
+  for (const mod of allModules) {
+    mod.topics.forEach(walk);
+  }
+}
+
+function isMissingProgressRpc(error: { code?: string; message?: string } | null): boolean {
+  if (!error) return false;
+  const message = error.message ?? '';
+  return (
+    error.code === 'PGRST202' ||
+    error.code === '42883' ||
+    /set_my_topic_progress|schema cache/i.test(message)
+  );
+}
+
+async function persistTopicRows(userId: string, topicIds: string[], completed: boolean): Promise<void> {
+  const items = topicIds
+    .filter((topicId) => topicId.trim())
+    .map((topicId) => ({
+      topic_id: topicId,
+      module_id: findModuleIdByTopicId(topicId),
+    }));
+  if (items.length === 0) return;
+
+  const { error: rpcError } = await sb.rpc('set_my_topic_progress', {
+    p_items: items,
+    p_completed: completed,
+  });
+  if (!rpcError) return;
+  if (!isMissingProgressRpc(rpcError)) throw rpcError;
+
+  if (completed) {
+    const rows = items.map((item) => ({
+      user_id: userId,
+      topic_id: item.topic_id,
+      module_id: item.module_id,
+      completed_at: new Date().toISOString(),
+    }));
+    const { error } = await sb
+      .from('student_completed_topics')
+      .upsert(rows, { onConflict: 'user_id, topic_id' });
+    if (error) throw error;
+    return;
+  }
+
+  for (const item of items) {
+    const { error } = await sb
+      .from('student_completed_topics')
+      .delete()
+      .eq('user_id', userId)
+      .eq('topic_id', item.topic_id);
+    if (error) throw error;
+  }
+}
+
 // ─── Topic Progress (Local-First + Cloud Synchronization) ────────────────────
 
 /**
@@ -166,25 +277,8 @@ export async function fetchStudentCompletedTopics(userId: string): Promise<Set<s
   withOutbox.forEach((id) => merged.add(id));
   await flushProgressOutbox(userId);
 
-  // 5. Normalize and propagate bidirectional completion between parents and children
-  for (const m of allModules) {
-    for (const t of m.topics) {
-      if (t.children && t.children.length > 0) {
-        const childIds = getAllTopicIds(t.children);
-        // If parent is marked completed, ensure all children are also in merged
-        if (merged.has(t.id)) {
-          childIds.forEach((cid) => merged.add(cid));
-        } else {
-          // If all children are marked completed, ensure parent is in merged
-          const allChildrenDone = childIds.length > 0 && childIds.every((cid) => merged.has(cid));
-          if (allChildrenDone) {
-            merged.add(t.id);
-          }
-        }
-      }
-    }
-  }
-
+  // 5. A finished section also completes its parent lesson. An explicit unmark wins.
+  propagateStoredCompletion(merged);
   const pendingDeletes = new Set(
     queuedOutbox.filter((item) => !item.completed).map((item) => item.topicId)
   );
@@ -195,19 +289,32 @@ export async function fetchStudentCompletedTopics(userId: string): Promise<Set<s
     ? Array.from(merged).filter((id) => !dbTopics.includes(id) && !pendingDeletes.has(id))
     : [];
   if (missingInDb.length > 0) {
+    const snapshot = readProgressOutbox(userId).filter(
+      (item) => item.completed && missingInDb.includes(item.topicId)
+    );
     try {
-      const rows = missingInDb.map((tid) => ({
-        user_id: userId,
-        topic_id: tid,
-        completed_at: new Date().toISOString(),
-      }));
-      await sb.from('student_completed_topics').upsert(rows, { onConflict: 'user_id, topic_id' });
+      await persistTopicRows(userId, missingInDb, true);
+      if (snapshot.length > 0) {
+        removeProgressOutboxItems(userId, missingInDb, snapshot);
+      }
     } catch (e) {
+      enqueueProgressOutbox(userId, missingInDb, true);
       console.warn('[StudentService] No se pudieron reconciliar temas locales:', e);
     }
   }
 
-  // 7. Cache merged truth back into localStorage
+  // 7. A read or unmark that happened during this request replaces the opening snapshot.
+  const latestLocal = getCompletedTopics(userId);
+  latestLocal.forEach((id) => {
+    if (!localSet.has(id)) merged.add(id);
+  });
+  localSet.forEach((id) => {
+    if (!latestLocal.has(id)) merged.delete(id);
+  });
+  const latest = applyOutboxToCompletedSet(merged, readProgressOutbox(userId));
+  merged.clear();
+  latest.forEach((id) => merged.add(id));
+
   try {
     localStorage.setItem(
       `${KEY_COMPLETED_TOPICS}${userId}`,
@@ -249,32 +356,20 @@ export async function flushProgressOutbox(userId: string): Promise<void> {
 
   try {
     if (completedIds.length > 0) {
-      const completedAt = new Map(items.map((item) => [item.topicId, item.at]));
-      const rows = completedIds.map((tid) => ({
-        user_id: userId,
-        topic_id: tid,
-        completed_at: completedAt.get(tid) ?? new Date().toISOString(),
-      }));
-      const { error } = await sb
-        .from('student_completed_topics')
-        .upsert(rows, { onConflict: 'user_id, topic_id' });
-      if (error) throw error;
+      await persistTopicRows(userId, completedIds, true);
       succeeded.push(...completedIds);
     }
 
     if (pendingIds.length > 0) {
-      for (const tid of pendingIds) {
-        const { error } = await supabase
-          .from('student_completed_topics')
-          .delete()
-          .eq('user_id', userId)
-          .eq('topic_id', tid);
-        if (error) throw error;
-        succeeded.push(tid);
-      }
+      await persistTopicRows(userId, pendingIds, false);
+      succeeded.push(...pendingIds);
     }
 
-    removeProgressOutboxItems(userId, succeeded);
+    removeProgressOutboxItems(
+      userId,
+      succeeded,
+      items.filter((item) => succeeded.includes(item.topicId))
+    );
 
     try {
       await sb.from('student_activity_logs').insert({
@@ -287,7 +382,11 @@ export async function flushProgressOutbox(userId: string): Promise<void> {
     }
   } catch (e) {
     if (succeeded.length > 0) {
-      removeProgressOutboxItems(userId, succeeded);
+      removeProgressOutboxItems(
+        userId,
+        succeeded,
+        items.filter((item) => succeeded.includes(item.topicId))
+      );
     }
     console.warn('[StudentService] Error syncing student_completed_topics:', e);
   }
@@ -322,11 +421,16 @@ export function toggleTopicCompleted(
     for (const cid of affectedIds) {
       current.delete(cid);
     }
+    for (const ancestorId of ancestorTopicIds(topicId)) {
+      current.delete(ancestorId);
+      affectedIds.push(ancestorId);
+    }
     isNowCompleted = false;
   } else {
     for (const cid of affectedIds) {
       current.add(cid);
     }
+    affectedIds.push(...closeCompletedAncestors(current, topicId));
     isNowCompleted = true;
   }
 
@@ -351,6 +455,7 @@ export function markTopicCompleted(userId: string, topicId: string): void {
   const current = getCompletedTopics(userId);
   if (!current.has(topicId)) {
     current.add(topicId);
+    const savedIds = [topicId, ...closeCompletedAncestors(current, topicId)];
     try {
       localStorage.setItem(
         `${KEY_COMPLETED_TOPICS}${userId}`,
@@ -360,7 +465,7 @@ export function markTopicCompleted(userId: string, topicId: string): void {
     } catch (e) {
       console.warn('[StudentService] Error saving completed topics:', e);
     }
-    syncTopicCompletionToSupabase(userId, [topicId], true, current).catch(console.warn);
+    syncTopicCompletionToSupabase(userId, savedIds, true, current).catch(console.warn);
   }
 }
 
@@ -368,7 +473,8 @@ export function markTopicPending(userId: string, topicId: string): void {
   if (!userId || !topicId) return;
   const current = getCompletedTopics(userId);
   if (current.has(topicId)) {
-    current.delete(topicId);
+    const removedIds = [topicId, ...ancestorTopicIds(topicId)];
+    removedIds.forEach((id) => current.delete(id));
     try {
       localStorage.setItem(
         `${KEY_COMPLETED_TOPICS}${userId}`,
@@ -378,7 +484,7 @@ export function markTopicPending(userId: string, topicId: string): void {
     } catch (e) {
       console.warn('[StudentService] Error updating pending topic:', e);
     }
-    syncTopicCompletionToSupabase(userId, [topicId], false, current).catch(console.warn);
+    syncTopicCompletionToSupabase(userId, removedIds, false, current).catch(console.warn);
   }
 }
 
@@ -391,16 +497,32 @@ export function markMultipleTopics(
   const current = getCompletedTopics(userId);
   let changed = false;
 
+  const syncedIds = [...topicIds];
   for (const tid of topicIds) {
     if (completed) {
       if (!current.has(tid)) {
         current.add(tid);
         changed = true;
       }
-    } else {
-      if (current.has(tid)) {
-        current.delete(tid);
+    } else if (current.has(tid)) {
+      current.delete(tid);
+      changed = true;
+    }
+  }
+  if (completed) {
+    for (const tid of topicIds) {
+      for (const ancestorId of closeCompletedAncestors(current, tid)) {
+        syncedIds.push(ancestorId);
         changed = true;
+      }
+    }
+  } else {
+    for (const tid of topicIds) {
+      for (const ancestorId of ancestorTopicIds(tid)) {
+        if (current.delete(ancestorId)) {
+          syncedIds.push(ancestorId);
+          changed = true;
+        }
       }
     }
   }
@@ -415,7 +537,7 @@ export function markMultipleTopics(
     } catch (e) {
       console.warn('[StudentService] Error batch updating topics:', e);
     }
-    syncTopicCompletionToSupabase(userId, topicIds, completed, current).catch(console.warn);
+    syncTopicCompletionToSupabase(userId, syncedIds, completed, current).catch(console.warn);
   }
 }
 

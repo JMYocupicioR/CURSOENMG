@@ -22,6 +22,7 @@ import { AdminLayout } from './AdminLayout';
 import { useSyllabusCatalog } from '../../hooks/useSyllabusCatalog';
 import { QuickCreateTopicModal } from './QuickCreateTopicModal';
 import { CourseEditorModal, type CourseEditorSavePayload } from './CourseEditorModal';
+import AssignExamModal from './AssignExamModal';
 import { SortableList } from '../common/SortableList';
 import {
   assignModuleToCourse,
@@ -83,6 +84,26 @@ export default function AdminSyllabusPage() {
     isOpen: false,
     moduleId: '',
   });
+
+  const [examModalState, setExamModalState] = useState<{
+    isOpen: boolean;
+    courseId?: string;
+    moduleId?: string;
+    topicId?: string;
+    subtopicId?: string;
+  }>({
+    isOpen: false,
+  });
+
+  const handleOpenAssignExam = (moduleId: string, topicId?: string, subtopicId?: string) => {
+    setExamModalState({
+      isOpen: true,
+      courseId: selectedCourse?.id,
+      moduleId,
+      topicId,
+      subtopicId,
+    });
+  };
 
   const sortedCourses = useMemo(
     () => [...courses].sort((a, b) => a.sort_order - b.sort_order || a.title.localeCompare(b.title, 'es')),
@@ -748,6 +769,7 @@ export default function AdminSyllabusPage() {
                               onCreateSubtopic={(topic) =>
                                 handleOpenCreateModal(mod.id, mod.title, topic.id, topic.title)
                               }
+                              onAssignExam={(topic, sub) => handleOpenAssignExam(mod.id, topic.id, sub?.id)}
                               onMoveTopic={(topic, direction) => requestMoveTopic(topic.title, mod.id, topic.id, direction)}
                               onMoveSibling={(sub, siblings, topicId, direction) =>
                                 requestMoveSibling(sub.title, mod.id, siblings, topicId, direction)
@@ -943,6 +965,20 @@ export default function AdminSyllabusPage() {
           setTimeout(() => setSuccessMsg(null), 5000);
         }}
       />
+
+      <AssignExamModal
+        isOpen={examModalState.isOpen}
+        onClose={() => setExamModalState((prev) => ({ ...prev, isOpen: false }))}
+        initialCourseId={examModalState.courseId}
+        initialModuleId={examModalState.moduleId}
+        initialTopicId={examModalState.topicId}
+        initialSubtopicId={examModalState.subtopicId}
+        onAssigned={async () => {
+          setExamModalState((prev) => ({ ...prev, isOpen: false }));
+          setSuccessMsg('Examen final creado y enviado exitosamente a los alumnos.');
+          setTimeout(() => setSuccessMsg(null), 5000);
+        }}
+      />
     </AdminLayout>
   );
 }
@@ -1040,9 +1076,16 @@ function CourseMetaForm({
 
   return (
     <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden">
-      <button
-        type="button"
+      <div
+        role="button"
+        tabIndex={0}
         onClick={onToggleExpanded}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            onToggleExpanded();
+          }
+        }}
         className="w-full flex flex-wrap items-center justify-between gap-3 p-4 text-left hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition cursor-pointer"
       >
         <div className="min-w-0">
@@ -1085,7 +1128,7 @@ function CourseMetaForm({
           )}
           {expanded ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
         </div>
-      </button>
+      </div>
 
       {expanded && (
         <div className="px-4 pb-4 pt-0 space-y-4 border-t border-slate-100 dark:border-slate-800">
@@ -1281,6 +1324,7 @@ function ModuleTopicsPanel({
   onMoveTopic,
   onMoveSibling,
   onToggleTopicVisible,
+  onAssignExam,
 }: {
   mod: Module;
   busy: boolean;
@@ -1291,6 +1335,7 @@ function ModuleTopicsPanel({
   onMoveTopic: (topic: Topic, direction: -1 | 1) => void;
   onMoveSibling: (sub: Topic, siblings: Topic[], topicId: string, direction: -1 | 1) => void;
   onToggleTopicVisible: (topicId: string, visible: boolean, order: number) => void;
+  onAssignExam: (topic: Topic, subtopic?: Topic) => void;
 }) {
   return (
     <div className="mt-3.5 space-y-2 pt-3.5 border-t border-slate-200/70 dark:border-slate-700/60">
@@ -1318,6 +1363,15 @@ function ModuleTopicsPanel({
                 )}
               </div>
               <div className="flex items-center justify-end gap-1.5 shrink-0 self-end sm:self-auto pt-1 sm:pt-0">
+                <button
+                  type="button"
+                  onClick={() => onAssignExam(topic)}
+                  className="px-2.5 py-1.5 rounded-lg border border-purple-300/80 dark:border-purple-800/60 bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 text-xs font-semibold hover:bg-purple-100 dark:hover:bg-purple-900/50 transition-colors inline-flex items-center gap-1 active:scale-95 shadow-2xs cursor-pointer"
+                  title="Crear o asignar examen final de este tema"
+                >
+                  <GraduationCap className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Examen</span>
+                </button>
                 <button
                   type="button"
                   onClick={() => onCreateSubtopic(topic)}
@@ -1394,6 +1448,15 @@ function ModuleTopicsPanel({
                         )}
                       </div>
                       <div className="flex items-center justify-end gap-1 shrink-0 self-end sm:self-auto">
+                        <button
+                          type="button"
+                          onClick={() => onAssignExam(topic, sub)}
+                          className="px-2 py-1 rounded-md border border-purple-200 dark:border-purple-900/50 bg-purple-50/70 dark:bg-purple-950/30 text-purple-700 dark:text-purple-300 text-[11px] font-medium hover:bg-purple-100 dark:hover:bg-purple-900/50 transition-colors inline-flex items-center gap-1 active:scale-95 shadow-2xs cursor-pointer"
+                          title="Crear o asignar examen de este subtema"
+                        >
+                          <GraduationCap className="w-3 h-3" />
+                          <span className="hidden md:inline">Examen</span>
+                        </button>
                         <button
                           type="button"
                           className="p-1 rounded-md border border-slate-200/90 dark:border-slate-700/80 bg-slate-100/90 dark:bg-slate-700/60 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-300 dark:hover:bg-slate-700 dark:text-slate-300 dark:hover:text-cyan-300 dark:hover:border-slate-600 disabled:opacity-25 disabled:pointer-events-none transition-all shadow-2xs cursor-pointer active:scale-95"
