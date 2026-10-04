@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { CourseEnrollmentStatus, CourseWaitlistRow } from '../types/database';
+import type { CourseEnrollmentStatus } from '../types/database';
 import { DEFAULT_COURSES, sellableCourseIds } from '../content/courseCatalog';
 
 describe('Course Subscriptions and Waitlist Logic', () => {
@@ -17,13 +17,12 @@ describe('Course Subscriptions and Waitlist Logic', () => {
   });
 
   it('verifies FIFO queue sorting for waitlist applicants', () => {
-    const mockWaitlist: CourseWaitlistRow[] = [
+    const mockWaitlist = [
       {
         user_id: 'user-2',
         course_id: 'principiante',
         status: 'pending',
         requested_at: '2026-09-18T10:00:00Z',
-        created_at: '2026-09-18T10:00:00Z',
         display_name: 'Dr. Beta',
         email: 'beta@med.mx',
         cedula_profesional: '123456',
@@ -38,7 +37,6 @@ describe('Course Subscriptions and Waitlist Logic', () => {
         course_id: 'principiante',
         status: 'pending',
         requested_at: '2026-09-18T08:30:00Z',
-        created_at: '2026-09-18T08:30:00Z',
         display_name: 'Dra. Alfa',
         email: 'alfa@med.mx',
         cedula_profesional: '654321',

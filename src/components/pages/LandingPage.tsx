@@ -24,7 +24,6 @@ import {
   Check,
   BarChart3,
   Award,
-  Users,
   ClipboardCheck,
   ArrowRight,
   Lock,
@@ -38,7 +37,7 @@ import { TeacherLanding } from '../landing/TeacherLanding';
 import { WorkshopCard } from '../course/WorkshopCard';
 import { ComefyrBadge } from '../landing/ComefyrBadge';
 import { ClinicalTraceSimulator } from '../landing/ClinicalTraceSimulator';
-import { MedicalBentoGrid } from '../landing/MedicalBentoGrid';
+import { MedicalValueGrid } from '../landing/MedicalValueGrid';
 import { BrandLogo } from '../brand/BrandLogo';
 import { BRAND } from '../../config/brand';
 
@@ -130,11 +129,6 @@ export default function LandingPage() {
 
   const enrollUrl = '/auth/registro';
 
-  const totalTopics = useMemo(
-    () => modules.reduce((acc, m) => acc + countTopics(m.topics), 0),
-    [modules]
-  );
-
   const searchResults = useMemo(() => {
     if (!searchQuery.trim() || searchQuery.length < 2) return [];
     const q = searchQuery.toLowerCase();
@@ -148,157 +142,137 @@ export default function LandingPage() {
   }
 
   return (
-    <main className="relative min-h-screen bg-gradient-to-b from-slate-50 via-white to-slate-50/80 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 text-slate-900 dark:text-slate-100">
+    <main className="relative min-h-screen overflow-x-hidden bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
       {/* ── 1. HERO SECTION ── */}
-      <section className="relative overflow-hidden px-4 pt-24 pb-14 sm:pt-32 sm:pb-20">
-        {/* Subtle Ambient Depth (No harsh saturated blues) */}
-        <div className="absolute inset-0 -z-10 pointer-events-none">
-          <div className="absolute top-10 left-1/2 -translate-x-1/2 w-[700px] h-[350px] bg-blue-500/5 dark:bg-blue-500/10 rounded-full blur-3xl" />
-          <div className="absolute top-40 right-10 w-[400px] h-[300px] bg-cyan-500/5 dark:bg-cyan-500/5 rounded-full blur-3xl" />
-        </div>
-
-        <div className="max-w-6xl mx-auto text-center">
-          {/* Official COMEFYR Institutional Badge */}
+      <section className="border-b border-slate-200/70 px-4 pb-12 pt-[4.75rem] dark:border-slate-800/70 sm:px-6 sm:pb-20 sm:pt-28">
+        <div className="mx-auto min-w-0 max-w-7xl">
           <motion.div
-            initial={{ opacity: 0, y: -15 }}
+            initial={{ opacity: 0, y: -12 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5 }}
-            className="mb-6 flex justify-center"
+            transition={{ duration: 0.45 }}
+            className="mb-5 flex justify-center lg:mb-7 lg:justify-start"
           >
             <ComefyrBadge />
           </motion.div>
 
-          {/* Clinically Persuasive H1 Value Proposition */}
-          <motion.h1
-            initial={{ opacity: 0, y: 15 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.1 }}
-            className="text-3xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight text-slate-900 dark:text-white max-w-4xl mx-auto mb-6 leading-[1.15]"
-          >
-            Domina el electrodiagnóstico y la neuroconducción con{' '}
-            <span className="bg-gradient-to-r from-blue-600 via-indigo-600 to-cyan-600 dark:from-blue-400 dark:via-cyan-300 dark:to-indigo-300 bg-clip-text text-transparent">
-              casos clínicos reales
-            </span>
-          </motion.h1>
-
-          {/* Subtitle with Institutional Weight (Natural copywriting, no AI bold words) */}
-          <motion.p
-            initial={{ opacity: 0, y: 15 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.15 }}
-            className="text-base sm:text-xl text-slate-600 dark:text-slate-300 max-w-3xl mx-auto mb-8 leading-relaxed font-normal"
-          >
-            {BRAND.enableAccreditation
-              ? 'El programa interactivo avalado por la COMEFYR para médicos especialistas en rehabilitación y residentes en formación neurofisiológica.'
-              : 'El programa interactivo de posgrado para médicos especialistas en rehabilitación y residentes en formación neurofisiológica.'}
-          </motion.p>
-
-          {/* Primary & Secondary Call to Actions */}
-          <motion.div
-            initial={{ opacity: 0, y: 15 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.2 }}
-            className="flex flex-col sm:flex-row items-center justify-center gap-3.5 mb-12"
-          >
-            {isEnrolledPhysician ? (
-              <Link
-                to="/mi-progreso"
-                className="w-full sm:w-auto inline-flex items-center justify-center gap-2.5 px-7 py-3.5 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40 hover:scale-[1.01] transition-all"
+          <div className="grid min-w-0 items-start gap-8 lg:grid-cols-12 lg:gap-12">
+            <div className="min-w-0 lg:col-span-5">
+              <motion.p
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.45, delay: 0.05 }}
+                className="mb-3 max-w-full text-balance text-[11px] font-semibold uppercase leading-snug tracking-[0.06em] text-cyan-700 dark:text-cyan-300 sm:mb-4 sm:text-xs sm:tracking-[0.14em]"
               >
-                <BarChart3 className="w-4 h-4" />
-                <span>Ver mi progreso y clases</span>
-              </Link>
-            ) : isSupabaseConfigured ? (
-              <Link
-                to={enrollUrl}
-                className="w-full sm:w-auto inline-flex items-center justify-center gap-2.5 px-7 py-3.5 rounded-2xl bg-gradient-to-r from-blue-600 via-indigo-600 to-cyan-600 text-white font-semibold shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40 hover:scale-[1.01] transition-all"
-              >
-                <GraduationCap className="w-5 h-5" />
-                <span>
-                  {BRAND.enableAccreditation
-                    ? 'Registro de Estudiante (Créditos COMEFYR)'
-                    : 'Registro de Estudiante de Posgrado'}
-                </span>
-              </Link>
-            ) : null}
+                Formación electrofisiológica de posgrado
+              </motion.p>
 
-            <a
-              href="#programa"
-              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-2xl bg-white/90 dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/80 text-slate-700 dark:text-slate-200 font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 hover:border-blue-300 dark:hover:border-blue-500 transition-all shadow-xs"
+              <motion.h1
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.55, delay: 0.1 }}
+                className="mb-4 max-w-full text-balance break-words text-[1.65rem] font-extrabold leading-[1.16] tracking-tight text-slate-900 dark:text-white sm:mb-5 sm:text-5xl sm:leading-[1.08] lg:text-[3.15rem] lg:leading-[1.06]"
+              >
+                Domina el electrodiagnóstico y la neuroconducción con
+                <span className="mt-1 block text-cyan-700 dark:text-cyan-300">casos clínicos reales</span>
+              </motion.h1>
+
+              <motion.p
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.55, delay: 0.15 }}
+                className="mb-6 max-w-full text-pretty text-[15px] leading-relaxed text-slate-600 dark:text-slate-300 sm:mb-8 sm:text-lg"
+              >
+                {BRAND.enableAccreditation
+                  ? 'Programa interactivo avalado por COMEFYR para médicos especialistas en rehabilitación y residentes en formación neurofisiológica.'
+                  : 'Programa interactivo de posgrado para médicos especialistas en rehabilitación y residentes en formación neurofisiológica.'}
+              </motion.p>
+
+              <motion.div
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5, delay: 0.2 }}
+                className="mb-5 flex min-w-0 flex-col gap-2.5 sm:mb-8 sm:flex-row sm:gap-3"
+              >
+                {isEnrolledPhysician ? (
+                  <Link
+                    to="/mi-progreso"
+                    className="inline-flex min-h-11 w-full min-w-0 max-w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-3 text-center text-sm font-semibold leading-snug text-white transition-colors hover:bg-slate-800 dark:bg-cyan-500 dark:text-slate-950 dark:hover:bg-cyan-400 sm:w-auto sm:px-6"
+                  >
+                    <BarChart3 className="h-4 w-4 shrink-0" />
+                    <span className="min-w-0 text-balance">Ver mi progreso y clases</span>
+                  </Link>
+                ) : isSupabaseConfigured ? (
+                  <Link
+                    to={enrollUrl}
+                    className="inline-flex min-h-11 w-full min-w-0 max-w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-3 text-center text-sm font-semibold leading-snug text-white transition-colors hover:bg-slate-800 dark:bg-cyan-500 dark:text-slate-950 dark:hover:bg-cyan-400 sm:w-auto sm:px-6"
+                  >
+                    <GraduationCap className="h-4 w-4 shrink-0" />
+                    <span className="min-w-0 text-balance">
+                      {BRAND.enableAccreditation
+                        ? 'Registro con créditos COMEFYR'
+                        : 'Registro de posgrado'}
+                    </span>
+                  </Link>
+                ) : null}
+
+                <a
+                  href="#programa"
+                  className="inline-flex min-h-11 w-full min-w-0 max-w-full items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-3 text-center text-sm font-semibold leading-snug text-slate-700 transition-colors hover:border-slate-400 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:border-slate-600 dark:hover:bg-slate-800 sm:w-auto sm:px-6"
+                >
+                  <span className="min-w-0 text-balance">Ver programa y 13 módulos</span>
+                  <ArrowRight className="h-4 w-4 shrink-0 text-slate-500" />
+                </a>
+              </motion.div>
+
+              <motion.dl
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5, delay: 0.25 }}
+                className="grid min-w-0 grid-cols-2 gap-2.5 sm:gap-4"
+              >
+                {[
+                  { term: '13 módulos', desc: 'Ruta por bloques clínicos' },
+                  { term: '470+ trazos', desc: 'Práctica interactiva' },
+                  { term: 'Feedback guiado', desc: 'Corrección paso a paso' },
+                  { term: 'Modo offline', desc: 'Consulta sin cobertura' },
+                ].map((item) => (
+                  <div
+                    key={item.term}
+                    className="min-w-0 rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900 sm:p-3.5"
+                  >
+                    <dt className="text-[13px] font-semibold leading-tight text-slate-900 dark:text-slate-100 sm:text-sm">{item.term}</dt>
+                    <dd className="mt-1 text-[11px] leading-snug text-slate-500 dark:text-slate-400 sm:text-xs">{item.desc}</dd>
+                  </div>
+                ))}
+              </motion.dl>
+            </div>
+
+            <motion.div
+              initial={{ opacity: 0, y: 14 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.55, delay: 0.25 }}
+              className="min-w-0 lg:col-span-7"
             >
-              <span>Explorar programa y 13 módulos</span>
-              <ArrowRight className="w-4 h-4 text-slate-400" />
-            </a>
-          </motion.div>
-
-          {/* High-Impact Real Clinical Metrics (Replacing filler stats) */}
-          <motion.div
-            initial={{ opacity: 0, y: 15 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.25 }}
-            className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 max-w-4xl mx-auto mb-12 sm:mb-16"
-          >
-            {[
-              {
-                value: '13 Módulos',
-                label: 'Certificados',
-                sub: 'ENMG, aguja y ultrasonido',
-              },
-              {
-                value: '470+ Trazos',
-                label: 'Casos Interactivos',
-                sub: 'Bioelectricidad real',
-              },
-              {
-                value: 'Valor Curricular',
-                label: BRAND.enableAccreditation ? 'Aval Oficial COMEFYR' : 'Acreditación Oficial',
-                sub: BRAND.enableAccreditation ? 'Créditos recertificación' : 'Horas de posgrado',
-              },
-              {
-                value: 'Paso a Paso',
-                label: 'Feedback Diagnóstico',
-                sub: 'Correlación anatómica',
-              },
-            ].map((stat, i) => (
-              <div
-                key={i}
-                className="p-3.5 sm:p-4 rounded-2xl bg-white/80 dark:bg-slate-900/60 border border-slate-200/70 dark:border-slate-800/70 shadow-xs text-left"
-              >
-                <div className="text-base sm:text-xl font-extrabold text-slate-900 dark:text-white tracking-tight">
-                  {stat.value}
-                </div>
-                <div className="text-xs font-semibold text-blue-600 dark:text-cyan-400 mt-0.5">
-                  {stat.label}
-                </div>
-                <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 hidden sm:block">
-                  {stat.sub}
-                </div>
-              </div>
-            ))}
-          </motion.div>
-
-          {/* ── SHOW, DON'T TELL INTERACTIVE MICRO-DEMO (Before the Scroll) ── */}
-          <motion.div
-            initial={{ opacity: 0, scale: 0.98 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.6, delay: 0.3 }}
-            className="relative"
-          >
-            <ClinicalTraceSimulator />
-          </motion.div>
+              <ClinicalTraceSimulator />
+              <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">
+                <span className="font-mono font-semibold tracking-wide text-slate-700 dark:text-slate-200">EMG · NCV</span>{' '}
+                Demostración interactiva orientada a correlación neuroanatómica y toma de decisiones clínicas.
+              </p>
+            </motion.div>
+          </div>
         </div>
       </section>
 
-      {/* ── 2. MODULAR BENTO GRID (MedTech & EdTech Modern Standards) ── */}
-      <MedicalBentoGrid />
+      {/* ── 2. CLINICAL VALUE BLOCKS ── */}
+      <MedicalValueGrid />
 
       {/* ── 3. CURRICULUM & MODULE EXPLORER WITH INTEGRATED CONTEXTUAL SEARCH ── */}
       <section id="programa" className="px-4 py-16 sm:py-24 bg-slate-50/50 dark:bg-slate-900/40 border-t border-slate-200/60 dark:border-slate-800/60">
         <div className="max-w-7xl mx-auto">
           <div className="text-center max-w-3xl mx-auto mb-10">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/10 text-blue-700 dark:text-blue-300 text-xs font-semibold mb-3 border border-blue-500/20">
-              <Layers className="w-3.5 h-3.5" />
-              <span>Currículo Académico Completo</span>
+            <div className="mb-3 inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.12em] text-cyan-700 dark:text-cyan-300">
+              <Layers className="h-3.5 w-3.5" />
+              <span>Currículo académico completo</span>
             </div>
             <h2 className="text-2xl sm:text-4xl font-bold tracking-tight text-slate-900 dark:text-white mb-3">
               Plan de Estudios en 13 Módulos Clínicos
@@ -364,18 +338,17 @@ export default function LandingPage() {
                 <motion.div key={mod.id} variants={cardVariants}>
                   <Link
                     to={isEnrolledPhysician ? `/modulo/${mod.id}` : `/temario#modulo-${mod.id}`}
-                    className="group flex flex-col justify-between h-full p-5 rounded-2xl bg-white dark:bg-slate-900/80 border border-slate-200/80 dark:border-slate-800/80 hover:border-blue-300 dark:hover:border-blue-600 shadow-xs hover:shadow-lg transition-all duration-300 hover:-translate-y-0.5"
+                    className="group flex flex-col justify-between h-full rounded-2xl border border-slate-200/80 bg-white p-5 transition-all duration-300 hover:border-slate-400 hover:shadow-md dark:border-slate-800/80 dark:bg-slate-900/80 dark:hover:border-slate-600"
                   >
                     <div>
                       <div className="flex items-center justify-between mb-3">
-                        <div className={`inline-flex items-center justify-center w-11 h-11 rounded-xl bg-gradient-to-br ${mod.color} text-white shadow-md group-hover:scale-105 transition-transform`}>
-                          <IconComponent className="w-5 h-5" />
+                        <div className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-slate-900 text-cyan-300 transition-transform group-hover:scale-105 dark:border-slate-700 dark:bg-slate-800">
+                          <IconComponent className="h-5 w-5" />
                         </div>
                         <div className="flex items-center gap-1.5">
-                          <span className="text-xs font-mono font-bold text-slate-400 dark:text-slate-500">
+                          <span className="text-xs font-mono font-bold text-slate-500 dark:text-slate-400">
                             MOD {String(mod.number).padStart(2, '0')}
                           </span>
-                          <span className="text-xl">{mod.emoji}</span>
                         </div>
                       </div>
 
@@ -475,12 +448,12 @@ export default function LandingPage() {
             </div>
 
             {/* High-Authority Registration Card */}
-            <div className="p-6 sm:p-8 rounded-3xl bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-950 text-white border border-indigo-500/30 shadow-2xl">
+            <div className="rounded-3xl border border-slate-700/80 bg-slate-900 p-6 text-white shadow-2xl shadow-slate-900/30 sm:p-8">
               <div className="flex items-center justify-between mb-4">
-                <span className="text-xs font-mono uppercase tracking-wider text-cyan-400 font-bold">
+                <span className="text-xs font-mono uppercase tracking-wider text-cyan-300 font-bold">
                   Suscripción Académica
                 </span>
-                <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-slate-800 text-emerald-300 border border-slate-700">
                   {BRAND.enableAccreditation ? 'Aval COMEFYR' : 'Acreditación Posgrado'}
                 </span>
               </div>
@@ -518,7 +491,7 @@ export default function LandingPage() {
               ) : isSupabaseConfigured ? (
                 <Link
                   to={enrollUrl}
-                  className="flex items-center justify-center gap-2 w-full py-3.5 rounded-xl bg-gradient-to-r from-blue-600 via-indigo-600 to-cyan-600 hover:opacity-95 font-bold text-sm text-white shadow-lg shadow-blue-500/25 transition-all"
+                  className="flex items-center justify-center gap-2 w-full py-3.5 rounded-xl bg-cyan-400 text-slate-950 hover:bg-cyan-300 font-bold text-sm shadow-lg shadow-cyan-500/20 transition-colors"
                 >
                   <GraduationCap className="w-4 h-4" />
                   <span>Comenzar registro de estudiante</span>
@@ -527,7 +500,7 @@ export default function LandingPage() {
 
               <div className="text-center mt-4">
                 <Link to="/temario" className="text-xs text-cyan-300 hover:underline">
-                  ¿Deseas consultar el desglose completo del temario antes? Haz clic aquí →
+                  ¿Deseas consultar el desglose completo del temario antes? Haz clic aquí.
                 </Link>
               </div>
             </div>
@@ -556,7 +529,7 @@ export default function LandingPage() {
                 <div className="p-3 sm:p-3.5 flex justify-center items-center bg-blue-50/30 dark:bg-blue-950/20">
                   {row.student === 'premium' ? (
                     <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-700 dark:text-amber-300 bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/20">
-                      👑 Premium
+                      Acceso premium
                     </span>
                   ) : row.student ? (
                     <Check className="w-4 h-4 text-blue-600 dark:text-cyan-400 font-bold" />
@@ -573,17 +546,17 @@ export default function LandingPage() {
       {/* ── 6. FINAL ENROLLMENT BANNER ── */}
       {!isEnrolledPhysician && isSupabaseConfigured && (
         <section className="px-4 pb-20">
-          <div className="max-w-5xl mx-auto rounded-3xl bg-gradient-to-r from-blue-600 via-indigo-600 to-cyan-700 text-white p-8 sm:p-12 shadow-2xl shadow-blue-500/20 text-center">
-            <GraduationCap className="w-12 h-12 mx-auto mb-4 opacity-90" />
+          <div className="max-w-5xl mx-auto rounded-3xl border border-cyan-500/20 bg-slate-900 text-white p-8 sm:p-12 shadow-2xl shadow-slate-900/30 text-center">
+            <GraduationCap className="w-12 h-12 mx-auto mb-4 text-cyan-300" />
             <h2 className="text-2xl sm:text-4xl font-bold mb-3 tracking-tight">
               Acredita tu competencia en electrodiagnóstico
             </h2>
-            <p className="text-sm sm:text-base text-blue-100 max-w-xl mx-auto mb-8 leading-relaxed">
+            <p className="text-sm sm:text-base text-slate-300 max-w-xl mx-auto mb-8 leading-relaxed">
               Únete a la plataforma interactiva más rigurosa para médicos especialistas en rehabilitación y residentes en formación.
             </p>
             <Link
               to={enrollUrl}
-              className="inline-flex items-center gap-2 px-8 py-3.5 rounded-2xl bg-white text-slate-900 font-bold hover:bg-blue-50 transition-all shadow-lg text-sm"
+              className="inline-flex items-center gap-2 px-8 py-3.5 rounded-2xl bg-cyan-400 text-slate-950 font-bold hover:bg-cyan-300 transition-all shadow-lg shadow-cyan-500/20 text-sm"
             >
               <span>
                 {BRAND.enableAccreditation

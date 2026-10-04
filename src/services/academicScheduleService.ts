@@ -1,6 +1,5 @@
 import { supabase } from '../lib/supabase';
 import { allModules } from '../content/modules';
-import { getAllTopicIds } from './studentService';
 import {
   isMissingRelationError,
   isTableMissingInSupabase,
@@ -401,7 +400,7 @@ export async function deleteMilestone(milestoneId: string): Promise<void> {
 }
 
 export async function getStudentMilestoneAudits(
-  studentId: string,
+  _studentId: string,
   completedTopicSet: Set<string>,
   providedMilestones?: AcademicMilestone[]
 ): Promise<StudentMilestoneAudit[]> {

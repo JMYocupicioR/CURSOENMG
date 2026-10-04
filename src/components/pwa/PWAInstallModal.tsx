@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Share, Plus, Download, Smartphone, CheckCircle, ShieldCheck, Zap } from 'lucide-react';
+import { X, Share, Plus, Download, CheckCircle, ShieldCheck, Zap } from 'lucide-react';
 import { usePWAInstallStore } from '../../stores/pwaInstallStore';
 import { BRAND } from '../../config/brand';
 

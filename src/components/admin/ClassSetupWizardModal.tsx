@@ -9,7 +9,6 @@ import {
   Video,
   MapPin,
   Users,
-  FileQuestion,
   Activity,
   Copy,
   X,
@@ -27,6 +26,8 @@ import {
   Trash2,
   ArrowRight,
   HelpCircle,
+  Maximize2,
+  Minimize2,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthProvider';
 import { allModules } from '../../content/modules';
@@ -35,7 +36,6 @@ import {
   listTopicTeachingCommitments,
   assignWorkshopToTopics,
 } from '../../services/topicTeachingService';
-import { loadAllCaseTemplates, type CustomCaseTemplateRecord } from '../../services/emgExerciseService';
 import { getAdminProfiles } from '../../services/editorialService';
 import { filterGradeableStudents } from '../../utils/adminUtils';
 import {
@@ -87,9 +87,9 @@ export function ClassSetupWizardModal({
   const { user } = useAuth();
 
   // Mode: Wizard (Modo Fácil) vs Advanced (Modo Técnico)
-  const [mode, setMode] = useState<'wizard' | 'advanced'>(initialMode);
+  const [mode, _setMode] = useState<'wizard' | 'advanced'>(initialMode);
 
-  // Wizard Step: 0 = Bienvenida/Plantillas, 1 = Identificación, 2 = Temario (Mis Temas), 3 = Prácticas, 4 = Alumnos, 5 = Resumen/Lanzamiento
+  // Wizard Step: 0 = Bienvenida/Plantillas, 1 = Nombre y Temario, 2 = Horario y Guardado de Clase, 3 = Alumnos (Opcional)
   const [step, setStep] = useState<number>(0);
 
   // State: Clase / Sesión (Shared between Wizard and Advanced)
@@ -118,10 +118,12 @@ export function ClassSetupWizardModal({
   const [rawEmails, setRawEmails] = useState('');
   const [csvStudentsCount, setCsvStudentsCount] = useState<number | null>(null);
   const [topicSearch, setTopicSearch] = useState('');
+  const [selectedTopicsViewMode, setSelectedTopicsViewMode] = useState<'cards' | 'pills'>('cards');
+  const [selectedTopicsExpanded, setSelectedTopicsExpanded] = useState(false);
+  const [selectedTopicsSearch, setSelectedTopicsSearch] = useState('');
 
   // Data sources
   const [myCommitments, setMyCommitments] = useState<TopicTeachingCommitment[]>([]);
-  const [availableCases, setAvailableCases] = useState<CustomCaseTemplateRecord[]>([]);
   const [studentsList, setStudentsList] = useState<AdminProfileRow[]>([]);
   const [loadingData, setLoadingData] = useState(false);
 
@@ -194,14 +196,12 @@ export function ClassSetupWizardModal({
     setLoadingData(true);
     Promise.all([
       listTopicTeachingCommitments().catch(() => []),
-      loadAllCaseTemplates().catch(() => ({ templates: [] })),
       getAdminProfiles(false, 'all').catch(() => []),
       getWorkshops().catch(() => []),
     ])
-      .then(([commitments, casesRes, profiles, workshops]) => {
+      .then(([commitments, profiles, workshops]) => {
         const mine = commitments.filter((c) => c.teacher_id === user?.id && c.status !== 'withdrawn');
         setMyCommitments(mine);
-        setAvailableCases(casesRes.templates || []);
         setStudentsList(filterGradeableStudents(profiles, user?.id));
         setExistingWorkshops(workshops);
 
@@ -320,18 +320,14 @@ export function ClassSetupWizardModal({
         setSelectedTopicIds(mod1Topics);
       }
     } else if (templateType === 'cases') {
-      setTitle('Taller Práctico de Resolución de Casos Clínicos EMG');
+      setTitle('Taller Práctico de Casos Clínicos EMG');
       setDurationMinutes(90);
       setSessionModality('online');
-      setUnlimitedAttempts(true);
       // Auto-select carpal tunnel or primary topic
       const carpalTopic = flatTopics.find((t) => `${t.topic.id} ${t.topic.title}`.toLowerCase().includes('carpian'));
       if (carpalTopic) {
         setSelectedTopicIds([carpalTopic.topic.id]);
       }
-      // Pick 2 cases
-      const casesSample = availableCases.slice(0, 2).map((c) => c.patternId);
-      setSelectedCaseIds(casesSample);
     } else {
       // Custom with "Mis Temas"
       const myIds = myCommitments.map((c) => c.topic_id);
@@ -355,27 +351,19 @@ export function ClassSetupWizardModal({
     const step2Valid = Boolean(scheduledAt);
     const step2State: 'done' | 'pending' = step2Valid ? 'done' : 'pending';
 
-    // Step 3: Prácticas
-    const step3Valid = selectedCaseIds.length > 0 || includeQuiz;
+    // Step 3: Alumnos (Opcional)
+    const step3Valid = Boolean(accessCode || rawEmails.trim() || csvStudentsCount);
     const step3State: 'done' | 'optional' = step3Valid ? 'done' : 'optional';
 
-    // Step 4: Alumnos
-    const step4Valid = Boolean(accessCode || rawEmails.trim() || csvStudentsCount);
-    const step4State: 'done' | 'optional' = step4Valid ? 'done' : 'optional';
-
-    // Step 5: Lanzamiento
     const ready = step1Valid && step2Valid;
-    const step5State: 'done' | 'pending' = ready ? 'done' : 'pending';
 
     return {
       1: step1State,
       2: step2State,
       3: step3State,
-      4: step4State,
-      5: step5State,
       readyToPublish: ready,
     };
-  }, [title, scheduledAt, selectedTopicIds, selectedCaseIds, includeQuiz, accessCode, rawEmails, csvStudentsCount]);
+  }, [title, scheduledAt, selectedTopicIds, accessCode, rawEmails, csvStudentsCount]);
 
   // Topic Helpers
   const flatTopics = useMemo(() => {
@@ -399,17 +387,17 @@ export function ClassSetupWizardModal({
       .filter(Boolean) as { topic: Topic; moduleId: string; moduleTitle: string }[];
   }, [selectedTopicIds, flatTopics]);
 
+  const filteredSelectedTopics = useMemo(() => {
+    if (!selectedTopicsSearch.trim()) return selectedTopicsDetails;
+    const q = selectedTopicsSearch.trim().toLowerCase();
+    return selectedTopicsDetails.filter(
+      (t) => t.topic.title.toLowerCase().includes(q) || t.moduleTitle.toLowerCase().includes(q)
+    );
+  }, [selectedTopicsDetails, selectedTopicsSearch]);
+
   const toggleTopicSelection = (topicId: string) => {
     setSelectedTopicIds((prev) =>
       prev.includes(topicId) ? prev.filter((id) => id !== topicId) : [...prev, topicId]
-    );
-  };
-
-  const toggleCaseSelection = (casePatternId: string) => {
-    setSelectedCaseIds((prev) =>
-      prev.includes(casePatternId)
-        ? prev.filter((id) => id !== casePatternId)
-        : [...prev, casePatternId]
     );
   };
 
@@ -648,26 +636,6 @@ export function ClassSetupWizardModal({
     setSelectedTopicIds([]);
   };
 
-  const toggleSelectModule = (targetModId: string) => {
-    const mod = allModules.find((m) => m.id === targetModId);
-    if (!mod) return;
-    const modTopicIds: string[] = [];
-    for (const t of mod.topics) {
-      modTopicIds.push(t.id);
-      if (t.children) {
-        for (const c of t.children) {
-          modTopicIds.push(c.id);
-        }
-      }
-    }
-
-    const allInModSelected = modTopicIds.length > 0 && modTopicIds.every((id) => selectedTopicIds.includes(id));
-    if (allInModSelected) {
-      setSelectedTopicIds((prev) => prev.filter((id) => !modTopicIds.includes(id)));
-    } else {
-      setSelectedTopicIds((prev) => Array.from(new Set([...prev, ...modTopicIds])));
-    }
-  };
 
   const suggestTitleFromTopics = () => {
     if (selectedTopicsDetails.length === 0) return;
@@ -819,7 +787,7 @@ export function ClassSetupWizardModal({
       />
 
       {/* Modal Window */}
-      <div className="relative w-full max-w-4xl bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/90 dark:border-slate-800 shadow-2xl overflow-hidden z-10 flex flex-col max-h-[92vh]">
+      <div className="relative w-full max-w-5xl bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/90 dark:border-slate-800 shadow-2xl overflow-hidden z-10 flex flex-col max-h-[94vh]">
         {/* ── Fixed Top Header Bar ── */}
         <div className="px-4 py-3 sm:px-5 sm:py-4 border-b border-slate-100 dark:border-slate-800 bg-gradient-to-r from-indigo-500/10 via-purple-500/5 to-transparent flex items-center gap-3">
           {/* Icon */}
@@ -834,7 +802,7 @@ export function ClassSetupWizardModal({
                 Asistente de Configuración
               </h2>
               <span className="shrink-0 px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
-                {step === 0 ? 'Inicio' : `Paso ${step} de 5`}
+                {step === 0 ? 'Inicio' : `Paso ${step} de 3`}
               </span>
             </div>
           </div>
@@ -860,10 +828,8 @@ export function ClassSetupWizardModal({
             <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 select-none scrollbar-none">
               {[
                 { s: 1, label: 'Temario', state: stepStatus[1] },
-                { s: 2, label: 'Horario', state: stepStatus[2] },
-                { s: 3, label: 'Prácticas', state: stepStatus[3] },
-                { s: 4, label: 'Alumnos', state: stepStatus[4] },
-                { s: 5, label: 'Lanzamiento', state: stepStatus[5] },
+                { s: 2, label: 'Horario y Guardado', state: stepStatus[2] },
+                { s: 3, label: 'Alumnos (Opcional)', state: stepStatus[3] },
               ].map((item) => {
                 const isCurrent = step === item.s;
                 const isDone = item.state === 'done';
@@ -1007,7 +973,7 @@ export function ClassSetupWizardModal({
                       <ChevronRight className="w-5 h-5 text-slate-400 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 shrink-0 self-center" />
                     </div>
 
-                    {/* Tarjeta B: Taller Práctico */}
+                    {/* Tarjeta B: Taller Clínico / Discusión */}
                     <div
                       onClick={() => handleSelectTemplate('cases')}
                       className="p-4 sm:p-5 rounded-3xl border border-slate-200 dark:border-slate-800 hover:border-teal-500 dark:hover:border-teal-500 bg-white dark:bg-slate-800/60 hover:shadow-lg transition cursor-pointer group flex items-start gap-4"
@@ -1017,10 +983,10 @@ export function ClassSetupWizardModal({
                       </div>
                       <div className="flex-1 min-w-0">
                         <h4 className="text-sm font-bold text-slate-900 dark:text-white group-hover:text-teal-600 dark:group-hover:text-teal-400 transition-colors mb-1">
-                          Taller Práctico / Casos Clínicos EMG
+                          Taller Clínico / Discusión de Casos EMG
                         </h4>
                         <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-                          Enfocado en simulaciones de trazos, electromiografía de aguja y resolución interactiva de pacientes con reintentos libres.
+                          Enfocado en sesión de análisis clínico, correlación fisiológica y discusión guiada de pacientes con tus alumnos.
                         </p>
                       </div>
                       <ChevronRight className="w-5 h-5 text-slate-400 group-hover:text-teal-600 dark:group-hover:text-teal-400 shrink-0 self-center" />
@@ -1100,7 +1066,7 @@ export function ClassSetupWizardModal({
 
               {/* ── PASO 1: Identificación de la Clase ── */}
               {step === 1 && (
-                <div className="space-y-4 max-w-2xl mx-auto py-2">
+                <div className="space-y-4 max-w-4xl mx-auto py-2">
                   <div>
                     <h3 className="text-base font-bold text-slate-900 dark:text-white">
                       1. Nombre y Temario de la Clase
@@ -1531,30 +1497,173 @@ export function ClassSetupWizardModal({
                         )}
                       </div>
 
-                      {/* Resumen de temas seleccionados si ya hay al menos uno */}
+                      {/* ── Panel Amplio de Gestión y Visualización de Temas Seleccionados ── */}
                       {selectedTopicIds.length > 0 && (
-                        <div className="pt-2 border-t border-indigo-100 dark:border-indigo-900/60 space-y-1.5">
-                          <span className="text-[11px] font-bold text-indigo-900 dark:text-indigo-200 flex items-center gap-1">
-                            <CheckCircle2 className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
-                            <span>Temas incluidos para esta clase ({selectedTopicIds.length}):</span>
-                          </span>
-                          <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto p-1 bg-white/80 dark:bg-slate-800/60 rounded-xl border border-indigo-200/60 dark:border-indigo-800/60">
-                            {selectedTopicsDetails.map((t) => (
-                              <span
-                                key={t.topic.id}
-                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-xs font-semibold bg-indigo-50 dark:bg-indigo-950/80 border border-indigo-200 dark:border-indigo-800 text-indigo-900 dark:text-indigo-200"
-                              >
-                                <span className="truncate max-w-[190px]">{t.topic.title}</span>
+                        <div className="pt-4 border-t-2 border-indigo-200/80 dark:border-indigo-900/80 space-y-3">
+                          {/* Barra de herramientas superior */}
+                          <div className="flex flex-col md:flex-row md:items-center justify-between gap-2.5">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="inline-flex items-center gap-1.5 text-xs font-black text-indigo-950 dark:text-indigo-200">
+                                <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+                                <span>Temas incluidos para esta clase:</span>
+                              </span>
+                              <span className="px-2.5 py-0.5 rounded-full text-xs font-black bg-indigo-600 text-white shadow-2xs">
+                                {selectedTopicIds.length} {selectedTopicIds.length === 1 ? 'tema' : 'temas'}
+                              </span>
+                            </div>
+
+                            {/* Controles de Vista, Filtro y Limpieza */}
+                            <div className="flex items-center gap-2 flex-wrap">
+                              {selectedTopicIds.length > 4 && (
+                                <div className="relative">
+                                  <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                                  <input
+                                    type="text"
+                                    value={selectedTopicsSearch}
+                                    onChange={(e) => setSelectedTopicsSearch(e.target.value)}
+                                    placeholder="Buscar en seleccionados..."
+                                    className="pl-7 pr-6 py-1.5 rounded-xl text-xs bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 outline-none focus:ring-1 focus:ring-indigo-500 w-44 sm:w-56"
+                                  />
+                                  {selectedTopicsSearch && (
+                                    <button
+                                      type="button"
+                                      onClick={() => setSelectedTopicsSearch('')}
+                                      className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                                    >
+                                      <X className="w-3 h-3" />
+                                    </button>
+                                  )}
+                                </div>
+                              )}
+
+                              <div className="inline-flex rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-0.5">
                                 <button
                                   type="button"
-                                  onClick={() => toggleTopicSelection(t.topic.id)}
-                                  className="text-indigo-400 hover:text-rose-500 cursor-pointer ml-0.5"
-                                  title="Quitar"
+                                  onClick={() => setSelectedTopicsViewMode('cards')}
+                                  className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition cursor-pointer ${
+                                    selectedTopicsViewMode === 'cards'
+                                      ? 'bg-indigo-600 text-white shadow-2xs'
+                                      : 'text-slate-600 dark:text-slate-300 hover:text-indigo-600'
+                                  }`}
+                                  title="Ver en tarjetas detalladas"
                                 >
-                                  <X className="w-3 h-3" />
+                                  Tarjetas
                                 </button>
-                              </span>
-                            ))}
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedTopicsViewMode('pills')}
+                                  className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition cursor-pointer ${
+                                    selectedTopicsViewMode === 'pills'
+                                      ? 'bg-indigo-600 text-white shadow-2xs'
+                                      : 'text-slate-600 dark:text-slate-300 hover:text-indigo-600'
+                                  }`}
+                                  title="Ver en etiquetas compactas"
+                                >
+                                  Etiquetas
+                                </button>
+                              </div>
+
+                              <button
+                                type="button"
+                                onClick={() => setSelectedTopicsExpanded((v) => !v)}
+                                className="px-2.5 py-1.5 rounded-xl text-[11px] font-bold border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:border-indigo-400 transition cursor-pointer inline-flex items-center gap-1 shadow-2xs"
+                                title={selectedTopicsExpanded ? 'Compactar panel' : 'Expandir área para ver todos sin restricción'}
+                              >
+                                {selectedTopicsExpanded ? (
+                                  <>
+                                    <Minimize2 className="w-3.5 h-3.5" />
+                                    <span>Compactar</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Maximize2 className="w-3.5 h-3.5" />
+                                    <span>Ver todos</span>
+                                  </>
+                                )}
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={clearTopicSelection}
+                                className="px-2.5 py-1.5 rounded-xl text-[11px] font-bold text-rose-600 dark:text-rose-400 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/60 dark:hover:bg-rose-900/60 border border-rose-200 dark:border-rose-900 transition cursor-pointer inline-flex items-center gap-1"
+                                title="Quitar todos los temas seleccionados"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                                <span>Quitar todos</span>
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Contenedor espacioso con altura generosa */}
+                          <div
+                            className={`p-3 bg-white/95 dark:bg-slate-800/90 rounded-2xl border border-indigo-200/90 dark:border-indigo-900/90 transition-all shadow-inner ${
+                              selectedTopicsExpanded
+                                ? 'max-h-[560px] overflow-y-auto'
+                                : 'max-h-72 sm:max-h-80 overflow-y-auto'
+                            }`}
+                          >
+                            {selectedTopicsViewMode === 'cards' ? (
+                              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
+                                {filteredSelectedTopics.map((t, idx) => (
+                                  <div
+                                    key={t.topic.id}
+                                    className="p-3 rounded-xl bg-slate-50 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 hover:border-indigo-300 dark:hover:border-indigo-700 transition flex items-start justify-between gap-2.5 shadow-2xs group"
+                                  >
+                                    <div className="min-w-0 flex-1">
+                                      <div className="flex items-center gap-1.5 mb-1.5">
+                                        <span className="w-5 h-5 rounded-md bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 text-[10px] font-black flex items-center justify-center shrink-0">
+                                          {idx + 1}
+                                        </span>
+                                        <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 truncate">
+                                          {t.moduleTitle}
+                                        </span>
+                                      </div>
+                                      <p className="text-xs font-bold text-slate-900 dark:text-white leading-snug line-clamp-3">
+                                        {t.topic.title}
+                                      </p>
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={() => toggleTopicSelection(t.topic.id)}
+                                      className="p-1 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/60 transition cursor-pointer shrink-0 mt-0.5"
+                                      title="Quitar de la clase"
+                                    >
+                                      <X className="w-4 h-4" />
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <div className="flex flex-wrap gap-2">
+                                {filteredSelectedTopics.map((t, idx) => (
+                                  <span
+                                    key={t.topic.id}
+                                    className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-semibold bg-indigo-50 dark:bg-indigo-950/90 border border-indigo-200 dark:border-indigo-800 text-indigo-900 dark:text-indigo-200 shadow-2xs hover:border-indigo-300"
+                                  >
+                                    <span className="w-4 h-4 rounded-md bg-indigo-200/60 dark:bg-indigo-900 text-indigo-800 dark:text-indigo-200 text-[10px] font-black flex items-center justify-center shrink-0">
+                                      {idx + 1}
+                                    </span>
+                                    <span className="max-w-md sm:max-w-xl font-medium" title={t.topic.title}>
+                                      {t.topic.title}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={() => toggleTopicSelection(t.topic.id)}
+                                      className="text-indigo-400 hover:text-rose-500 hover:bg-rose-100 dark:hover:bg-rose-900/60 p-0.5 rounded-md cursor-pointer transition ml-1"
+                                      title="Quitar"
+                                    >
+                                      <X className="w-3.5 h-3.5" />
+                                    </button>
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+
+                            {filteredSelectedTopics.length === 0 && selectedTopicsSearch && (
+                              <div className="py-6 text-center text-xs text-slate-500 dark:text-slate-400">
+                                No se encontraron temas seleccionados que coincidan con "{selectedTopicsSearch}".
+                              </div>
+                            )}
                           </div>
                         </div>
                       )}
@@ -1563,16 +1672,16 @@ export function ClassSetupWizardModal({
                 </div>
               )}
 
-              {/* ── PASO 2: Horario, Modalidad y Acceso de la Sesión ── */}
+              {/* ── PASO 2: Horario, Modalidad y Guardado de la Sesión ── */}
               {step === 2 && (
-                <div className="space-y-4 max-w-2xl mx-auto py-2">
+                <div className="space-y-4 max-w-4xl mx-auto py-2">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                     <div>
                       <h3 className="text-base font-bold text-slate-900 dark:text-white">
-                        2. Horario, Modalidad y Acceso de la Sesión
+                        2. Horario, Modalidad y Guardado de la Sesión
                       </h3>
                       <p className="text-xs text-slate-500 dark:text-slate-400">
-                        Configura la fecha, duración, modalidad de transmisión o sede física y el acceso para tus alumnos.
+                        Configura el horario, modalidad de transmisión o sede y guarda tu clase con el tema seleccionado.
                       </p>
                     </div>
                     <div>
@@ -1590,44 +1699,68 @@ export function ClassSetupWizardModal({
                     </div>
                   </div>
 
-                  {/* Resumen pedagógico de los temas elegidos en el Paso 1 */}
-                  <div className="p-3.5 rounded-2xl bg-indigo-50/60 dark:bg-indigo-950/30 border border-indigo-200/80 dark:border-indigo-800 flex items-start justify-between gap-3">
-                    <div className="space-y-1.5 min-w-0">
+                  {/* Resumen pedagógico del tema elegido */}
+                  <div className="p-4 rounded-3xl bg-indigo-50/70 dark:bg-indigo-950/40 border border-indigo-200/90 dark:border-indigo-800/80 space-y-2.5 shadow-2xs">
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
                       <div className="flex items-center gap-2">
                         <BookOpen className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
-                        <span className="text-xs font-bold text-slate-900 dark:text-white">
-                          Temas seleccionados para esta clase ({selectedTopicIds.length}):
+                        <span className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider">
+                          Tema Seleccionado para esta Clase
                         </span>
                       </div>
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        {selectedTopicsDetails.length > 0 ? (
-                          selectedTopicsDetails.slice(0, 5).map((t) => (
-                            <span
-                              key={t.topic.id}
-                              className="px-2 py-0.5 rounded-lg text-[11px] font-semibold bg-white dark:bg-slate-800 border border-indigo-200 dark:border-indigo-800 text-indigo-900 dark:text-indigo-200 truncate max-w-[180px]"
-                            >
-                              {t.topic.title}
+                      <button
+                        type="button"
+                        onClick={() => setStep(1)}
+                        className="text-[11px] font-bold text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 dark:hover:text-indigo-300 hover:underline shrink-0 cursor-pointer inline-flex items-center gap-1"
+                      >
+                        <span>← Cambiar o agregar temas</span>
+                      </button>
+                    </div>
+
+                    {selectedTopicsDetails.length > 0 ? (
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="px-3 py-1.5 rounded-xl text-xs font-bold bg-white dark:bg-slate-800 border-2 border-indigo-300 dark:border-indigo-700 text-indigo-900 dark:text-indigo-200 shadow-2xs flex items-center gap-1.5">
+                            <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                            <span>Tema principal: {selectedTopicsDetails[0].topic.title}</span>
+                          </span>
+                          <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
+                            (Módulo: {selectedTopicsDetails[0].moduleTitle})
+                          </span>
+                        </div>
+                        {selectedTopicsDetails.length > 1 && (
+                          <div className="space-y-1.5 pt-1.5 border-t border-indigo-100/60 dark:border-indigo-900/40">
+                            <span className="text-[11px] font-bold text-slate-600 dark:text-slate-300">
+                              Otros temas incluidos ({selectedTopicsDetails.length - 1}):
                             </span>
-                          ))
-                        ) : (
-                          <span className="text-xs text-rose-500 font-semibold">
-                            ⚠️ Aún no has seleccionado temas en el Paso 1
-                          </span>
-                        )}
-                        {selectedTopicsDetails.length > 5 && (
-                          <span className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400">
-                            +{selectedTopicsDetails.length - 5} más
-                          </span>
+                            <div className="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto p-1.5 bg-white/70 dark:bg-slate-800/60 rounded-xl border border-indigo-200/50 dark:border-indigo-800/50">
+                              {selectedTopicsDetails.slice(1).map((t) => (
+                                <span
+                                  key={t.topic.id}
+                                  className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-white dark:bg-slate-800 border border-indigo-200 dark:border-indigo-800 text-indigo-900 dark:text-indigo-200 max-w-sm truncate"
+                                  title={t.topic.title}
+                                >
+                                  {t.topic.title}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
                         )}
                       </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setStep(1)}
-                      className="text-[11px] font-bold text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 dark:hover:text-indigo-300 hover:underline shrink-0 cursor-pointer inline-flex items-center gap-1"
-                    >
-                      <span>← Modificar temas</span>
-                    </button>
+                    ) : (
+                      <div className="p-3 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-rose-700 dark:text-rose-300 flex items-center justify-between gap-2">
+                        <span className="text-xs font-bold">
+                          ⚠️ Aún no has seleccionado ningún tema para esta clase.
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setStep(1)}
+                          className="px-2.5 py-1 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition shrink-0 cursor-pointer"
+                        >
+                          Ir al Paso 1 y seleccionar tema
+                        </button>
+                      </div>
+                    )}
                   </div>
 
                   <div className="space-y-4">
@@ -1666,7 +1799,7 @@ export function ClassSetupWizardModal({
                       </div>
 
                       <div>
-                        <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-1.5">
+                        <label className="text-xs font-bold text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-1.5">
                           <Clock className="w-3.5 h-3.5 text-indigo-500" />
                           <span>Duración Estimada</span>
                         </label>
@@ -1691,7 +1824,7 @@ export function ClassSetupWizardModal({
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                       <div>
-                        <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-1.5">
+                        <label className="text-xs font-bold text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-1.5">
                           <Calendar className="w-3.5 h-3.5 text-indigo-500" />
                           <span>Fecha y Hora de Inicio *</span>
                         </label>
@@ -1787,153 +1920,73 @@ export function ClassSetupWizardModal({
                         <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600" />
                       </label>
                     </div>
+
+                    {/* ── BOTÓN DIRECTO PARA GUARDAR LA CLASE EN PANTALLA 2 ── */}
+                    <div className="p-4 sm:p-5 rounded-3xl bg-gradient-to-r from-emerald-50/90 via-teal-50/70 to-indigo-50/80 dark:from-emerald-950/40 dark:via-teal-950/30 dark:to-indigo-950/30 border-2 border-emerald-300 dark:border-emerald-800 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm">
+                      <div className="space-y-1.5 min-w-0 text-center sm:text-left">
+                        <div className="flex items-center gap-2 justify-center sm:justify-start">
+                          <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+                          <h4 className="text-xs font-black text-emerald-950 dark:text-emerald-200 uppercase tracking-wider">
+                            ¿Listo para guardar tu clase?
+                          </h4>
+                        </div>
+                        <p className="text-xs text-slate-700 dark:text-slate-300 leading-snug">
+                          Clase: <strong>"{title || 'Sin título'}"</strong>
+                          <br />
+                          Tema:{' '}
+                          <strong className="text-indigo-600 dark:text-indigo-400">
+                            {selectedTopicsDetails[0]?.topic.title || 'Ningún tema seleccionado'}
+                          </strong>
+                          {selectedTopicIds.length > 1 ? ` (+${selectedTopicIds.length - 1} más)` : ''}
+                        </p>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                          Fecha: {formattedScheduledDate} · {sessionModality === 'online' ? 'Virtual' : 'Presencial'}
+                        </p>
+                      </div>
+
+                      <div className="flex flex-col sm:flex-row items-center gap-2 w-full sm:w-auto shrink-0">
+                        <button
+                          type="button"
+                          disabled={submitting || !scheduledAt || !title.trim() || selectedTopicIds.length === 0}
+                          onClick={handlePublishClass}
+                          className="w-full sm:w-auto px-5 py-3 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-black shadow-md shadow-emerald-500/25 disabled:opacity-50 cursor-pointer flex items-center justify-center gap-2 transition"
+                        >
+                          {submitting ? (
+                            <span>Guardando clase...</span>
+                          ) : (
+                            <>
+                              <Check className="w-4 h-4 stroke-[3]" />
+                              <span>🚀 Guardar Clase y Tema Seleccionado</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 </div>
               )}
 
-              {/* ── PASO 3: Simulaciones y Evaluaciones ── */}
+              {/* ── PASO 3: Incorporación y Acceso de Alumnos (Opcional) ── */}
               {step === 3 && (
-                <div className="space-y-4 py-2">
-                  <div>
-                    <h3 className="text-base font-bold text-slate-900 dark:text-white">
-                      3. Simulaciones y Evaluaciones Asociadas
-                    </h3>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">
-                      Asigna casos clínicos interactivos de EMG y cuestionarios de comprobación para tus estudiantes.
-                    </p>
-                  </div>
-
-                  {/* Bloque A: Casos Clínicos Simulados */}
-                  <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 space-y-3">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                      <div className="flex items-center gap-2">
-                        <div className="w-7 h-7 rounded-lg bg-teal-50 dark:bg-teal-950/60 text-teal-600 dark:text-teal-400 flex items-center justify-center font-bold">
-                          <Activity className="w-4 h-4" />
-                        </div>
-                        <h4 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">
-                          Casos Clínicos EMG Simulados ({availableCases.length} disponibles)
-                        </h4>
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        <span className="text-[11px] text-slate-400">Dificultad:</span>
-                        <div className="flex p-0.5 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-[10px] font-bold">
-                          {(['easy', 'medium', 'hard'] as const).map((diff) => (
-                            <button
-                              key={diff}
-                              type="button"
-                              onClick={() => setCaseDifficulty(diff)}
-                              className={`px-2 py-0.5 rounded-md transition ${
-                                caseDifficulty === diff
-                                  ? 'bg-teal-600 text-white shadow-2xs'
-                                  : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
-                              }`}
-                            >
-                              {diff === 'easy' ? 'Principiante' : diff === 'medium' ? 'Intermedio' : 'Avanzado'}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
+                <div className="space-y-4 py-2 max-w-4xl mx-auto">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <div>
+                      <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                        3. Incorporación y Acceso de Alumnos (Opcional)
+                      </h3>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">
+                        Elige el método más rápido para que tus estudiantes se unan a esta clase o comparte el enlace.
+                      </p>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-60 overflow-y-auto p-1">
-                      {availableCases.slice(0, 10).map((c) => {
-                        const isSelected = selectedCaseIds.includes(c.patternId);
-                        return (
-                          <div
-                            key={c.patternId}
-                            onClick={() => toggleCaseSelection(c.patternId)}
-                            className={`p-3 rounded-2xl border transition cursor-pointer flex items-start gap-2.5 ${
-                              isSelected
-                                ? 'border-teal-500 bg-teal-50/60 dark:bg-teal-950/40 text-slate-900 dark:text-white'
-                                : 'border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/40'
-                            }`}
-                          >
-                            <input
-                              type="checkbox"
-                              checked={isSelected}
-                              onChange={() => {}}
-                              className="mt-0.5 rounded text-teal-600 focus:ring-teal-500"
-                            />
-                            <div className="min-w-0 flex-1">
-                              <p className="text-xs font-bold truncate">{c.patternName}</p>
-                              <p className="text-[10px] text-slate-400 truncate">{c.category || 'Neuropatía'}</p>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-
-                    <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs">
-                      <label className="flex items-center gap-2 cursor-pointer text-slate-700 dark:text-slate-300">
-                        <input
-                          type="checkbox"
-                          checked={unlimitedAttempts}
-                          onChange={(e) => setUnlimitedAttempts(e.target.checked)}
-                          className="rounded text-teal-600 focus:ring-teal-500"
-                        />
-                        <span>Permitir intentos ilimitados a los alumnos para estudio libre</span>
-                      </label>
-                    </div>
-                  </div>
-
-                  {/* Bloque B: Cuestionarios / Quizzes */}
-                  <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 space-y-3">
-                    <div className="flex items-center gap-2">
-                      <div className="w-7 h-7 rounded-lg bg-purple-50 dark:bg-purple-950/60 text-purple-600 dark:text-purple-400 flex items-center justify-center font-bold">
-                        <FileQuestion className="w-4 h-4" />
-                      </div>
-                      <h4 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">
-                        Cuestionarios de Comprobación (Quizzes)
-                      </h4>
-                    </div>
-
-                    <div className="space-y-2 text-xs">
-                      <label className="flex items-center gap-2.5 p-3 rounded-xl border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/40 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={includeQuiz}
-                          onChange={(e) => setIncludeQuiz(e.target.checked)}
-                          className="rounded text-purple-600 focus:ring-purple-500"
-                        />
-                        <div className="flex-1">
-                          <p className="font-bold text-slate-900 dark:text-white">
-                            Habilitar Quiz interactivo asociado a los temas seleccionados
-                          </p>
-                          <p className="text-[11px] text-slate-400">
-                            Carga automática de preguntas clínicas del banco oficial de NeuroSAFE.
-                          </p>
-                        </div>
-                      </label>
-
-                      {includeQuiz && (
-                        <div className="pl-6 pt-1 space-y-2">
-                          <label className="flex items-center gap-2 cursor-pointer text-slate-600 dark:text-slate-300">
-                            <input
-                              type="checkbox"
-                              checked={quizImmediateFeedback}
-                              onChange={(e) => setQuizImmediateFeedback(e.target.checked)}
-                              className="rounded text-purple-600 focus:ring-purple-500"
-                            />
-                            <span>Calificación automática y retroalimentación inmediata (Modo formativo)</span>
-                          </label>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* ── PASO 4: Incorporación de Alumnos ── */}
-              {step === 4 && (
-                <div className="space-y-4 py-2 max-w-2xl mx-auto">
-                  <div>
-                    <h3 className="text-base font-bold text-slate-900 dark:text-white">
-                      4. Incorporación y Acceso de Alumnos
-                    </h3>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">
-                      Elige el método más rápido para que tus estudiantes se unan a esta clase.
-                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setShowStudentPreviewModal(true)}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-indigo-200 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 text-xs font-bold hover:bg-indigo-100 transition shadow-2xs cursor-pointer"
+                    >
+                      <Eye className="w-3.5 h-3.5" />
+                      <span>Vista previa de estudiante</span>
+                    </button>
                   </div>
 
                   {/* Tabs */}
@@ -2065,140 +2118,30 @@ export function ClassSetupWizardModal({
                     </div>
                   )}
 
-                  <div className="pt-2 text-center">
+                  <div className="pt-3 flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-slate-100 dark:border-slate-800">
                     <button
                       type="button"
-                      onClick={() => setStep(5)}
+                      onClick={() => setStep(2)}
                       className="text-xs font-semibold text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 hover:underline transition"
                     >
-                      Hacer esto más tarde (Saltar al resumen)
+                      ← Volver a Horario
                     </button>
-                  </div>
-                </div>
-              )}
-
-              {/* ── PASO 5: Resumen, Vista Previa del Alumno y Lanzamiento ── */}
-              {step === 5 && (
-                <div className="space-y-4 py-2 max-w-2xl mx-auto">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h3 className="text-base font-bold text-slate-900 dark:text-white">
-                        5. Resumen y Publicación de la Clase
-                      </h3>
-                      <p className="text-xs text-slate-500 dark:text-slate-400">
-                        Revisa la configuración final antes de lanzar la clase a los alumnos.
-                      </p>
-                    </div>
 
                     <button
                       type="button"
-                      onClick={() => setShowStudentPreviewModal(true)}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-indigo-200 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 text-xs font-bold hover:bg-indigo-100 transition shadow-2xs cursor-pointer"
+                      disabled={submitting || !stepStatus.readyToPublish}
+                      onClick={handlePublishClass}
+                      className="w-full sm:w-auto px-6 py-2.5 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-black shadow-md shadow-emerald-500/20 disabled:opacity-50 cursor-pointer flex items-center justify-center gap-2 transition"
                     >
-                      <Eye className="w-3.5 h-3.5" />
-                      <span>Vista previa de estudiante</span>
+                      {submitting ? (
+                        <span>Publicando clase...</span>
+                      ) : (
+                        <>
+                          <Sparkles className="w-4 h-4" />
+                          <span>🚀 Guardar y Publicar Clase</span>
+                        </>
+                      )}
                     </button>
-                  </div>
-
-                  {/* Resumen Cards */}
-                  <div className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 divide-y divide-slate-100 dark:divide-slate-800 overflow-hidden shadow-xs">
-                    {/* Bloque Clase */}
-                    <div className="p-4 flex items-center justify-between gap-3 text-xs">
-                      <div>
-                        <span className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">
-                          Clase / Sesión
-                        </span>
-                        <h4 className="text-sm font-bold text-slate-900 dark:text-white mt-0.5">
-                          {title || 'Sin título'}
-                        </h4>
-                        <p className="text-slate-500 dark:text-slate-400 mt-0.5 flex items-center gap-2">
-                          <span className="inline-flex items-center gap-1">
-                            <Calendar className="w-3.5 h-3.5" /> {formattedScheduledDate}
-                          </span>
-                          <span>·</span>
-                          <span className="inline-flex items-center gap-1">
-                            <Clock className="w-3.5 h-3.5" /> {durationMinutes} min
-                          </span>
-                          <span>·</span>
-                          <span className="capitalize">{sessionModality === 'online' ? 'Virtual' : 'Presencial'}</span>
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setStep(1)}
-                        className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline"
-                      >
-                        Editar
-                      </button>
-                    </div>
-
-                    {/* Bloque Temas */}
-                    <div className="p-4 flex items-center justify-between gap-3 text-xs">
-                      <div>
-                        <span className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">
-                          Temario Asignado ({selectedTopicIds.length} temas)
-                        </span>
-                        <div className="flex flex-wrap gap-1.5 mt-1.5">
-                          {selectedTopicsDetails.length === 0 ? (
-                            <span className="text-rose-500 font-semibold">Sin temas seleccionados (Paso obligatorio)</span>
-                          ) : (
-                            selectedTopicsDetails.map((t) => (
-                              <span
-                                key={t.topic.id}
-                                className="px-2.5 py-0.5 rounded-lg text-xs font-bold bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800"
-                              >
-                                {t.topic.title}
-                              </span>
-                            ))
-                          )}
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setStep(2)}
-                        className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline"
-                      >
-                        Editar
-                      </button>
-                    </div>
-
-                    {/* Bloque Prácticas */}
-                    <div className="p-4 flex items-center justify-between gap-3 text-xs">
-                      <div>
-                        <span className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">
-                          Prácticas y Evaluaciones
-                        </span>
-                        <p className="text-slate-700 dark:text-slate-300 mt-1 font-medium">
-                          {selectedCaseIds.length} {selectedCaseIds.length === 1 ? 'caso EMG' : 'casos EMG'} asignados · Quiz: {includeQuiz ? 'Activo (Formativo)' : 'Desactivado'}
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setStep(3)}
-                        className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline"
-                      >
-                        Editar
-                      </button>
-                    </div>
-
-                    {/* Bloque Alumnos */}
-                    <div className="p-4 flex items-center justify-between gap-3 text-xs">
-                      <div>
-                        <span className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">
-                          Acceso de Alumnos
-                        </span>
-                        <p className="text-slate-700 dark:text-slate-300 mt-1 font-mono font-bold">
-                          Código: {accessCode}
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setStep(4)}
-                        className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline"
-                      >
-                        Editar
-                      </button>
-                    </div>
                   </div>
                 </div>
               )}
@@ -2412,46 +2355,80 @@ export function ClassSetupWizardModal({
                 )}
               </div>
 
-              <div className="flex items-center gap-2">
-                {step < 5 ? (
+              <div className="flex items-center gap-2 flex-wrap">
+                {step === 0 && (
                   <button
                     type="button"
                     onClick={() => {
-                      if (step === 1) {
-                        if (!title.trim()) {
-                          setError('Por favor escribe el nombre de la clase.');
-                          return;
-                        }
-                        if (selectedTopicIds.length === 0) {
-                          setError('Selecciona al menos un tema o subtema para impartir en esta clase.');
-                          return;
-                        }
+                      setError(null);
+                      setStep(1);
+                    }}
+                    className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition shadow-sm cursor-pointer"
+                  >
+                    <span>Comenzar Configuración</span>
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                )}
+
+                {step === 1 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!title.trim()) {
+                        setError('Por favor escribe el nombre de la clase.');
+                        return;
                       }
-                      if (step === 2) {
+                      if (selectedTopicIds.length === 0) {
+                        setError('Selecciona al menos un tema o subtema para impartir en esta clase.');
+                        return;
+                      }
+                      setError(null);
+                      setStep(2);
+                    }}
+                    className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition shadow-sm cursor-pointer"
+                  >
+                    <span>Siguiente: Horario y Guardado</span>
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                )}
+
+                {step === 2 && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => {
                         if (!scheduledAt) {
                           setError('Por favor define la fecha y hora de la clase.');
                           return;
                         }
-                      }
-                      setError(null);
-                      setStep((s) => Math.min(5, s + 1));
-                    }}
-                    className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition shadow-sm cursor-pointer"
-                  >
-                    <span>
-                      {step === 0
-                        ? 'Comenzar Configuración'
-                        : step === 1
-                        ? 'Siguiente: Horario y Modalidad'
-                        : step === 2
-                        ? 'Siguiente: Prácticas'
-                        : step === 4
-                        ? 'Ver Resumen'
-                        : 'Siguiente'}
-                    </span>
-                    <ChevronRight className="w-4 h-4" />
-                  </button>
-                ) : (
+                        setError(null);
+                        setStep(3);
+                      }}
+                      className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-bold hover:bg-slate-50 dark:hover:bg-slate-700 transition cursor-pointer"
+                    >
+                      <span>Siguiente: Invitar Alumnos</span>
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+
+                    <button
+                      type="button"
+                      disabled={submitting || !stepStatus.readyToPublish}
+                      onClick={handlePublishClass}
+                      className="inline-flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-black transition shadow-md shadow-emerald-500/20 disabled:opacity-60 cursor-pointer"
+                    >
+                      {submitting ? (
+                        <span>Publicando clase...</span>
+                      ) : (
+                        <>
+                          <Check className="w-4 h-4 stroke-[3]" />
+                          <span>🚀 Guardar y Publicar Clase</span>
+                        </>
+                      )}
+                    </button>
+                  </>
+                )}
+
+                {step === 3 && (
                   <button
                     type="button"
                     disabled={submitting || !stepStatus.readyToPublish}
@@ -2463,7 +2440,7 @@ export function ClassSetupWizardModal({
                     ) : (
                       <>
                         <Sparkles className="w-4 h-4" />
-                        <span>🚀 Activar y Publicar Clase</span>
+                        <span>🚀 Guardar y Publicar Clase</span>
                       </>
                     )}
                   </button>

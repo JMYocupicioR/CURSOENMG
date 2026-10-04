@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Bell, X, CheckCircle2, Smartphone, ShieldCheck } from 'lucide-react';
+import { Bell, X, CheckCircle2, Smartphone } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthProvider';
 import {
   getNotificationDiagnostics,

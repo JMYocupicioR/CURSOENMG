@@ -1,11 +1,11 @@
 // src/content/modules/module-08-topographic-anatomy.ts
 import { Module } from '../../types/content';
-import brachialPlexusDiagram from '../../assets/images/brachial-plexus-diagram.png';
-import lumbosacralPlexusDiagram from '../../assets/images/lumbosacral-plexus-diagram.png';
-import drgConcept from '../../assets/images/drg-preganglionic-concept.png';
-import martinGruberDiagram from '../../assets/images/martin-gruber-anastomosis.png';
-import dermatomeDiagram from '../../assets/images/dermatome-map-clinical.png';
-import entrapmentSitesDiagram from '../../assets/images/nerve-entrapment-sites.png';
+import brachialPlexusDiagram from '../../assets/images/brachial-plexus-diagram.webp';
+import lumbosacralPlexusDiagram from '../../assets/images/lumbosacral-plexus-diagram.webp';
+import drgConcept from '../../assets/images/drg-preganglionic-concept.webp';
+import martinGruberDiagram from '../../assets/images/martin-gruber-anastomosis.webp';
+import dermatomeDiagram from '../../assets/images/dermatome-map-clinical.webp';
+import entrapmentSitesDiagram from '../../assets/images/nerve-entrapment-sites.webp';
 
 export const module08: Module = {
   id: 'topographic-anatomy',

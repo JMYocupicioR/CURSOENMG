@@ -1,6 +1,18 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { GraduationCap, Lock, Check, ArrowRight, BookOpen, Clock, AlertCircle, Sparkles } from 'lucide-react';
+import {
+  GraduationCap,
+  Lock,
+  Check,
+  ArrowRight,
+  BookOpen,
+  Clock,
+  Sparkles,
+  UserCheck,
+  Calendar,
+  FileText,
+  Download,
+} from 'lucide-react';
 import { useAuth } from '../../contexts/AuthProvider';
 import { useSyllabusCatalog } from '../../hooks/useSyllabusCatalog';
 import { previousSellableCourseId, recommendedNextCourse, sellableCourses } from '../../content/courseCatalog';
@@ -72,13 +84,60 @@ export default function CoursesCatalogPage() {
                 <h2 className="text-xl font-extrabold text-slate-900 dark:text-white mb-2">{course.title}</h2>
                 <p className="text-sm text-slate-600 dark:text-slate-300 mb-4 flex-1">{course.description}</p>
 
+                {/* Docente Titular */}
+                {(course.instructor_name || course.instructor_title) && (
+                  <div className="mb-3 py-2 px-3 rounded-xl bg-blue-50/70 dark:bg-blue-950/30 border border-blue-100 dark:border-blue-900/40 flex items-center gap-2.5 text-xs text-blue-900 dark:text-blue-200">
+                    <UserCheck className="w-4 h-4 text-blue-600 dark:text-cyan-400 shrink-0" />
+                    <div className="min-w-0">
+                      <span className="font-bold text-slate-900 dark:text-white">{course.instructor_name || 'Profesor Titular'}</span>
+                      {course.instructor_title && (
+                        <span className="text-slate-500 dark:text-slate-400 block text-[11px] truncate">{course.instructor_title}</span>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Horario en vivo */}
+                {course.live_schedule_notes && (
+                  <div className="mb-3 py-2 px-3 rounded-xl bg-purple-50/70 dark:bg-purple-950/30 border border-purple-100 dark:border-purple-900/40 flex items-center gap-2.5 text-xs text-purple-900 dark:text-purple-200">
+                    <Calendar className="w-4 h-4 text-purple-600 dark:text-purple-400 shrink-0" />
+                    <div className="min-w-0">
+                      <span className="font-semibold text-purple-900 dark:text-purple-200 block text-[11px]">Sesiones en vivo:</span>
+                      <span className="text-slate-700 dark:text-slate-300 text-xs">{course.live_schedule_notes}</span>
+                    </div>
+                  </div>
+                )}
+
                 {/* Dynamic Price Display */}
-                <div className="mb-4 py-2 px-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/70 dark:border-slate-700/60 flex items-center justify-between">
+                <div className="mb-3 py-2 px-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/70 dark:border-slate-700/60 flex items-center justify-between">
                   <span className="text-xs text-slate-500 font-medium">Inversión del curso:</span>
                   <span className="text-base font-extrabold text-slate-900 dark:text-cyan-300">
                     {course.price_display || 'Consultar'}
                   </span>
                 </div>
+
+                {/* Descarga Brochure Oficial si existe */}
+                {course.syllabus_brochure_url && (
+                  <a
+                    href={course.syllabus_brochure_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center justify-center gap-1.5 text-xs font-semibold py-2 px-3 rounded-xl border border-rose-200 dark:border-rose-900/50 bg-rose-50/60 hover:bg-rose-100 dark:bg-rose-950/30 dark:hover:bg-rose-900/40 text-rose-800 dark:text-rose-300 transition mb-3"
+                  >
+                    <FileText className="w-3.5 h-3.5 text-rose-500 shrink-0" />
+                    <span className="truncate">Descargar Temario Oficial (PDF)</span>
+                    <Download className="w-3 h-3 ml-auto opacity-70" />
+                  </a>
+                )}
+
+                {/* Enlace rápido al temario filtrado */}
+                <Link
+                  to={`/temario?curso=${course.id}`}
+                  className="text-xs font-medium text-blue-600 dark:text-cyan-400 hover:underline inline-flex items-center gap-1 mb-4"
+                >
+                  <BookOpen className="w-3.5 h-3.5" />
+                  <span>Ver desglose de módulos ({modules.length})</span>
+                </Link>
 
                 {prevId && (
                   <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">
@@ -99,7 +158,7 @@ export default function CoursesCatalogPage() {
 
                 {owned ? (
                   <Link
-                    to="/portal?tab=modules"
+                    to={`/portal/curso/${course.id}`}
                     className="inline-flex items-center justify-center gap-2 min-h-[44px] rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold transition shadow-sm"
                   >
                     <span>Ir al curso</span>

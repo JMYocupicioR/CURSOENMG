@@ -302,7 +302,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Solo necesitamos actuar aquí si getSession no lo hizo (poco probable pero defensivo).
         return;
       }
-      if (event === 'TOKEN_REFRESH_FAILED') {
+      if ((event as string) === 'TOKEN_REFRESH_FAILED') {
         console.warn('[Auth] Token refresh falló (400 / invalid_grant). Limpiando tokens locales.');
         void supabase.auth.signOut({ scope: 'local' }).catch(() => {});
         setSession(null);

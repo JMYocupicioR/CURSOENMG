@@ -934,7 +934,7 @@ export default function AssignExamModal({
             <div className="p-3 bg-amber-50/60 dark:bg-amber-950/30 rounded-xl border border-amber-200/80 dark:border-amber-800/60 space-y-3">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
-                  <label className="block font-bold text-amber-900 dark:text-amber-200 mb-1 flex items-center gap-1.5">
+                  <label className="font-bold text-amber-900 dark:text-amber-200 mb-1 flex items-center gap-1.5">
                     <Clock className="w-3.5 h-3.5 text-amber-600" />
                     Tiempo Límite para Resolver:
                   </label>
@@ -1012,7 +1012,7 @@ export default function AssignExamModal({
             <div className="p-3.5 bg-indigo-50/60 dark:bg-indigo-950/30 rounded-xl border border-indigo-200/80 dark:border-indigo-800/60 space-y-3">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
-                  <label className="block font-bold text-indigo-950 dark:text-indigo-200 mb-1 flex items-center gap-1.5">
+                  <label className="font-bold text-indigo-950 dark:text-indigo-200 mb-1 flex items-center gap-1.5">
                     <ShieldCheck className="w-3.5 h-3.5 text-indigo-600" />
                     Límite de Intentos Permitidos:
                   </label>

@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   BookOpen,
@@ -27,7 +27,6 @@ import {
   Send,
   Lock,
   AlertTriangle,
-  Edit3,
   RotateCcw,
   Eye,
   X,
@@ -36,7 +35,10 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthProvider';
 import { getMyAttempts, getMyProgressByModule } from '../../services/quizService';
-import { getUpcomingWorkshops } from '../../services/courseService';
+import {
+  getUpcomingWorkshops,
+  getLiveSessionUrgency,
+} from '../../services/courseService';
 import PendingTasksAlertModal from './PendingTasksAlertModal';
 import { StudentPortalGuide } from './StudentPortalGuide';
 import type { PortalGuideCourseState } from './portalGuideSteps';
@@ -50,7 +52,6 @@ import {
 } from '../../services/portalGuideService';
 import type { PortalWelcomeSlide } from '../../types/database';
 import {
-  isNotificationSupported,
   getNotificationPermission,
   requestNotificationPermission,
   sendTestNotification,
@@ -199,6 +200,7 @@ export default function StudentDashboard() {
   const [guideSourceReady, setGuideSourceReady] = useState(false);
   const [courseForModal, setCourseForModal] = useState<Course | null>(null);
   const [dismissedTopBanner, setDismissedTopBanner] = useState(false);
+  const [dismissedLiveBanner, setDismissedLiveBanner] = useState(false);
   const [deviceNotifStatus, setDeviceNotifStatus] = useState<NotificationPermissionStatus>('default');
   const [testingDeviceNotif, setTestingDeviceNotif] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -234,7 +236,7 @@ export default function StudentDashboard() {
     setDeviceNotifStatus(getNotificationPermission());
 
     try {
-      const unsubscribe = subscribeToRealtimeAssignments(user.id, (updatedAsg, eventType) => {
+      const unsubscribe = subscribeToRealtimeAssignments(user.id, (updatedAsg) => {
         setAssignments((prev) => {
           const idx = prev.findIndex((a) => a.id === updatedAsg.id);
           if (idx >= 0) {
@@ -326,15 +328,9 @@ export default function StudentDashboard() {
         if (cancelled) return;
         setNotifications(mergeServerNotifications(localNotifs, serverNotifs));
 
-        // Check for pending tasks and trigger modal & device notification
+        // Notify device in background if permission is active
         const pendingList = asgs.filter((a) => a.status === 'pending');
         if (pendingList.length > 0) {
-          const today = new Date().toISOString().slice(0, 10);
-          const dismissedDate = localStorage.getItem(`neurosafe_dismiss_pending_modal_${user.id}`);
-          if (dismissedDate !== today && !guideOpen) {
-            setShowPendingTasksModal(true);
-          }
-          // Notify device in background if permission is active
           void checkAndNotifyPendingAssignments(user.id, asgs);
         }
 
@@ -355,6 +351,65 @@ export default function StudentDashboard() {
       cancelled = true;
     };
   }, [user, profile, refreshTrigger]);
+
+  // Detección de urgencia de clase en vivo (dentro de 30 min o en curso)
+  const liveUrgency = useMemo(() => {
+    return getLiveSessionUrgency(workshops, 30);
+  }, [workshops]);
+  const isLiveSessionImminent = liveUrgency.isUrgent;
+
+  // Auto-deep-link a la sesión en vivo si el alumno llega con ?join_live=true
+  useEffect(() => {
+    if (loading || !liveUrgency.isUrgent || !liveUrgency.workshop) return;
+    const joinLive = searchParams.get('join_live') === 'true';
+    if (joinLive) {
+      if (liveUrgency.workshop.stream_url) {
+        window.open(liveUrgency.workshop.stream_url, '_blank');
+      } else {
+        navigate(`/taller/${liveUrgency.workshop.id}`);
+      }
+      searchParams.delete('join_live');
+      setSearchParams(searchParams, { replace: true });
+    }
+  }, [loading, liveUrgency, searchParams, setSearchParams, navigate]);
+
+  const isGuideSnoozedInSession = useCallback(() => {
+    try {
+      return sessionStorage.getItem('neurosafe_portal_guide_snoozed') === 'true';
+    } catch {
+      return false;
+    }
+  }, []);
+
+  const handleSnoozeGuide = () => {
+    setGuideOpen(false);
+    setGuideDismissedThisVisit(true);
+    try {
+      sessionStorage.setItem('neurosafe_portal_guide_snoozed', 'true');
+    } catch {}
+  };
+
+  // Apertura coordinada del modal de tareas (solo si NO hay clase en vivo, ni examen activo, ni guía abierta)
+  useEffect(() => {
+    if (loading || !user || isLiveSessionImminent || guideOpen) return;
+
+    const isExamActive = Boolean(activeExamLock && (remainingActiveSeconds ?? 1) > 0);
+    if (isExamActive) return;
+
+    const pendingList = assignments.filter((a) => a.status === 'pending');
+    if (pendingList.length === 0) return;
+
+    const today = new Date().toISOString().slice(0, 10);
+    const dismissedDate = localStorage.getItem(`neurosafe_dismiss_pending_modal_${user.id}`);
+    let isSnoozedSession = false;
+    try {
+      isSnoozedSession = sessionStorage.getItem(`neurosafe_pending_tasks_snoozed_${user.id}`) === 'true';
+    } catch {}
+
+    if (dismissedDate !== today && !isSnoozedSession) {
+      setShowPendingTasksModal(true);
+    }
+  }, [loading, user, isLiveSessionImminent, guideOpen, activeExamLock, remainingActiveSeconds, assignments]);
 
   // Derived metrics
   const resumeLesson = useMemo(() => {
@@ -381,7 +436,7 @@ export default function StudentDashboard() {
   const metrics = useMemo(() => {
     if (!user) return null;
     return calculateStudentMetrics(user.id, moduleProgress, completedTopicsSet);
-  }, [user, moduleProgress, completedTopicsSet, refreshTrigger]);
+  }, [user, moduleProgress, completedTopicsSet]);
 
   const hasStartedCurriculum = (metrics?.totalCompletedCurriculumTopics || 0) > 0 || Boolean(lastVisited);
 
@@ -406,12 +461,12 @@ export default function StudentDashboard() {
     }
   }, [guideOpen, showPendingTasksModal]);
 
-  // Apertura de la inducción de primer ingreso al portal
+  // Apertura de la inducción de primer ingreso al portal con bypass para clases en vivo y snooze
   useEffect(() => {
     if (loading || !user || !profile || guideDismissedThisVisit) return;
 
     const isExamActive = Boolean(activeExamLock && (remainingActiveSeconds ?? 1) > 0);
-    if (isExamActive) {
+    if (isExamActive || isLiveSessionImminent || isGuideSnoozedInSession()) {
       if (guideOpen) {
         setGuideOpen(false);
       }
@@ -425,19 +480,35 @@ export default function StudentDashboard() {
       setGuideStep(0);
       setGuideOpen(true);
     }
-  }, [loading, user?.id, profile, activeExamLock, remainingActiveSeconds, guideDismissedThisVisit, guideOpen, guideSourceReady, guidePublishedVersion]);
+  }, [
+    loading,
+    user,
+    profile,
+    activeExamLock,
+    remainingActiveSeconds,
+    guideDismissedThisVisit,
+    guideOpen,
+    guideSourceReady,
+    guidePublishedVersion,
+    isLiveSessionImminent,
+    isGuideSnoozedInSession,
+  ]);
 
   useEffect(() => {
     if (!user?.id) return;
     let cancelled = false;
-    fetchPublishedPortalWelcome().then((result) => {
-      if (cancelled) return;
-      if (result) {
-        setGuideSlides(result.slides);
-        setGuidePublishedVersion(result.publishedVersion);
-      }
-      setGuideSourceReady(true);
-    });
+    settleWithTimeout(fetchPublishedPortalWelcome(), null, 'portalWelcome', 5000)
+      .then((result) => {
+        if (cancelled) return;
+        if (result) {
+          setGuideSlides(result.slides);
+          setGuidePublishedVersion(result.publishedVersion);
+        }
+        setGuideSourceReady(true);
+      })
+      .catch(() => {
+        if (!cancelled) setGuideSourceReady(true);
+      });
     return () => {
       cancelled = true;
     };
@@ -481,6 +552,17 @@ export default function StudentDashboard() {
 
   // Guardar persistencia en Supabase (RPC propio) y opcionalmente navegar
   const handleSaveGuide = async (action: 'skip' | 'finish') => {
+    // Si la acción es 'skip', cerramos la UI de inmediato para 0ms de latencia,
+    // y enviamos la persistencia en background sin bloquear la interacción
+    if (action === 'skip') {
+      setGuideOpen(false);
+      setGuideDismissedThisVisit(true);
+      void markPortalGuideSeen(guidePublishedVersion ?? PORTAL_GUIDE_VERSION).then(() => {
+        void refreshProfile();
+      });
+      return;
+    }
+
     if (guideSaving) return;
     setGuideSaving(true);
     setGuideError(null);
@@ -726,6 +808,79 @@ export default function StudentDashboard() {
           {actionError}
         </div>
       )}
+
+      {/* ─── BANNER FAST-TRACK: CLASE EN VIVO INMINENTE O EN PROGRESO (FASE 2) ─── */}
+      {liveUrgency.isUrgent && liveUrgency.workshop && !dismissedLiveBanner && (
+        <aside
+          aria-label="Acceso prioritario a clase en vivo"
+          className="mb-6 p-4 sm:p-5 rounded-3xl bg-gradient-to-r from-red-600 via-rose-600 to-indigo-700 text-white shadow-xl shadow-rose-950/20 border border-white/20 animate-fade-in relative overflow-hidden"
+        >
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 relative z-10">
+            <div className="flex items-start sm:items-center gap-3.5">
+              <div className="w-12 h-12 rounded-2xl bg-white/20 backdrop-blur-md text-white flex items-center justify-center shrink-0 border border-white/30 shadow-md">
+                <Video className="w-6 h-6 animate-pulse text-white" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-white text-rose-700 shadow-xs">
+                    <span className="w-2 h-2 rounded-full bg-rose-600 animate-ping inline-block" />
+                    {liveUrgency.isLiveNow ? 'EN VIVO AHORA' : `COMIENZA EN ${liveUrgency.startsInMinutes ?? 0} MIN`}
+                  </span>
+                  <span className="text-xs font-semibold text-rose-100 uppercase tracking-wider">
+                    Acceso Prioritario Fast-Track
+                  </span>
+                </div>
+                <h3 className="text-base sm:text-lg font-bold text-white mt-1 leading-snug">
+                  {liveUrgency.workshop.title}
+                </h3>
+                <p className="text-xs text-rose-100/90 mt-0.5 line-clamp-1">
+                  {liveUrgency.workshop.description || 'Taller clínico y discusión electromiográfica en tiempo real.'}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2.5 shrink-0 self-end md:self-center">
+              {liveUrgency.workshop.stream_url ? (
+                <a
+                  href={liveUrgency.workshop.stream_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl font-bold text-xs sm:text-sm bg-white text-rose-700 hover:bg-rose-50 shadow-lg shadow-black/20 hover:scale-[1.02] transition-all cursor-pointer"
+                >
+                  <Play className="w-4 h-4 fill-rose-600 text-rose-600" />
+                  <span>Entrar al Stream Directo</span>
+                </a>
+              ) : (
+                <Link
+                  to={`/taller/${liveUrgency.workshop.id}`}
+                  className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl font-bold text-xs sm:text-sm bg-white text-rose-700 hover:bg-rose-50 shadow-lg shadow-black/20 hover:scale-[1.02] transition-all"
+                >
+                  <Video className="w-4 h-4" />
+                  <span>Entrar a la Sala del Taller</span>
+                </Link>
+              )}
+
+              <Link
+                to={`/taller/${liveUrgency.workshop.id}`}
+                className="px-3 py-2 rounded-xl text-xs font-semibold text-white/90 hover:text-white hover:bg-white/10 transition"
+              >
+                Ver Ficha
+              </Link>
+
+              <button
+                type="button"
+                onClick={() => setDismissedLiveBanner(true)}
+                className="p-1.5 rounded-xl text-white/70 hover:text-white hover:bg-white/10 transition cursor-pointer"
+                title="Minimizar aviso"
+                aria-label="Cerrar banner"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        </aside>
+      )}
+
       {/* ─── Hero Header ─── */}
       <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-900 via-indigo-950 to-blue-950 text-white p-6 sm:p-8 md:p-10 shadow-2xl border border-indigo-500/20 mb-8">
         <div className="absolute top-0 right-0 -mt-8 -mr-8 w-72 h-72 rounded-full bg-blue-500/10 blur-3xl pointer-events-none" />
@@ -812,11 +967,15 @@ export default function StudentDashboard() {
                 title={
                   activeExamLock && (remainingActiveSeconds ?? 1) > 0
                     ? 'Termina el examen en curso para ver la guía'
-                    : 'Ver la guía del portal'
+                    : 'Ver las novedades y la guía del portal'
                 }
-                className="text-xs text-slate-300 hover:text-white underline underline-offset-4 decoration-slate-400 hover:decoration-white transition disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                className="relative inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-white/10 hover:bg-white/20 text-slate-200 hover:text-white border border-white/20 transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Guía del portal
+                <Sparkles className="w-3.5 h-3.5 text-blue-300" />
+                <span>Novedades del curso</span>
+                {shouldShowPortalGuide(profile, guidePublishedVersion ?? PORTAL_GUIDE_VERSION) && (
+                  <span className="w-2 h-2 rounded-full bg-blue-400 ring-2 ring-blue-600 animate-pulse" />
+                )}
               </button>
             </div>
           </div>
@@ -1179,6 +1338,177 @@ export default function StudentDashboard() {
       {/* ─── TAB 1: Resumen General ─── */}
       {activeTab === 'summary' && (
         <div className="space-y-8">
+          {/* ─── NEXT BEST ACTION (DIRIGIDO AL APRENDIZAJE) & ACCESOS RÁPIDOS CLÍNICOS (FASE 4) ─── */}
+          <section aria-label="Siguiente mejor acción de aprendizaje" className="space-y-4">
+            {/* Tarjeta Principal de Reanudación Directa */}
+            <div className="p-6 sm:p-7 rounded-3xl border border-blue-200/90 dark:border-blue-900/60 bg-gradient-to-br from-blue-50/80 via-white to-indigo-50/50 dark:from-blue-950/30 dark:via-slate-900/90 dark:to-indigo-950/30 shadow-md backdrop-blur-sm">
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+                <div className="flex-1">
+                  <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold bg-blue-600/10 dark:bg-blue-400/10 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800/60 mb-3">
+                    <Sparkles className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                    <span>Tu Siguiente Mejor Acción de Estudio</span>
+                  </div>
+
+                  {resumeLesson ? (
+                    <div>
+                      <h2 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white leading-tight">
+                        {hasStartedCurriculum
+                          ? `Continuar: Módulo ${resumeLesson.moduleNumber}: ${resumeLesson.moduleTitle}`
+                          : `Comienza tu Formación: Módulo ${resumeLesson.moduleNumber}: ${resumeLesson.moduleTitle}`}
+                      </h2>
+                      <p className="text-sm font-semibold text-blue-600 dark:text-blue-400 mt-1 flex items-center gap-2">
+                        <BookOpen className="w-4 h-4 shrink-0" />
+                        <span>Lección actual: {resumeLesson.topicTitle}</span>
+                      </p>
+                      {resumeLesson.firstIncompleteChildTitle && (
+                        <p className="text-xs text-slate-600 dark:text-slate-300 mt-1 flex items-center gap-1.5">
+                          <span className="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0" />
+                          <span>Subtema pendiente: <strong>{resumeLesson.firstIncompleteChildTitle}</strong></span>
+                        </p>
+                      )}
+
+                      <div className="mt-4 flex flex-col sm:flex-row sm:items-center gap-3">
+                        <div className="flex-1 max-w-md">
+                          <div className="flex justify-between text-xs text-slate-500 mb-1">
+                            <span>Avance curricular general</span>
+                            <span className="font-bold text-slate-700 dark:text-slate-200">
+                              {metrics?.overallProgressPct || 0}%
+                            </span>
+                          </div>
+                          <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2.5 overflow-hidden">
+                            <div
+                              className="bg-gradient-to-r from-blue-600 to-indigo-600 h-full rounded-full transition-all duration-500"
+                              style={{ width: `${metrics?.overallProgressPct || 0}%` }}
+                            />
+                          </div>
+                        </div>
+                        <span className="text-xs text-slate-500 shrink-0">
+                          {resumeLesson.pendingLessonCount} {resumeLesson.pendingLessonCount === 1 ? 'tema pendiente' : 'temas pendientes'}
+                        </span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div>
+                      <h2 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white leading-tight">
+                        ¡Temario curricular completado al 100%!
+                      </h2>
+                      <p className="text-sm text-slate-600 dark:text-slate-300 mt-1">
+                        Has finalizado todas las lecciones del programa. Puedes poner a prueba tu destreza con los simuladores electromiográficos y casos clínicos.
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                <div className="shrink-0 flex flex-col sm:flex-row lg:flex-col gap-3">
+                  {resumeLesson ? (
+                    <Link
+                      to={resumeLesson.url}
+                      className="inline-flex items-center justify-center gap-2.5 px-6 py-3.5 rounded-2xl text-sm font-black bg-gradient-to-r from-blue-600 via-indigo-600 to-cyan-600 hover:from-blue-700 hover:via-indigo-700 hover:to-cyan-700 text-white shadow-lg shadow-blue-600/30 hover:shadow-xl transition-all cursor-pointer"
+                    >
+                      <Play className="w-4 h-4 fill-white" />
+                      <span>{hasStartedCurriculum ? 'Continuar Lección' : 'Empezar Curso'}</span>
+                      <ArrowRight className="w-4 h-4" />
+                    </Link>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => selectTab('modules')}
+                      className="inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-2xl text-sm font-black bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-600/30 transition-all cursor-pointer"
+                    >
+                      <span>Repasar Módulos</span>
+                      <ArrowRight className="w-4 h-4" />
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => selectTab('modules')}
+                    className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-750 border border-slate-200 dark:border-slate-700 transition"
+                  >
+                    <BookOpen className="w-3.5 h-3.5" />
+                    <span>Ver Temario Completo</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Accesos Rápidos a Herramientas Clínicas de 1 Clic */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+              <Link
+                to="/ejercicios"
+                className="group p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 hover:bg-gradient-to-br hover:from-indigo-50/70 hover:to-white dark:hover:from-indigo-950/30 dark:hover:to-slate-900 hover:border-indigo-300 dark:hover:border-indigo-700 shadow-xs hover:shadow-md transition-all flex items-center gap-3.5"
+              >
+                <div className="w-10 h-10 rounded-xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
+                  <Activity className="w-5 h-5" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-bold text-slate-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 truncate">
+                    Simulador de Trazos EMG
+                  </p>
+                  <p className="text-[11px] text-slate-500 truncate">
+                    Potenciales y agujas en vivo
+                  </p>
+                </div>
+                <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-indigo-600 shrink-0 transition" />
+              </Link>
+
+              <Link
+                to="/escalas"
+                className="group p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 hover:bg-gradient-to-br hover:from-purple-50/70 hover:to-white dark:hover:from-purple-950/30 dark:hover:to-slate-900 hover:border-purple-300 dark:hover:border-purple-700 shadow-xs hover:shadow-md transition-all flex items-center gap-3.5"
+              >
+                <div className="w-10 h-10 rounded-xl bg-purple-500/10 text-purple-600 dark:text-purple-400 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
+                  <Brain className="w-5 h-5" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-bold text-slate-900 dark:text-white group-hover:text-purple-600 dark:group-hover:text-purple-400 truncate">
+                    Calculadora de Plexo
+                  </p>
+                  <p className="text-[11px] text-slate-500 truncate">
+                    Diagnóstico topográfico rápido
+                  </p>
+                </div>
+                <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-purple-600 shrink-0 transition" />
+              </Link>
+
+              <button
+                type="button"
+                onClick={() => setShowKardexModal(true)}
+                className="group p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 hover:bg-gradient-to-br hover:from-emerald-50/70 hover:to-white dark:hover:from-emerald-950/30 dark:hover:to-slate-900 hover:border-emerald-300 dark:hover:border-emerald-700 shadow-xs hover:shadow-md transition-all flex items-center gap-3.5 text-left cursor-pointer"
+              >
+                <div className="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
+                  <FileCheck className="w-5 h-5" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-bold text-slate-900 dark:text-white group-hover:text-emerald-600 dark:group-hover:text-emerald-400 truncate">
+                    Mi Kardex Académico
+                  </p>
+                  <p className="text-[11px] text-slate-500 truncate">
+                    Dictamen y horas lectivas
+                  </p>
+                </div>
+                <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-emerald-600 shrink-0 transition" />
+              </button>
+
+              <Link
+                to="/talleres"
+                className="group p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 hover:bg-gradient-to-br hover:from-blue-50/70 hover:to-white dark:hover:from-blue-950/30 dark:hover:to-slate-900 hover:border-blue-300 dark:hover:border-blue-700 shadow-xs hover:shadow-md transition-all flex items-center gap-3.5"
+              >
+                <div className="w-10 h-10 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
+                  <Video className="w-5 h-5" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-bold text-slate-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 truncate">
+                    Clases Grabadas
+                  </p>
+                  <p className="text-[11px] text-slate-500 truncate">
+                    Archivo de sesiones y webinars
+                  </p>
+                </div>
+                <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-blue-600 shrink-0 transition" />
+              </Link>
+            </div>
+          </section>
+
           {/* ─── Cursos en los que estás Activo y Cursando Actualmente ─── */}
           <section className="p-6 sm:p-7 rounded-3xl border border-slate-200/90 dark:border-slate-800 bg-white/95 dark:bg-slate-900/90 shadow-sm backdrop-blur-sm">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6 pb-4 border-b border-slate-100 dark:border-slate-800">
@@ -2970,15 +3300,15 @@ export default function StudentDashboard() {
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800 text-center">
                   <div className="p-2">
                     <p className="text-[10px] uppercase font-bold text-slate-400">Tema Evaluado</p>
-                    <p className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate mt-0.5" title={selectedExamForModal.target_topic_title || 'General'}>
-                      {selectedExamForModal.target_topic_title || 'General'}
+                    <p className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate mt-0.5" title={selectedExamForModal.target_subtopic_title || 'General'}>
+                      {selectedExamForModal.target_subtopic_title || 'General'}
                     </p>
                   </div>
                   <div className="p-2">
                     <p className="text-[10px] uppercase font-bold text-slate-400">Preguntas</p>
                     <p className="text-xs font-bold text-slate-800 dark:text-slate-200 mt-0.5">
                       {selectedExamForModal.target_exam_config?.selectedQuestionIds?.length ||
-                       selectedExamForModal.target_exam_config?.numberOfQuestions ||
+                       selectedExamForModal.target_exam_config?.questionCount ||
                        10} reactivos
                     </p>
                   </div>
@@ -3267,7 +3597,7 @@ export default function StudentDashboard() {
               <div className="flex items-center justify-between p-3.5 rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30">
                 <div className="flex items-center gap-3">
                   {certRequirements?.cedulaVerified ? (
-                    <CheckCircle2 className="w-5 h-5 text-emerald-500 fill-emerald-500 text-white" />
+                    <CheckCircle2 className="w-5 h-5 fill-emerald-500 text-white" />
                   ) : (
                     <AlertCircle className="w-5 h-5 text-amber-500" />
                   )}
@@ -3296,7 +3626,7 @@ export default function StudentDashboard() {
               <div className="flex items-center justify-between p-3.5 rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30">
                 <div className="flex items-center gap-3">
                   {certRequirements?.isOfficialPassing ? (
-                    <CheckCircle2 className="w-5 h-5 text-emerald-500 fill-emerald-500 text-white" />
+                    <CheckCircle2 className="w-5 h-5 fill-emerald-500 text-white" />
                   ) : (
                     <Clock className="w-5 h-5 text-slate-400" />
                   )}
@@ -3325,7 +3655,7 @@ export default function StudentDashboard() {
               <div className="flex items-center justify-between p-3.5 rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30">
                 <div className="flex items-center gap-3">
                   {certRequirements?.cedulaVerified && certRequirements.isOfficialPassing ? (
-                    <CheckCircle2 className="w-5 h-5 text-emerald-500 fill-emerald-500 text-white" />
+                    <CheckCircle2 className="w-5 h-5 fill-emerald-500 text-white" />
                   ) : (
                     <AlertCircle className="w-5 h-5 text-slate-400" />
                   )}
@@ -3472,6 +3802,7 @@ export default function StudentDashboard() {
         onNext={() => setGuideStep((prev) => prev + 1)}
         onSkip={() => handleSaveGuide('skip')}
         onFinish={() => handleSaveGuide('finish')}
+        onSnooze={handleSnoozeGuide}
         stepIndex={guideStep}
         saving={guideSaving}
         saveError={guideError}

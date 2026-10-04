@@ -1,20 +1,15 @@
 import { useState, useEffect, useRef } from 'react';
 import {
   Award,
-  BookOpen,
   Calendar,
   CheckCircle2,
   Clock,
-  Download,
   FileCheck,
   FileText,
-  GraduationCap,
   Printer,
   QrCode,
   ShieldCheck,
-  User,
   X,
-  Building2,
   Sparkles,
   AlertTriangle,
 } from 'lucide-react';

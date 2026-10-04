@@ -3,7 +3,6 @@ import {
   defaultOptionsForType,
   publishedQuestionsToDraft,
   isQuestionCorrect,
-  scoreQuiz,
 } from './quizScoring';
 import type { QuizQuestion } from '../types/quiz';
 

@@ -220,7 +220,7 @@ export async function verifyPhysicianEnrollment(userId: string) {
 export async function rejectPhysicianEnrollment(userId: string, notes?: string) {
   const { error } = await supabase.rpc('reject_physician_enrollment', {
     target_user_id: userId,
-    notes: notes ?? null,
+    notes: notes ?? undefined,
   });
   if (error) throw error;
 }
@@ -397,7 +397,7 @@ export async function reviewRevision(
   const { error } = await supabase.rpc('review_revision', {
     revision_id: revisionId,
     new_status: status,
-    notes: notes ?? null,
+    notes: notes ?? undefined,
   });
   if (error) {
     throw new Error(error.message || error.details || 'Error al procesar la revisión');

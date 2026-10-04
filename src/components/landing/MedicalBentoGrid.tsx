@@ -10,7 +10,6 @@ import {
   ShieldCheck,
   Check,
   Stethoscope,
-  Lock,
   Sparkles,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';

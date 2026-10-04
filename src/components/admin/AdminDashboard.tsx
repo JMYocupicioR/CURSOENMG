@@ -3,7 +3,6 @@ import { Link } from 'react-router-dom';
 import {
   FileCheck,
   CheckCircle2,
-  Video,
   Sparkles,
   ArrowRight,
   Check,
@@ -209,7 +208,7 @@ export default function AdminDashboard() {
   const [showAllQuizzes, setShowAllQuizzes] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [waitlistError, setWaitlistError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [_loading, setLoading] = useState(true);
 
   // Modals state
   const [gradingItem, setGradingItem] = useState<TeacherPendingReviewItem | null>(null);
@@ -422,8 +421,9 @@ export default function AdminDashboard() {
       await approveExamRetake(
         item.assignment.id,
         item.assignment.student_id,
-        profile?.display_name || 'Profesor Titular',
-        'Reintento autorizado por el Profesor Titular.'
+        profile?.id,
+        1,
+        `Reintento autorizado por ${profile?.display_name || 'Profesor Titular'}.`
       );
       setSuccessMessage('¡Solicitud de reintento aprobada! El alumno cuenta con 1 nuevo intento.');
       await loadData();
@@ -527,7 +527,7 @@ export default function AdminDashboard() {
   const thisWeekClass = useMemo(() => {
     const now = new Date();
     const currentWeekItems = itemsInRange(weekItems, startOfWeekMonday(now), endOfWeekMonday(now));
-    const liveWorkshop = currentWeekItems.find((i) => i.type === 'workshop' || i.type === 'class');
+    const liveWorkshop = currentWeekItems.find((i) => i.type === 'session');
     return liveWorkshop || currentWeekItems[0] || null;
   }, [weekItems]);
 

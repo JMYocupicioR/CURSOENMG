@@ -40,7 +40,6 @@ import {
 } from '../../services/editorialService';
 import type { AdminProfileRow } from '../../types/admin';
 import type { AppRole, CourseEnrollment, CourseId } from '../../types/database';
-import { isEnrollmentProfileComplete, isProfileComplete } from '../../utils/adminUtils';
 import { useAuth } from '../../contexts/AuthProvider';
 import {
   getCourseEnrollmentsForUsers,
@@ -359,8 +358,6 @@ export default function AdminUsersPage() {
       ) : (
         <ul className="space-y-4">
           {filteredUsers.map((u) => {
-            const complete = isProfileComplete(u);
-            const enrollmentComplete = isEnrollmentProfileComplete(u);
             const isSelf = u.id === user?.id;
 
             const isPending = u.enrollment_status === 'pending' || u.enrollment_status === 'none';
@@ -368,8 +365,6 @@ export default function AdminUsersPage() {
             const isRejected = u.enrollment_status === 'rejected';
 
             const isCommittee = u.roles.includes('editor') || u.roles.includes('admin');
-            const isContributor = u.roles.includes('contributor');
-            const isStudent = u.roles.includes('student');
 
             return (
               <li

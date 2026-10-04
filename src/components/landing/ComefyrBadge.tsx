@@ -1,4 +1,3 @@
-import React from 'react';
 import { Award, ShieldCheck } from 'lucide-react';
 import { BRAND } from '../../config/brand';
 

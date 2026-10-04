@@ -1,6 +1,6 @@
 // src/content/modules/module-05-repetitive-stimulation.ts
 import { Module } from '../../types/content';
-import nmjIllustration from '../../assets/images/nmj-synapse-illustration.png';
+import nmjIllustration from '../../assets/images/nmj-synapse-illustration.webp';
 import nmjDiagram from '../../assets/images/nmj-physiology-diagram.svg';
 
 export const module05: Module = {

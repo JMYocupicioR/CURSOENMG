@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import {
   User,
   Upload,
@@ -19,7 +19,6 @@ import {
   FileCheck,
   Check,
   X,
-  Plus,
   AlertCircle,
   Shield,
   Briefcase,
@@ -931,7 +930,7 @@ export default function ProfileSetupPage() {
             
             {/* Especialidad */}
             <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
                 <Stethoscope className="w-3.5 h-3.5 text-cyan-500" /> Especialidad médica
               </label>
               <input
@@ -957,7 +956,7 @@ export default function ProfileSetupPage() {
 
             {/* Año de residencia o categoría académica */}
             <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
                 <Briefcase className="w-3.5 h-3.5 text-cyan-500" /> Grado formativo o rol
               </label>
               <input

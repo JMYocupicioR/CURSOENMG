@@ -10,8 +10,7 @@ import {
   UserCheck,
   Lock,
   Unlock,
-  AlertTriangle,
-  CheckCircle2,
+  BookOpen,
 } from 'lucide-react';
 import { AdminLayout } from './AdminLayout';
 import {
@@ -92,6 +91,21 @@ export default function AdminWorkshopsPage() {
     }
     return map;
   }, [workshops, studentIds, cohortRecords]);
+
+  const topicTitleMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const m of allModules) {
+      for (const t of m.topics) {
+        map.set(t.id, t.title);
+        if (t.children) {
+          for (const c of t.children) {
+            map.set(c.id, c.title);
+          }
+        }
+      }
+    }
+    return map;
+  }, []);
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -423,7 +437,7 @@ export default function AdminWorkshopsPage() {
                     </span>
                   </div>
 
-                  <div className="flex items-center gap-2 mb-3">
+                  <div className="flex items-center gap-2 mb-2">
                     <span className="text-xs text-indigo-600 dark:text-indigo-400 line-clamp-1 font-medium">
                       {mod?.title || 'Módulo académico'}
                     </span>
@@ -437,6 +451,13 @@ export default function AdminWorkshopsPage() {
                       {w.session_modality === 'in_person' ? 'Presencial' : 'En línea'}
                     </span>
                   </div>
+
+                  {w.topic_id && (
+                    <div className="mb-3 flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-50/90 dark:bg-indigo-950/60 border border-indigo-200/80 dark:border-indigo-800/60 text-indigo-700 dark:text-indigo-300 text-xs font-medium">
+                      <BookOpen className="w-3.5 h-3.5 shrink-0 text-indigo-600 dark:text-indigo-400" />
+                      <span className="truncate">Tema: {topicTitleMap.get(w.topic_id) || w.topic_id}</span>
+                    </div>
+                  )}
 
                   <div className="space-y-2 mb-4 text-xs text-slate-600 dark:text-slate-300">
                     <div className="flex items-center gap-2">

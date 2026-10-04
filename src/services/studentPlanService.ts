@@ -16,6 +16,7 @@ import type { AdminProfileRow } from '../types/admin';
 import type { QuizAttempt } from '../types/quiz';
 import type { ExamConfig, ExamSession } from '../types/exam';
 import type { Profile } from '../types/database';
+import { getLocalQuizFlagForTopic } from './localQuizzesFallback';
 import { getMyAttempts, getMyProgressByModule } from './quizService';
 import { sendAcademicPush } from './studentToolsService';
 import { calculateStudentMetrics, checkCertificationEligibility, fetchStudentCompletedTopics } from './studentService';
@@ -1104,7 +1105,7 @@ export async function getDetailedExamBreakdown(attempt: QuizAttempt): Promise<St
     quizId: attempt.quiz_id,
     topicId: attempt.topic_id,
     moduleId: attempt.module_id,
-    title: localQuiz?.title ?? `Evaluación: ${attempt.topic_id}`,
+    title: getLocalQuizFlagForTopic(attempt.topic_id)?.title ?? `Evaluación: ${attempt.topic_id}`,
     score: attempt.score,
     passed: attempt.passed,
     completedAt: attempt.completed_at,

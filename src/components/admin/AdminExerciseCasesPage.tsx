@@ -154,7 +154,6 @@ export default function AdminExerciseCasesPage() {
   const examCount = cases.filter(c => c.usageMode === 'exam_only').length;
   const practiceCount = cases.filter(c => c.usageMode === 'practice' || c.usageMode === 'both' || !c.usageMode).length;
   const customCount = cases.filter(c => c.is_custom).length;
-  const rnsCount = cases.filter(c => c.rns && c.rns.length > 0).length;
   const pitfallCount = cases.filter(c => c.isPitfall).length;
 
   const handleCreateNew = () => {

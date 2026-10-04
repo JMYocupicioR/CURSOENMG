@@ -189,7 +189,7 @@ export function TextbookModuleTree({
                         {optionsOpen && (
                           <div className="mt-1 mb-2 flex flex-wrap gap-1" style={{ paddingLeft: depth * 12 + 22 }}>
                             {TOPIC_TOGGLES.map((item) => {
-                              const on = Boolean(resolved[item.key]);
+                              const on = Boolean((resolved as any)[item.key]);
                               return (
                                 <button
                                   key={item.key}

@@ -20,7 +20,6 @@ import { isAppendixModule } from '../../content/appendixModules';
 import { resolveTopicReferences, type Reference } from '../../content/topicReferences';
 import {
   toggleTopicCompleted,
-  markMultipleTopics,
   setLastVisitedTopic,
   getCompletedTopics,
   TOPIC_PROGRESS_EVENT,
@@ -28,7 +27,6 @@ import {
 } from '../../services/studentService';
 import { getPassedQuizTopicIdsSync } from '../../services/quizCompletionGate';
 import {
-  buildLessonResumeUrl,
   findNextIncompleteFlatTopic,
   getNextPendingCurriculumLesson,
   isCurriculumNodeCompleted,

@@ -73,7 +73,17 @@ if (import.meta.env.PROD && 'serviceWorker' in navigator) {
   }
 }
 
-createRoot(document.getElementById('root')!).render(
+const rootElement = document.getElementById('root');
+
+if (!rootElement) {
+  throw new Error('No se encontró el contenedor raíz #root');
+}
+
+// Ensure the static pre-hydration shell never leaks inline layout styles
+// into the interactive app container on mobile browsers.
+rootElement.innerHTML = '';
+
+createRoot(rootElement).render(
   <StrictMode>
     <ErrorBoundary FallbackComponent={ErrorFallback}>
       <AuthProvider>

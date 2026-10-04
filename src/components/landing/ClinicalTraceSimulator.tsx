@@ -18,7 +18,7 @@ interface TraceData {
     markers: { onset: number; peak: { x: number; y: number } };
     summary: string;
     status: 'normal';
-    statusText: 'Dentro de límites fisiológicos';
+    statusText: string;
   };
   pathologic: {
     label: string;
@@ -30,7 +30,7 @@ interface TraceData {
     markers: { onset: number; peak: { x: number; y: number } };
     summary: string;
     status: 'abnormal';
-    statusText: 'Criterios de desmielinización focal / axónica';
+    statusText: string;
   };
   sensitivity: string;
   sweepSpeed: string;
@@ -149,134 +149,125 @@ export function ClinicalTraceSimulator() {
   const activeTrace = isPathologic ? currentCase.pathologic : currentCase.normal;
 
   return (
-    <div className="w-full max-w-5xl mx-auto rounded-3xl bg-slate-900/95 dark:bg-slate-950 text-slate-100 border border-slate-700/60 shadow-2xl shadow-slate-950/40 overflow-hidden backdrop-blur-xl">
-      {/* Oscilloscope Header / Clinical Toolbar */}
-      <div className="px-4 sm:px-6 py-3.5 border-b border-slate-800 flex flex-wrap items-center justify-between gap-3 bg-slate-900/80">
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="text-xs font-mono font-bold tracking-wider text-emerald-400 uppercase">
-              Micro-Demo Interactiva
+    <div className="mx-auto w-full min-w-0 max-w-5xl overflow-hidden rounded-2xl border border-slate-700/80 bg-slate-950 text-slate-100 shadow-[0_20px_55px_rgba(2,6,23,0.52)] sm:rounded-[28px]">
+      <div className="border-b border-slate-800 bg-slate-900/90 px-3.5 py-3 sm:px-6 sm:py-3.5">
+        <div className="flex flex-wrap items-center justify-between gap-2.5">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-emerald-400" aria-hidden />
+            <div className="min-w-0 leading-tight">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-emerald-300 sm:tracking-[0.14em]">
+                Demo clínica interactiva
+              </p>
+              <p className="hidden text-xs text-slate-400 md:block">
+                Visualizador electrofisiológico calibrado
+              </p>
+            </div>
+          </div>
+
+          <div className="flex min-w-0 flex-wrap items-center gap-1.5 text-[11px] font-mono tabular-nums text-slate-300">
+            <span className="rounded-md border border-slate-700 bg-slate-900 px-2 py-1">
+              {currentCase.sensitivity}
+            </span>
+            <span className="rounded-md border border-slate-700 bg-slate-900 px-2 py-1">
+              {currentCase.sweepSpeed}
+            </span>
+            <span className="hidden rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-slate-400 lg:inline-flex">
+              Filtro 20 Hz a 2 kHz
             </span>
           </div>
-          <span className="text-slate-600 hidden sm:inline">|</span>
-          <span className="text-xs text-slate-300 font-medium hidden md:inline">
-            Visualizador Electrofisiológico en Tiempo Real
-          </span>
-        </div>
-
-        {/* Technical Calibration Pill */}
-        <div className="flex items-center gap-2 text-[11px] font-mono text-slate-400">
-          <span className="px-2 py-0.5 rounded bg-slate-800/90 border border-slate-700">
-            {currentCase.sensitivity}
-          </span>
-          <span className="px-2 py-0.5 rounded bg-slate-800/90 border border-slate-700">
-            {currentCase.sweepSpeed}
-          </span>
-          <span className="hidden lg:inline-flex px-2 py-0.5 rounded bg-blue-950/80 text-blue-300 border border-blue-800/60">
-            Filtro: 20 Hz - 2 kHz
-          </span>
         </div>
       </div>
 
-      {/* Case Selector Tabs */}
-      <div className="px-4 sm:px-6 pt-3 pb-2 flex items-center gap-2 border-b border-slate-800/80 overflow-x-auto scrollbar-none bg-slate-900/50">
-        <span className="text-xs text-slate-400 font-medium whitespace-nowrap mr-1 flex items-center gap-1.5">
-          <Stethoscope className="w-3.5 h-3.5 text-blue-400" />
-          Caso:
-        </span>
-        {CLINICAL_CASES.map((c, idx) => (
-          <button
-            key={c.id}
-            onClick={() => {
-              setActiveCaseIndex(idx);
-              setIsPathologic(false);
-            }}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap flex items-center gap-1.5 ${
-              activeCaseIndex === idx
-                ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
-            }`}
-          >
-            <span>{c.title}</span>
-          </button>
-        ))}
+      <div className="border-b border-slate-800/80 bg-slate-900/70 px-3.5 pb-2 pt-3 sm:px-6">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="mr-1 flex items-center gap-1.5 whitespace-nowrap text-xs font-medium text-slate-400">
+            <Stethoscope className="h-3.5 w-3.5 text-cyan-400" />
+            Caso:
+          </span>
+          {CLINICAL_CASES.map((c, idx) => (
+            <button
+              key={c.id}
+              onClick={() => {
+                setActiveCaseIndex(idx);
+                setIsPathologic(false);
+              }}
+              aria-pressed={activeCaseIndex === idx}
+              className={`max-w-full rounded-lg px-3 py-1.5 text-left text-xs font-medium leading-snug transition focus-visible:ring-2 focus-visible:ring-cyan-400/80 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950 ${
+                activeCaseIndex === idx
+                  ? 'bg-cyan-500/90 text-slate-950'
+                  : 'text-slate-400 hover:bg-slate-800/70 hover:text-slate-100'
+              }`}
+            >
+              {c.title}
+            </button>
+          ))}
+        </div>
       </div>
 
-      {/* Main Interactive Screen */}
-      <div className="grid lg:grid-cols-12 gap-0">
-        {/* Waveform Trace Viewport (7 Cols) */}
-        <div className="lg:col-span-7 p-4 sm:p-6 flex flex-col justify-between border-b lg:border-b-0 lg:border-r border-slate-800 relative bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950">
-          {/* Technique description & Toggle button */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
+      <div className="grid min-w-0 lg:grid-cols-12">
+        <div className="relative flex min-w-0 flex-col justify-between border-b border-slate-800 bg-slate-950 p-3.5 sm:p-6 lg:col-span-7 lg:border-b-0 lg:border-r">
+          <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <div className="text-xs font-mono text-cyan-400">{currentCase.nerve}</div>
-              <div className="text-xs text-slate-400 line-clamp-1">{currentCase.technique}</div>
+              <p className="text-xs font-mono text-cyan-300">{currentCase.nerve}</p>
+              <p className="line-clamp-1 text-xs text-slate-400">{currentCase.technique}</p>
             </div>
 
-            {/* ONE-CLICK TOGGLE: Normal vs Pathologic */}
-            <div className="inline-flex p-1 rounded-xl bg-slate-800/90 border border-slate-700/80 self-start sm:self-auto shrink-0">
+            <div className="inline-flex shrink-0 self-start rounded-xl border border-slate-700/80 bg-slate-900 p-1 sm:self-auto">
               <button
                 onClick={() => setIsPathologic(false)}
-                className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
-                  !isPathologic
-                    ? 'bg-emerald-500 text-slate-950 shadow-sm'
-                    : 'text-slate-400 hover:text-white'
+                aria-pressed={!isPathologic}
+                className={`flex items-center gap-1.5 rounded-lg px-3 py-1 text-xs font-semibold transition focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900 ${
+                  !isPathologic ? 'bg-emerald-400 text-slate-950' : 'text-slate-400 hover:text-white'
                 }`}
               >
-                <CheckCircle2 className="w-3.5 h-3.5" />
+                <CheckCircle2 className="h-3.5 w-3.5" />
                 Normal
               </button>
               <button
                 onClick={() => setIsPathologic(true)}
-                className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
-                  isPathologic
-                    ? 'bg-amber-500 text-slate-950 shadow-sm'
-                    : 'text-slate-400 hover:text-white'
+                aria-pressed={isPathologic}
+                className={`flex items-center gap-1.5 rounded-lg px-3 py-1 text-xs font-semibold transition focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900 ${
+                  isPathologic ? 'bg-amber-400 text-slate-950' : 'text-slate-400 hover:text-white'
                 }`}
               >
-                <AlertTriangle className="w-3.5 h-3.5" />
+                <AlertTriangle className="h-3.5 w-3.5" />
                 Patológico
               </button>
             </div>
           </div>
 
-          {/* Oscilloscope Grid Canvas */}
-          <div className="relative w-full h-56 sm:h-64 rounded-2xl bg-slate-950 border border-slate-800/90 overflow-hidden shadow-inner flex items-center justify-center">
-            {/* Grid Lines (Medical Oscilloscope calibrated divisions) */}
+          <div className="relative flex h-44 w-full min-w-0 items-center justify-center overflow-hidden rounded-2xl border border-slate-800/90 bg-slate-950 shadow-inner sm:h-64">
             <div
-              className="absolute inset-0 opacity-20 pointer-events-none"
+              className="pointer-events-none absolute inset-0 opacity-20"
               style={{
                 backgroundImage: `
-                  linear-gradient(to right, #38bdf8 1px, transparent 1px),
-                  linear-gradient(to bottom, #38bdf8 1px, transparent 1px)
+                  linear-gradient(to right, #334155 1px, transparent 1px),
+                  linear-gradient(to bottom, #334155 1px, transparent 1px)
                 `,
                 backgroundSize: '24px 24px',
               }}
             />
 
-            {/* Midline horizontal reference */}
-            <div className="absolute top-1/2 left-0 right-0 h-[1px] bg-slate-700/60 border-t border-dashed border-slate-600/50" />
+            <div className="absolute left-0 right-0 top-1/2 h-[1px] border-t border-dashed border-slate-700/70" />
 
-            {/* Stimulus indicator */}
             {currentCase.id !== 'needle-emg' && (
-              <div className="absolute top-3 left-7 flex items-center gap-1 text-[10px] font-mono text-cyan-400 bg-cyan-950/60 border border-cyan-800/40 px-1.5 py-0.5 rounded">
-                <Zap className="w-2.5 h-2.5" /> Estímulo 0 ms
+              <div className="absolute left-7 top-3 flex items-center gap-1 rounded border border-cyan-800/70 bg-cyan-950/60 px-1.5 py-0.5 text-[10px] font-mono text-cyan-300">
+                <Zap className="h-2.5 w-2.5" />
+                Estímulo 0 ms
               </div>
             )}
 
-            {/* SVG Waveform Trace */}
             <svg
               viewBox="0 0 600 240"
-              className="w-full h-full relative z-10 filter drop-shadow-[0_0_8px_rgba(56,189,248,0.3)]"
+              className="relative z-10 h-full w-full"
               preserveAspectRatio="none"
             >
               <AnimatePresence mode="wait">
                 <motion.path
                   key={`${currentCase.id}-${isPathologic ? 'path' : 'norm'}`}
-                  initial={{ pathLength: 0, opacity: 0.2 }}
+                  initial={{ pathLength: 0, opacity: 0.35 }}
                   animate={{ pathLength: 1, opacity: 1 }}
-                  transition={{ duration: 0.55, ease: 'easeOut' }}
+                  transition={{ duration: 0.45, ease: 'easeOut' }}
                   d={activeTrace.path}
                   fill="none"
                   stroke={isPathologic ? '#f59e0b' : '#38bdf8'}
@@ -286,9 +277,8 @@ export function ClinicalTraceSimulator() {
                 />
               </AnimatePresence>
 
-              {/* Peak Marker Tag */}
               {activeTrace.markers.peak.x > 0 && (
-                <g className="transition-all duration-300">
+                <g>
                   <circle
                     cx={activeTrace.markers.peak.x}
                     cy={activeTrace.markers.peak.y}
@@ -309,118 +299,95 @@ export function ClinicalTraceSimulator() {
               )}
             </svg>
 
-            {/* Status Watermark */}
-            <div className="absolute bottom-2.5 right-3 text-[10px] font-mono px-2 py-0.5 rounded bg-slate-900/90 border border-slate-700/60 text-slate-300">
+            <div className="absolute bottom-2.5 right-3 rounded border border-slate-700/70 bg-slate-900/95 px-2 py-0.5 text-[10px] font-mono text-slate-300">
               {activeTrace.label}
             </div>
           </div>
 
-          <div className="mt-2.5 flex items-center justify-between text-[11px] text-slate-400">
-            <span className="flex items-center gap-1.5">
-              <Activity className="w-3.5 h-3.5 text-blue-400" />
-              Trazo bioeléctrico calibrado para correlación clínica
+          <div className="mt-2.5 flex min-w-0 flex-wrap items-center justify-between gap-x-3 gap-y-1 text-[11px] text-slate-400">
+            <span className="flex min-w-0 items-center gap-1.5">
+              <Activity className="h-3.5 w-3.5 shrink-0 text-cyan-400" />
+              <span className="min-w-0">Trazo calibrado para correlación clínica</span>
             </span>
             <span className="font-mono text-slate-500">ElectroDx Engine v2</span>
           </div>
         </div>
 
-        {/* Telemetry & Quantitative Analysis (5 Cols) */}
-        <div className="lg:col-span-5 p-4 sm:p-6 flex flex-col justify-between bg-slate-900/90">
+        <div className="flex min-w-0 flex-col justify-between bg-slate-900/95 p-3.5 sm:p-6 lg:col-span-5">
           <div>
-            <div className="flex items-center justify-between mb-4">
-              <span className="text-xs uppercase font-mono font-bold tracking-wider text-slate-400 flex items-center gap-1.5">
-                <Sliders className="w-3.5 h-3.5 text-cyan-400" />
-                Telemetría Clínica
+            <div className="mb-4 flex items-center justify-between">
+              <span className="flex items-center gap-1.5 text-xs font-mono font-bold uppercase tracking-wider text-slate-400">
+                <Sliders className="h-3.5 w-3.5 text-cyan-400" />
+                Telemetría clínica
               </span>
               <span
-                className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border ${
+                className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${
                   isPathologic
-                    ? 'bg-amber-950/70 text-amber-300 border-amber-800/80'
-                    : 'bg-emerald-950/70 text-emerald-300 border-emerald-800/80'
+                    ? 'border-amber-800/80 bg-amber-950/70 text-amber-300'
+                    : 'border-emerald-800/80 bg-emerald-950/70 text-emerald-300'
                 }`}
               >
                 {isPathologic ? 'Patológico' : 'Fisiológico'}
               </span>
             </div>
 
-            {/* Numeric Parameters Grid in Monospace Font */}
-            <div className="grid grid-cols-2 gap-2.5 mb-5 font-mono">
-              <div className="p-3 rounded-xl bg-slate-950/70 border border-slate-800">
-                <div className="text-[10px] text-slate-400 uppercase tracking-tight">Latencia Distal</div>
-                <div
-                  className={`text-lg sm:text-xl font-bold mt-0.5 ${
-                    isPathologic ? 'text-amber-400' : 'text-emerald-400'
-                  }`}
-                >
+            <div className="mb-5 grid min-w-0 grid-cols-2 gap-2 font-mono tabular-nums sm:gap-2.5">
+              <div className="min-w-0 rounded-xl border border-slate-800 bg-slate-950/70 p-2.5 sm:p-3">
+                <div className="text-[10px] uppercase tracking-tight text-slate-400">Latencia distal</div>
+                <div className={`mt-0.5 break-words text-base font-bold leading-tight sm:text-xl ${isPathologic ? 'text-amber-400' : 'text-emerald-400'}`}>
                   {activeTrace.latency}
                 </div>
-                <div className="text-[9px] text-slate-500 mt-0.5">Norma: &lt; 4.0 ms</div>
+                <div className="mt-0.5 text-[9px] text-slate-500">Norma: &lt; 4.0 ms</div>
               </div>
 
-              <div className="p-3 rounded-xl bg-slate-950/70 border border-slate-800">
-                <div className="text-[10px] text-slate-400 uppercase tracking-tight">Amplitud Pico</div>
-                <div
-                  className={`text-lg sm:text-xl font-bold mt-0.5 ${
-                    isPathologic ? 'text-amber-400' : 'text-emerald-400'
-                  }`}
-                >
+              <div className="min-w-0 rounded-xl border border-slate-800 bg-slate-950/70 p-2.5 sm:p-3">
+                <div className="text-[10px] uppercase tracking-tight text-slate-400">Amplitud pico</div>
+                <div className={`mt-0.5 break-words text-base font-bold leading-tight sm:text-xl ${isPathologic ? 'text-amber-400' : 'text-emerald-400'}`}>
                   {activeTrace.amplitude}
                 </div>
-                <div className="text-[9px] text-slate-500 mt-0.5">Norma: &gt; 4.5 mV</div>
+                <div className="mt-0.5 text-[9px] text-slate-500">Norma: &gt; 4.5 mV</div>
               </div>
 
-              <div className="p-3 rounded-xl bg-slate-950/70 border border-slate-800">
-                <div className="text-[10px] text-slate-400 uppercase tracking-tight">Velocidad (VCN)</div>
-                <div
-                  className={`text-lg sm:text-xl font-bold mt-0.5 ${
-                    isPathologic ? 'text-amber-400' : 'text-emerald-400'
-                  }`}
-                >
+              <div className="min-w-0 rounded-xl border border-slate-800 bg-slate-950/70 p-2.5 sm:p-3">
+                <div className="text-[10px] uppercase tracking-tight text-slate-400">Velocidad (VCN)</div>
+                <div className={`mt-0.5 break-words text-base font-bold leading-tight sm:text-xl ${isPathologic ? 'text-amber-400' : 'text-emerald-400'}`}>
                   {activeTrace.velocity}
                 </div>
-                <div className="text-[9px] text-slate-500 mt-0.5">Norma: &gt; 50 m/s</div>
+                <div className="mt-0.5 text-[9px] text-slate-500">Norma: &gt; 50 m/s</div>
               </div>
 
-              <div className="p-3 rounded-xl bg-slate-950/70 border border-slate-800">
-                <div className="text-[10px] text-slate-400 uppercase tracking-tight">Duración CMAP</div>
-                <div
-                  className={`text-lg sm:text-xl font-bold mt-0.5 ${
-                    isPathologic ? 'text-amber-400' : 'text-emerald-400'
-                  }`}
-                >
+              <div className="min-w-0 rounded-xl border border-slate-800 bg-slate-950/70 p-2.5 sm:p-3">
+                <div className="text-[10px] uppercase tracking-tight text-slate-400">Duración CMAP</div>
+                <div className={`mt-0.5 break-words text-base font-bold leading-tight sm:text-xl ${isPathologic ? 'text-amber-400' : 'text-emerald-400'}`}>
                   {activeTrace.duration}
                 </div>
-                <div className="text-[9px] text-slate-500 mt-0.5">Dispersión: normal</div>
+                <div className="mt-0.5 text-[9px] text-slate-500">Dispersión: normal</div>
               </div>
             </div>
 
-            {/* Diagnostic Conclusion Box */}
-            <div className="p-3.5 rounded-2xl bg-slate-950/80 border border-slate-800/90 mb-4">
-              <div className="text-xs font-semibold text-slate-200 mb-1 flex items-center gap-1.5">
+            <div className="mb-4 rounded-2xl border border-slate-800/90 bg-slate-950/80 p-3.5">
+              <div className="mb-1 flex items-start gap-1.5 text-xs font-semibold leading-snug text-slate-200">
                 {isPathologic ? (
-                  <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+                  <AlertTriangle className="h-4 w-4 shrink-0 text-amber-400" />
                 ) : (
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
                 )}
                 <span>{activeTrace.statusText}</span>
               </div>
-              <p className="text-xs text-slate-300 leading-relaxed">
-                {activeTrace.summary}
-              </p>
+              <p className="text-xs leading-relaxed text-slate-300">{activeTrace.summary}</p>
             </div>
           </div>
 
-          {/* Action to deeper simulator */}
-          <div className="pt-2 border-t border-slate-800 flex items-center justify-between gap-3">
-            <span className="text-[11px] text-slate-400">
+          <div className="flex min-w-0 flex-col gap-2 border-t border-slate-800 pt-3 sm:flex-row sm:items-center sm:justify-between">
+            <span className="min-w-0 text-[11px] leading-snug text-slate-400">
               Más de 470 trazos diagnósticos interactivos con registro guiado.
             </span>
             <Link
               to="/ejercicios"
-              className="inline-flex items-center gap-1 text-xs font-semibold text-cyan-400 hover:text-cyan-300 transition-colors whitespace-nowrap"
+              className="inline-flex items-center gap-1 whitespace-nowrap text-xs font-semibold text-cyan-400 transition-colors hover:text-cyan-300"
             >
               <span>Abrir simulador</span>
-              <ArrowRight className="w-3.5 h-3.5" />
+              <ArrowRight className="h-3.5 w-3.5" />
             </Link>
           </div>
         </div>

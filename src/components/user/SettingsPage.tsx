@@ -20,16 +20,18 @@ import {
   Send,
   AlertTriangle,
   CheckCircle2,
+  RefreshCw,
+  Sparkles,
 } from 'lucide-react';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useAuth } from '../../contexts/AuthProvider';
 import { useStaffViewStore } from '../../stores/staffViewStore';
 import { usePWAInstallStore } from '../../stores/pwaInstallStore';
+import { usePWAUpdateStore } from '../../stores/pwaUpdateStore';
 import {
   getNotificationDiagnostics,
   requestNotificationPermission,
   sendTestNotification,
-  type NotificationPermissionStatus,
 } from '../../services/deviceNotificationService';
 import { BackButton } from '../common/BackButton';
 
@@ -51,10 +53,21 @@ export default function SettingsPage() {
   const [passError, setPassError] = useState<string | null>(null);
   const [passSuccess, setPassSuccess] = useState(false);
 
-  const { isStandalone, isIOS, canInstall, triggerInstall } = usePWAInstallStore();
+  const { isStandalone, isIOS, triggerInstall } = usePWAInstallStore();
+  const { needRefresh, isUpdating, isChecking, updateApp, checkForUpdate } = usePWAUpdateStore();
+  const [updateCheckMessage, setUpdateCheckMessage] = useState<string | null>(null);
   const [notifDiag, setNotifDiag] = useState(() => getNotificationDiagnostics());
   const [requestingNotifs, setRequestingNotifs] = useState(false);
   const [testSent, setTestSent] = useState(false);
+
+  const handleManualUpdateCheck = async () => {
+    setUpdateCheckMessage(null);
+    const found = await checkForUpdate();
+    if (!found) {
+      setUpdateCheckMessage('La plataforma ya está en la versión más reciente.');
+      setTimeout(() => setUpdateCheckMessage(null), 4000);
+    }
+  };
 
   const handleToggleNotifications = async () => {
     if (!user?.id) return;
@@ -421,6 +434,54 @@ export default function SettingsPage() {
               </button>
             </div>
           )}
+        </div>
+
+        {/* Control de Actualizaciones Web / Despliegues */}
+        <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-start gap-3">
+            <div className="w-8 h-8 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200/60 dark:border-emerald-800 flex items-center justify-center shrink-0">
+              <RefreshCw className={`w-4 h-4 text-emerald-600 dark:text-emerald-400 ${isChecking || isUpdating ? 'animate-spin' : ''}`} />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-slate-800 dark:text-slate-200">Versión Web y Actualizaciones</span>
+                {needRefresh && (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/60 px-2 py-0.5 rounded-full">
+                    <Sparkles className="w-2.5 h-2.5" /> Nueva versión lista
+                  </span>
+                )}
+              </div>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                {needRefresh
+                  ? 'Se ha detectado una nueva versión en el servidor lista para activarse.'
+                  : updateCheckMessage || 'Tu navegador sincroniza automáticamente los últimos despliegues del Diplomado.'}
+              </p>
+            </div>
+          </div>
+
+          <div className="shrink-0 self-end sm:self-center">
+            {needRefresh ? (
+              <button
+                type="button"
+                onClick={() => void updateApp()}
+                disabled={isUpdating}
+                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold transition shadow-sm cursor-pointer disabled:opacity-50"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isUpdating ? 'animate-spin' : ''}`} />
+                <span>{isUpdating ? 'Actualizando...' : 'Actualizar ahora'}</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => void handleManualUpdateCheck()}
+                disabled={isChecking}
+                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/60 text-slate-700 dark:text-slate-300 text-xs font-semibold transition cursor-pointer disabled:opacity-50"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isChecking ? 'animate-spin' : ''}`} />
+                <span>{isChecking ? 'Comprobando...' : 'Comprobar actualizaciones'}</span>
+              </button>
+            )}
+          </div>
         </div>
       </section>
 

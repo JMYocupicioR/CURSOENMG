@@ -4,6 +4,7 @@ import { Save, Send } from 'lucide-react';
 import { allModules } from '../../content/modules';
 import { useAuth } from '../../contexts/AuthProvider';
 import { saveRevision, submitRevision, getPublishedModules, getRevisionById } from '../../services/editorialService';
+import { mergeModuleLists } from '../../services/moduleMerge';
 import { useGoBack } from '../../hooks/useGoBack';
 import { BackButton } from '../common/BackButton';
 import type { RevisionPayload } from '../../types/database';

@@ -25,6 +25,13 @@ describe('postLoginPath', () => {
     expect(postLoginPath({ isAdmin: true, next: '/estudiante' })).toBe('/admin');
     expect(postLoginPath({ next: '/portal' })).toBe('/portal');
   });
+
+  it('honors direct deep linking parameters for live sessions and workshops', () => {
+    expect(postLoginPath({ joinLive: true })).toBe('/portal?join_live=true');
+    expect(postLoginPath({ redirectToWorkshop: 'ws-emg-101' })).toBe('/taller/ws-emg-101');
+    expect(postLoginPathFromRoles(['student'], undefined, { joinLive: true })).toBe('/portal?join_live=true');
+    expect(postLoginPathFromRoles(['student'], undefined, { redirectToWorkshop: 'taller-live' })).toBe('/taller/taller-live');
+  });
 });
 
 describe('shouldRedirectToStaffInbox', () => {

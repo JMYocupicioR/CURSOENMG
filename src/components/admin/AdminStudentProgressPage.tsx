@@ -23,21 +23,12 @@ import {
   Save,
   Check,
   Search,
-  Filter,
-  Shield,
-  Stethoscope,
   Building2,
-  ChevronRight,
   ChevronDown,
   ChevronUp,
   Circle,
-  TrendingUp,
-  UserCheck,
-  HelpCircle,
   BarChart3,
   Layers,
-  Phone,
-  Linkedin,
   FileCheck,
   RefreshCw,
   RotateCcw,
@@ -51,9 +42,6 @@ import {
   getStudentFullDossier,
   getDetailedExamBreakdown,
   createLearningPlan,
-  updateLearningPlan,
-  deleteLearningPlan,
-  createAssignment,
   gradeAssignment,
   deleteAssignment,
   saveAdminStudentNotes,
@@ -68,8 +56,6 @@ import type { Topic, Module } from '../../types/content';
 import type {
   StudentFullDossier,
   StudentExamDetail,
-  AssignmentType,
-  AssignmentPriority,
   StudentAssignment,
 } from '../../types/studentPlan';
 import StudentKardexModal from './StudentKardexModal';
@@ -431,18 +417,6 @@ export default function AdminStudentProgressPage() {
   const [showAssignmentModal, setShowAssignmentModal] = useState(false);
   const [showHomeworkModal, setShowHomeworkModal] = useState(false);
   const [showAssignCaseModal, setShowAssignCaseModal] = useState(false);
-  const [asgTitle, setAsgTitle] = useState('');
-  const [asgType, setAsgType] = useState<AssignmentType>('exam');
-  const [asgDesc, setAsgDesc] = useState('');
-  const [asgModuleId, setAsgModuleId] = useState('');
-  const [asgTopicId, setAsgTopicId] = useState('');
-  const [asgDueDate, setAsgDueDate] = useState(() => {
-    const d = new Date(Date.now() + 7 * 86400000);
-    return d.toISOString().slice(0, 16);
-  });
-  const [asgPriority, setAsgPriority] = useState<AssignmentPriority>('normal');
-  const [asgMinScore, setAsgMinScore] = useState(70);
-  const [savingAsg, setSavingAsg] = useState(false);
 
   // Grade Assignment Modal state
   const [gradingTarget, setGradingTarget] = useState<StudentAssignment | null>(null);
@@ -493,13 +467,7 @@ export default function AdminStudentProgressPage() {
     }
   };
 
-  const handleQuickAssignTopic = (topicTitle: string, moduleId: string, topicId: string) => {
-    setAsgTitle(`Lectura / Tarea: ${topicTitle}`);
-    setAsgType('reading');
-    setAsgDesc(`Revisar a profundidad y dominar el subtema ${topicTitle} (${topicId}) del Módulo ${moduleId}.`);
-    setAsgModuleId(moduleId);
-    setAsgTopicId(topicTitle);
-    setAsgPriority('normal');
+  const handleQuickAssignTopic = (_topicTitle: string, _moduleId: string, _topicId: string) => {
     setShowAssignmentModal(true);
     setActiveTab('plans');
   };
@@ -581,36 +549,6 @@ export default function AdminStudentProgressPage() {
     }
   };
 
-  // Submit New Assignment
-  const handleCreateAssignment = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!studentId || !asgTitle.trim() || !asgDueDate) return;
-    setSavingAsg(true);
-    try {
-      await createAssignment({
-        student_id: studentId,
-        title: asgTitle,
-        type: asgType,
-        description: asgDesc,
-        target_module_id: asgModuleId || null,
-        target_topic_id: asgTopicId || null,
-        due_date: new Date(asgDueDate).toISOString(),
-        priority: asgPriority,
-        min_score: asgMinScore,
-        status: 'pending',
-      });
-      setShowAssignmentModal(false);
-      setAsgTitle('');
-      setAsgDesc('');
-      setAsgModuleId('');
-      setAsgTopicId('');
-      await loadData();
-    } catch (e) {
-      alert('Error al crear asignación calendarizada');
-    } finally {
-      setSavingAsg(false);
-    }
-  };
 
   // Grade Assignment
   const handleGradeSubmit = async (e: React.FormEvent) => {
@@ -629,13 +567,7 @@ export default function AdminStudentProgressPage() {
   };
 
   // Pre-fill assignment from weak domain
-  const handleQuickAssignOpportunity = (topicName: string, moduleId: string) => {
-    setAsgTitle(`Refuerzo Clínico: ${topicName}`);
-    setAsgType('exam');
-    setAsgDesc(`Examen focalizado para superar las brechas identificadas en ${topicName} (Módulo ${moduleId}).`);
-    setAsgModuleId(moduleId);
-    setAsgTopicId(topicName);
-    setAsgPriority('high');
+  const handleQuickAssignOpportunity = (_topicName: string, _moduleId: string) => {
     setShowAssignmentModal(true);
     setActiveTab('plans');
   };
@@ -808,7 +740,7 @@ export default function AdminStudentProgressPage() {
               </div>
               <div className="w-px h-10 bg-slate-200 dark:bg-slate-700" />
               <div className="text-center px-2">
-                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block flex items-center justify-center gap-0.5">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 flex items-center justify-center gap-0.5">
                   <Flame className="w-3 h-3 text-orange-500 fill-orange-500" /> Racha
                 </span>
                 <span className="text-2xl font-black text-orange-600 dark:text-orange-400">
@@ -1543,7 +1475,7 @@ export default function AdminStudentProgressPage() {
             {/* Streak Metrics Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <div className="p-5 rounded-2xl border border-orange-200 dark:border-orange-900/40 bg-orange-50/40 dark:bg-orange-950/20 space-y-1">
-                <span className="text-xs font-bold text-orange-600 dark:text-orange-400 uppercase tracking-wider block flex items-center gap-1">
+                <span className="text-xs font-bold text-orange-600 dark:text-orange-400 uppercase tracking-wider flex items-center gap-1">
                   <Flame className="w-4 h-4 fill-orange-500" /> Racha Actual
                 </span>
                 <span className="text-3xl font-black text-orange-700 dark:text-orange-300">

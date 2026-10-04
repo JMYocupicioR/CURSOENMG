@@ -9,8 +9,6 @@ import {
   XCircle,
   AlertTriangle,
   ArrowRight,
-  ShieldCheck,
-  KeyRound,
   Sparkles,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthProvider';

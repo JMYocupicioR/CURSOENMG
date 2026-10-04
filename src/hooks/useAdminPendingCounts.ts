@@ -33,9 +33,11 @@ export function useAdminPendingCounts() {
         setPendingRevisions(0);
       });
 
-    supabase
-      .from('student_assignments')
-      .select('id, status, target_exam_config')
+    Promise.resolve(
+      supabase
+        .from('student_assignments')
+        .select('id, status, target_exam_config')
+    )
       .then(({ data }) => {
         if (!isMounted || !data) return;
         const pendingCount = (data as any[]).reduce((sum, assignment) => {
@@ -50,10 +52,12 @@ export function useAdminPendingCounts() {
         setPendingTeacherReviews(0);
       });
 
-    supabase
-      .from('published_quizzes')
-      .select('id', { count: 'exact', head: true })
-      .eq('clinical_validation_status', 'pending_review')
+    Promise.resolve(
+      supabase
+        .from('published_quizzes')
+        .select('id', { count: 'exact', head: true })
+        .eq('clinical_validation_status', 'pending_review')
+    )
       .then(({ count }) => {
         if (!isMounted) return;
         setPendingQuizzes(count ?? 0);

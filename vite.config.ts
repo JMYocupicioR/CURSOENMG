@@ -80,6 +80,8 @@ export default defineConfig({
       manifest: false, // Use the manifest.json in /public
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2,json}'],
+        globIgnores: ['**/icons/splash/**', '**/vendor-react-pdf*.js', '**/vendor-docx*.js'],
+        maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
         // iOS Safari aggressively caches sw.js — these ensure instant updates
         cleanupOutdatedCaches: true,
         skipWaiting: false,
@@ -109,6 +111,15 @@ export default defineConfig({
             },
           },
           {
+            // Heavy document generators (loaded on-demand by admin/export tools)
+            urlPattern: /\/assets\/(?:vendor-react-pdf|vendor-docx).*\.js$/i,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'document-generators-cache',
+              expiration: { maxEntries: 10, maxAgeSeconds: 60 * 60 * 24 * 30 },
+            },
+          },
+          {
             // External images
             urlPattern: /\.(?:png|jpg|jpeg|svg|gif|webp)$/i,
             handler: 'CacheFirst',
@@ -132,6 +143,52 @@ export default defineConfig({
   },
   optimizeDeps: {
     include: ['@react-pdf/renderer', 'qrcode'],
+  },
+  build: {
+    chunkSizeWarningLimit: 1000,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          const normalizedId = id.replace(/\\/g, '/');
+          if (normalizedId.includes('node_modules/')) {
+            if (normalizedId.includes('@react-pdf')) {
+              return 'vendor-react-pdf';
+            }
+            if (normalizedId.includes('docx')) {
+              return 'vendor-docx';
+            }
+            if (normalizedId.includes('pagedjs')) {
+              return 'vendor-pagedjs';
+            }
+            if (normalizedId.includes('framer-motion')) {
+              return 'vendor-framer-motion';
+            }
+            if (normalizedId.includes('lucide-react')) {
+              return 'vendor-lucide';
+            }
+            if (normalizedId.includes('@supabase')) {
+              return 'vendor-supabase';
+            }
+            if (normalizedId.includes('qrcode')) {
+              return 'vendor-qrcode';
+            }
+            if (
+              normalizedId.includes('node_modules/react/') ||
+              normalizedId.includes('node_modules/react-dom/') ||
+              normalizedId.includes('node_modules/react-router/') ||
+              normalizedId.includes('node_modules/react-router-dom/') ||
+              normalizedId.includes('node_modules/zustand/') ||
+              normalizedId.includes('node_modules/react-error-boundary/')
+            ) {
+              return 'vendor-react-core';
+            }
+          }
+          if (normalizedId.includes('src/content/modules/')) {
+            return 'course-modules-content';
+          }
+        },
+      },
+    },
   },
   test: {
     globals: true,

@@ -6,7 +6,6 @@ import {
   BookOpen,
   Check,
   ChevronDown,
-  ChevronRight,
   ExternalLink,
   FileQuestion,
   Layers,
@@ -336,9 +335,6 @@ export function TopicAdoptionInbox({
     });
   };
 
-  const handleQuickAdopt = (moduleId: string, topicId: string) => {
-    proposeIds(moduleId, [topicId], `quick-adopt-${topicId}`);
-  };
 
   const handleOpenFreeTopics = () => {
     setSubsectionsOpen((prev) => ({ ...prev, free: true }));
@@ -349,78 +345,6 @@ export function TopicAdoptionInbox({
     setOpenModules((prev) => ({ ...prev, ...autoOpen }));
   };
 
-  const handleAdoptPresetPackage = (pkg: 'upper' | 'lower' | 'radic' | 'needle') => {
-    let keywords: string[] = [];
-    if (pkg === 'upper') keywords = ['mediano', 'ulnar', 'cubital', 'radial', 'carpian'];
-    else if (pkg === 'lower') keywords = ['perone', 'tibial', 'sural', 'tarso'];
-    else if (pkg === 'radic') keywords = ['radiculopat', 'plexo'];
-    else if (pkg === 'needle') keywords = ['aguja', 'pum', 'espontanea', 'espontánea'];
-
-    const matching = withoutTeacher
-      .filter((n) => {
-        const s = `${n.topicId} ${n.topicTitle}`.toLowerCase();
-        return keywords.some((k) => s.includes(k));
-      })
-      .slice(0, 4);
-
-    if (matching.length === 0) return;
-
-    void runAction(`adopt-package-${pkg}`, async () => {
-      const byModule = new Map<string, string[]>();
-      for (const m of matching) {
-        const arr = byModule.get(m.moduleId) || [];
-        arr.push(m.topicId);
-        byModule.set(m.moduleId, arr);
-      }
-      for (const [modId, ids] of byModule.entries()) {
-        await proposeTopicCommitments(ids, modId);
-      }
-    });
-  };
-
-  const highYieldAdoptionTopics = useMemo(() => {
-    const definitions = [
-      { key: 'mediano', label: 'Conducción Motora Mediano', keywords: ['mediano', 'median'] },
-      { key: 'carpiano', label: 'Síndrome del Túnel Carpiano (CTS)', keywords: ['carpian', 'carpal', 'tunel'] },
-      { key: 'ulnar', label: 'Conducción Nervio Ulnar (Cubital)', keywords: ['ulnar', 'cubital'] },
-      { key: 'peroneo', label: 'Conducción Nervio Peroneo', keywords: ['perone', 'fibular'] },
-      { key: 'tibial', label: 'Conducción Nervio Tibial', keywords: ['tibial'] },
-      { key: 'radic-l5', label: 'Radiculopatía Lumbar L5/S1', keywords: ['radiculopat', 'l5', 's1', 'lumbar'] },
-      { key: 'radic-cervical', label: 'Radiculopatía Cervical C6/C7', keywords: ['cervical', 'c6', 'c7'] },
-      { key: 'aguja', label: 'EMG de Aguja: Potenciales y Espontánea', keywords: ['aguja', 'pum', 'needle', 'espontanea'] },
-      { key: 'polineuro', label: 'Polineuropatía Axonal / Diabética', keywords: ['polineuropat', 'diabetic', 'polineuropatía'] },
-    ];
-
-    const results: { topicId: string; moduleId: string; title: string; isAdoptedByMe: boolean }[] = [];
-    for (const def of definitions) {
-      const node = withoutTeacher.find((n) => {
-        const s = `${n.topicId} ${n.topicTitle}`.toLowerCase();
-        return def.keywords.some((k) => s.includes(k));
-      });
-      if (node) {
-        results.push({
-          topicId: node.topicId,
-          moduleId: node.moduleId,
-          title: node.topicTitle || def.label,
-          isAdoptedByMe: false,
-        });
-      } else {
-        const myRow = mine.find((m) => {
-          const s = `${m.topic_id} ${titleForTopic(m.topic_id, m.module_id)}`.toLowerCase();
-          return def.keywords.some((k) => s.includes(k));
-        });
-        if (myRow) {
-          results.push({
-            topicId: myRow.topic_id,
-            moduleId: myRow.module_id,
-            title: titleForTopic(myRow.topic_id, myRow.module_id) || def.label,
-            isAdoptedByMe: true,
-          });
-        }
-      }
-    }
-    return results;
-  }, [withoutTeacher, mine]);
 
   const searchResultsFreeTopics = useMemo(() => {
     const q = freeTopicSearch.trim().toLowerCase();
@@ -448,9 +372,6 @@ export function TopicAdoptionInbox({
       : null;
   }, [currentPedagogicalModIndex]);
 
-  const prevPedagogicalModule = useMemo(() => {
-    return currentPedagogicalModIndex > 0 ? allModules[currentPedagogicalModIndex - 1] : null;
-  }, [currentPedagogicalModIndex]);
 
   const currentPedagogicalSections = useMemo(() => {
     const extractSubs = (

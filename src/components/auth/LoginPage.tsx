@@ -3,7 +3,6 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Mail,
   Lock,
-  ArrowLeft,
   CheckCircle2,
   Eye,
   EyeOff,
@@ -12,7 +11,6 @@ import {
   Award,
   KeyRound,
   RotateCcw,
-  Sparkles,
   AlertCircle,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthProvider';
@@ -30,6 +28,8 @@ export default function LoginPage({ initialMode = 'password' }: LoginPageProps) 
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const nextPath = searchParams.get('next') ?? undefined;
+  const joinLive = searchParams.get('join_live') === 'true';
+  const redirectToWorkshop = searchParams.get('redirect_to_workshop') ?? undefined;
   const paramMode = searchParams.get('mode');
 
   const [mode, setMode] = useState<'password' | 'otp' | 'recovery'>(
@@ -66,13 +66,15 @@ export default function LoginPage({ initialMode = 'password' }: LoginPageProps) 
     navigate(
       postLoginPath({
         next: nextPath,
+        joinLive,
+        redirectToWorkshop,
         isAdmin,
         isEditor,
         isContributor: roles.includes('contributor'),
       }),
       { replace: true }
     );
-  }, [user, isLoading, isSessionReady, isAdmin, isEditor, roles, nextPath, navigate]);
+  }, [user, isLoading, isSessionReady, isAdmin, isEditor, roles, nextPath, joinLive, redirectToWorkshop, navigate]);
 
   useEffect(() => {
     if (searchParams.get('verified') === '1') setSent(true);

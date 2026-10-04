@@ -1,12 +1,10 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import {
   X,
   GraduationCap,
   Clock,
   CheckCircle2,
   AlertCircle,
-  FileText,
-  CreditCard,
   Building2,
   BadgeCheck,
 } from 'lucide-react';

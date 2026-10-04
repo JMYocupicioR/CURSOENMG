@@ -25,7 +25,7 @@ import { setWorkshopAttendanceClosed } from '../../services/courseService';
 import { useAuth } from '../../contexts/AuthProvider';
 import type { AdminProfileRow } from '../../types/admin';
 import type { LiveWorkshop } from '../../types/database';
-import type { AttendanceStatus, ClassAttendanceRecord, SessionModality } from '../../types/academicGradebook';
+import type { AttendanceStatus, ClassAttendanceRecord } from '../../types/academicGradebook';
 
 interface AttendanceCockpitProps {
   workshops: LiveWorkshop[];
@@ -248,7 +248,7 @@ export default function AttendanceCockpit({
     if (!window.confirm('¿Reiniciar todo el pase de lista de esta sesión a "Sin marcar"?')) {
       return;
     }
-    setAttendances((prev) => {
+    setAttendances(() => {
       const next: Record<string, StudentAttendanceDraft> = {};
       for (const s of students) {
         next[s.id] = {

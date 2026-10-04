@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { Save, Send, Stethoscope, AlertTriangle } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthProvider';
 import { getRevisionById, saveRevision, submitRevision } from '../../services/editorialService';

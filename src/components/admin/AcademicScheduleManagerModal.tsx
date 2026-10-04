@@ -12,9 +12,6 @@ import {
   ChevronDown,
   ChevronUp,
   Save,
-  Check,
-  Users,
-  Filter,
 } from 'lucide-react';
 import {
   getAcademicMilestones,
@@ -23,7 +20,6 @@ import {
   rememberAdminMilestones,
 } from '../../services/academicScheduleService';
 import { allModules } from '../../content/modules';
-import { getAllTopicIds } from '../../services/studentService';
 import type { AcademicMilestone } from '../../types/academicGradebook';
 import type { AdminProfileRow } from '../../types/admin';
 import type { Topic } from '../../types/content';

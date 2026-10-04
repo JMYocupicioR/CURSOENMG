@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Shield, Unlock, Lock, Save } from 'lucide-react';
+import { Shield, Unlock, Lock } from 'lucide-react';
 import { AdminLayout } from './AdminLayout';
 import { getModuleAccessMap, setModuleAccess } from '../../services/courseService';
 import { allModules } from '../../content/modules';

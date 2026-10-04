@@ -14,7 +14,6 @@ import {
   BookOpen,
   Mail,
   FileCheck2,
-  ExternalLink,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthProvider';
 import { BRAND } from '../../config/brand';

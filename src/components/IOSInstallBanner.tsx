@@ -37,7 +37,7 @@ export default function IOSInstallBanner() {
           animate={{ y: 0, opacity: 1 }}
           exit={{ y: 100, opacity: 0 }}
           transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-          className="fixed bottom-0 left-0 right-0 z-50 mx-auto max-w-lg"
+          className="fixed bottom-[4.75rem] left-0 right-0 z-50 mx-auto max-w-lg lg:bottom-0"
           style={{ paddingBottom: 'env(safe-area-inset-bottom, 16px)' }}
         >
           <div className="mx-3 mb-3 rounded-2xl bg-gray-800/95 backdrop-blur-xl border border-gray-700/50 shadow-2xl p-4">

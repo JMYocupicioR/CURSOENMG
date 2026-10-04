@@ -8,12 +8,25 @@ export function isStudentHomePath(path: string): boolean {
 
 export function postLoginPath(options: {
   next?: string | null;
+  joinLive?: boolean;
+  redirectToWorkshop?: string | null;
   isAdmin?: boolean;
   isEditor?: boolean;
   isContributor?: boolean;
 }): string {
   const next = options.next?.trim() || null;
   const isStaff = Boolean(options.isAdmin || options.isEditor);
+
+  // Deep linking prioritario a sesión en vivo o taller específico
+  if (options.redirectToWorkshop?.trim()) {
+    const workshopId = encodeURIComponent(options.redirectToWorkshop.trim());
+    return `/taller/${workshopId}`;
+  }
+
+  if (options.joinLive) {
+    return '/portal?join_live=true';
+  }
+
   const nextIsInternal = Boolean(next && next.startsWith('/') && !next.startsWith('//'));
   if (nextIsInternal && next && !(isStaff && isStudentHomePath(next))) return next;
   if (isStaff) return '/admin';
@@ -37,9 +50,15 @@ export function shouldRedirectToStaffInbox(options: {
   return isStudentHomePath(options.pathname);
 }
 
-export function postLoginPathFromRoles(roles: string[], next?: string | null): string {
+export function postLoginPathFromRoles(
+  roles: string[],
+  next?: string | null,
+  deepLinkOptions?: { joinLive?: boolean; redirectToWorkshop?: string | null }
+): string {
   return postLoginPath({
     next,
+    joinLive: deepLinkOptions?.joinLive,
+    redirectToWorkshop: deepLinkOptions?.redirectToWorkshop,
     isAdmin: roles.includes('admin'),
     isEditor: roles.includes('editor'),
     isContributor: roles.includes('contributor'),

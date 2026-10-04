@@ -16,22 +16,27 @@ import {
   PackageOpen,
   ArrowUpDown,
   Layers,
+  Settings,
 } from 'lucide-react';
 import { AdminLayout } from './AdminLayout';
 import { useSyllabusCatalog } from '../../hooks/useSyllabusCatalog';
 import { QuickCreateTopicModal } from './QuickCreateTopicModal';
-import { CreateCourseModal } from './CreateCourseModal';
+import { CourseEditorModal, type CourseEditorSavePayload } from './CourseEditorModal';
 import { SortableList } from '../common/SortableList';
 import {
   assignModuleToCourse,
+  createCourse,
   deleteCourse,
+  getUpcomingWorkshops,
   reorderCourseModules,
   setCourseModuleVisible,
   setSyllabusTopicOverrides,
   updateCourseMetadata,
 } from '../../services/courseService';
-import type { Course, CourseId } from '../../types/database';
+import type { Course, CourseId, LiveWorkshop } from '../../types/database';
 import type { Module, Topic } from '../../types/content';
+import { allModules } from '../../content/modules';
+import { nextCourseSortOrder } from '../../content/courseCatalog';
 import { moveItem, siblingOverrideInputs } from '../../utils/syllabusTree';
 
 export default function AdminSyllabusPage() {
@@ -44,6 +49,8 @@ export default function AdminSyllabusPage() {
   const [selectedCourseId, setSelectedCourseId] = useState<CourseId | null>(null);
   const [metaExpanded, setMetaExpanded] = useState(false);
   const [createCourseOpen, setCreateCourseOpen] = useState(false);
+  const [editCourseModalOpen, setEditCourseModalOpen] = useState(false);
+  const [adminWorkshops, setAdminWorkshops] = useState<LiveWorkshop[]>([]);
   const [moduleMenuId, setModuleMenuId] = useState<string | null>(null);
   const [courseToDelete, setCourseToDelete] = useState<{
     id: CourseId;
@@ -52,6 +59,10 @@ export default function AdminSyllabusPage() {
     moduleTitles: string[];
   } | null>(null);
   const [deleting, setDeleting] = useState(false);
+
+  useEffect(() => {
+    void getUpcomingWorkshops().then(setAdminWorkshops);
+  }, []);
 
   const [reorderConfirm, setReorderConfirm] = useState<{
     title: string;
@@ -136,6 +147,71 @@ export default function AdminSyllabusPage() {
 
   const nextSortOrder = (courseId: CourseId) =>
     assignments.filter((a) => a.course_id === courseId).reduce((max, a) => Math.max(max, a.sort_order), 0) + 1;
+
+  const handleSaveCourseModal = async (payload: CourseEditorSavePayload) => {
+    if (payload.id && selectedCourse && payload.id === selectedCourse.id) {
+      await run(`meta-${selectedCourse.id}`, async () => {
+        await updateCourseMetadata(selectedCourse.id, {
+          title: payload.title,
+          description: payload.description,
+          price_display: payload.price_display,
+          is_active: payload.is_active,
+          is_sellable: payload.is_sellable,
+          instructor_name: payload.instructor_name,
+          instructor_title: payload.instructor_title,
+          live_meeting_url: payload.live_meeting_url,
+          live_schedule_notes: payload.live_schedule_notes,
+          active_workshop_id: payload.active_workshop_id,
+          syllabus_brochure_url: payload.syllabus_brochure_url,
+          min_passing_grade: payload.min_passing_grade,
+        });
+
+        if (payload.selectedModuleIds) {
+          const currentModIds = rowsForCourse(selectedCourse.id).map((r) => r.assignment.module_id);
+          const toAdd = payload.selectedModuleIds.filter((id) => !currentModIds.includes(id));
+          for (let i = 0; i < toAdd.length; i++) {
+            await assignModuleToCourse(toAdd[i], selectedCourse.id, nextSortOrder(selectedCourse.id) + i, true);
+          }
+        }
+      }, `Curso "${payload.title}" actualizado con éxito.`);
+    } else if (payload.id) {
+      setBusyKey('create-course');
+      try {
+        const created = await createCourse({
+          id: payload.id,
+          title: payload.title,
+          description: payload.description,
+          price_display: payload.price_display,
+          is_active: payload.is_active,
+          is_sellable: payload.is_sellable,
+          sort_order: nextCourseSortOrder(courses),
+        });
+
+        await updateCourseMetadata(created.id, {
+          instructor_name: payload.instructor_name,
+          instructor_title: payload.instructor_title,
+          live_meeting_url: payload.live_meeting_url,
+          live_schedule_notes: payload.live_schedule_notes,
+          active_workshop_id: payload.active_workshop_id,
+          syllabus_brochure_url: payload.syllabus_brochure_url,
+          min_passing_grade: payload.min_passing_grade,
+        });
+
+        if (payload.selectedModuleIds?.length) {
+          for (let i = 0; i < payload.selectedModuleIds.length; i++) {
+            await assignModuleToCourse(payload.selectedModuleIds[i], created.id, i + 1, true);
+          }
+        }
+
+        await reload();
+        setSelectedCourseId(created.id);
+        setSuccessMsg(`Curso "${created.title}" creado con éxito.`);
+        setTimeout(() => setSuccessMsg(null), 5000);
+      } finally {
+        setBusyKey(null);
+      }
+    }
+  };
 
   const reorderModules = (courseId: CourseId, from: number, to: number) => {
     const ids = rowsForCourse(courseId).map((row) => row.assignment.module_id);
@@ -450,6 +526,7 @@ export default function AdminSyllabusPage() {
                 course={selectedCourse}
                 expanded={metaExpanded}
                 onToggleExpanded={() => setMetaExpanded((v) => !v)}
+                onOpenEditorModal={() => setEditCourseModalOpen(true)}
                 busy={busyKey === `meta-${selectedCourse.id}`}
                 onSave={(payload) =>
                   run(`meta-${selectedCourse.id}`, () => updateCourseMetadata(selectedCourse.id, payload))
@@ -838,17 +915,19 @@ export default function AdminSyllabusPage() {
         </div>
       )}
 
-      <CreateCourseModal
-        isOpen={createCourseOpen}
-        onClose={() => setCreateCourseOpen(false)}
-        courses={courses}
-        onSuccess={async (created) => {
-          await reload();
-          setSelectedCourseId(created.id);
-          setMetaExpanded(true);
-          setSuccessMsg(`Curso "${created.title}" creado. Asigna módulos para que aparezca en la web.`);
-          setTimeout(() => setSuccessMsg(null), 6000);
+      <CourseEditorModal
+        isOpen={createCourseOpen || editCourseModalOpen}
+        onClose={() => {
+          setCreateCourseOpen(false);
+          setEditCourseModalOpen(false);
         }}
+        course={editCourseModalOpen ? selectedCourse : null}
+        allCourses={courses}
+        allModules={allModules}
+        assignedModuleIds={selectedCourse ? rowsForCourse(selectedCourse.id).map((r) => r.assignment.module_id) : []}
+        workshops={adminWorkshops}
+        onSave={handleSaveCourseModal}
+        onDelete={editCourseModalOpen && selectedCourse ? () => handleRequestDelete(selectedCourse) : undefined}
       />
 
       <QuickCreateTopicModal
@@ -872,6 +951,7 @@ function CourseMetaForm({
   course,
   expanded,
   onToggleExpanded,
+  onOpenEditorModal,
   busy,
   onSave,
   onDelete,
@@ -879,14 +959,9 @@ function CourseMetaForm({
   course: Course;
   expanded: boolean;
   onToggleExpanded: () => void;
+  onOpenEditorModal: () => void;
   busy: boolean;
-  onSave: (payload: {
-    title: string;
-    description: string;
-    price_display: string | null;
-    is_active: boolean;
-    is_sellable: boolean;
-  }) => void;
+  onSave: (payload: Partial<Omit<Course, 'id' | 'updated_at' | 'updated_by'>>) => void;
   onDelete: () => void;
 }) {
   const [localTitle, setLocalTitle] = useState(course.title);
@@ -894,6 +969,12 @@ function CourseMetaForm({
   const [localPrice, setLocalPrice] = useState(course.price_display ?? '');
   const [localActive, setLocalActive] = useState(course.is_active);
   const [localSellable, setLocalSellable] = useState(course.is_sellable);
+  const [localInstructorName, setLocalInstructorName] = useState(course.instructor_name ?? 'Dr. Juan Marcos Yocupicio Robles');
+  const [localInstructorTitle, setLocalInstructorTitle] = useState(course.instructor_title ?? 'Especialista en Neurofisiología Clínica');
+  const [localLiveMeetingUrl, setLocalLiveMeetingUrl] = useState(course.live_meeting_url ?? '');
+  const [localLiveScheduleNotes, setLocalLiveScheduleNotes] = useState(course.live_schedule_notes ?? '');
+  const [localSyllabusBrochureUrl, setLocalSyllabusBrochureUrl] = useState(course.syllabus_brochure_url ?? '');
+  const [localMinPassingGrade, setLocalMinPassingGrade] = useState(course.min_passing_grade ?? 80);
   const [savedSuccess, setSavedSuccess] = useState(false);
 
   const pricePresets = ['$4,500 MXN', '$3,500 MXN', '$2,500 MXN', 'Consultar', 'Beca 100%'];
@@ -904,15 +985,40 @@ function CourseMetaForm({
     setLocalPrice(course.price_display ?? '');
     setLocalActive(course.is_active);
     setLocalSellable(course.is_sellable);
+    setLocalInstructorName(course.instructor_name ?? 'Dr. Juan Marcos Yocupicio Robles');
+    setLocalInstructorTitle(course.instructor_title ?? 'Especialista en Neurofisiología Clínica');
+    setLocalLiveMeetingUrl(course.live_meeting_url ?? '');
+    setLocalLiveScheduleNotes(course.live_schedule_notes ?? '');
+    setLocalSyllabusBrochureUrl(course.syllabus_brochure_url ?? '');
+    setLocalMinPassingGrade(course.min_passing_grade ?? 80);
     setSavedSuccess(false);
-  }, [course.id, course.title, course.description, course.price_display, course.is_active, course.is_sellable]);
+  }, [
+    course.id,
+    course.title,
+    course.description,
+    course.price_display,
+    course.is_active,
+    course.is_sellable,
+    course.instructor_name,
+    course.instructor_title,
+    course.live_meeting_url,
+    course.live_schedule_notes,
+    course.syllabus_brochure_url,
+    course.min_passing_grade,
+  ]);
 
   const dirty =
     localTitle !== course.title ||
     localDesc !== course.description ||
     (localPrice.trim() || null) !== (course.price_display?.trim() || null) ||
     localActive !== course.is_active ||
-    localSellable !== course.is_sellable;
+    localSellable !== course.is_sellable ||
+    localInstructorName !== (course.instructor_name ?? 'Dr. Juan Marcos Yocupicio Robles') ||
+    localInstructorTitle !== (course.instructor_title ?? 'Especialista en Neurofisiología Clínica') ||
+    localLiveMeetingUrl !== (course.live_meeting_url ?? '') ||
+    localLiveScheduleNotes !== (course.live_schedule_notes ?? '') ||
+    localSyllabusBrochureUrl !== (course.syllabus_brochure_url ?? '') ||
+    localMinPassingGrade !== (course.min_passing_grade ?? 80);
 
   const handleSave = () => {
     onSave({
@@ -921,6 +1027,12 @@ function CourseMetaForm({
       price_display: localSellable ? localPrice.trim() || null : null,
       is_active: localActive,
       is_sellable: localSellable,
+      instructor_name: localInstructorName.trim() || null,
+      instructor_title: localInstructorTitle.trim() || null,
+      live_meeting_url: localLiveMeetingUrl.trim() || null,
+      live_schedule_notes: localLiveScheduleNotes.trim() || null,
+      syllabus_brochure_url: localSyllabusBrochureUrl.trim() || null,
+      min_passing_grade: localMinPassingGrade,
     });
     setSavedSuccess(true);
     setTimeout(() => setSavedSuccess(false), 3000);
@@ -935,7 +1047,7 @@ function CourseMetaForm({
       >
         <div className="min-w-0">
           <span className="text-[10px] font-bold uppercase tracking-wider text-blue-600 dark:text-cyan-400">
-            Ficha comercial
+            Ficha comercial y operativa
           </span>
           <h2 className="text-lg font-extrabold text-slate-900 dark:text-white flex items-center gap-2 truncate">
             {localTitle}
@@ -952,6 +1064,18 @@ function CourseMetaForm({
           </h2>
         </div>
         <div className="flex items-center gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpenEditorModal();
+            }}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/70 dark:hover:bg-blue-900/80 text-blue-700 dark:text-cyan-300 text-xs font-bold border border-blue-200/80 dark:border-blue-800 transition shadow-2xs hover:shadow-xs cursor-pointer"
+          >
+            <Settings className="w-3.5 h-3.5" />
+            <span>Configuración completa (4 pestañas)</span>
+          </button>
+
           {localSellable ? (
             <span className="text-xs font-black px-2.5 py-1 rounded-lg bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300">
               {localPrice.trim() || 'Consultar'}
@@ -971,7 +1095,7 @@ function CourseMetaForm({
                 Título oficial del curso
               </label>
               <input
-                className="w-full border rounded-xl px-3 py-2 text-sm bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700"
+                className="w-full border rounded-xl px-3 py-2 text-sm bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 font-bold"
                 value={localTitle}
                 onChange={(e) => setLocalTitle(e.target.value)}
               />
@@ -1017,6 +1141,81 @@ function CourseMetaForm({
               value={localDesc}
               onChange={(e) => setLocalDesc(e.target.value)}
             />
+          </div>
+
+          {/* Metadata Operativa en Formulario Inline */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800">
+            <div>
+              <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
+                Docente Titular
+              </label>
+              <input
+                className="w-full border rounded-xl px-3 py-1.5 text-xs bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 font-bold"
+                value={localInstructorName}
+                onChange={(e) => setLocalInstructorName(e.target.value)}
+                placeholder="Dr. Juan Marcos Yocupicio Robles"
+              />
+            </div>
+            <div>
+              <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
+                Especialidad / Cargo Docente
+              </label>
+              <input
+                className="w-full border rounded-xl px-3 py-1.5 text-xs bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700"
+                value={localInstructorTitle}
+                onChange={(e) => setLocalInstructorTitle(e.target.value)}
+                placeholder="Especialista en Neurofisiología Clínica"
+              />
+            </div>
+            <div>
+              <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
+                Aula Virtual Recurrente (Zoom / Meet)
+              </label>
+              <input
+                type="url"
+                className="w-full border rounded-xl px-3 py-1.5 text-xs font-mono bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700"
+                value={localLiveMeetingUrl}
+                onChange={(e) => setLocalLiveMeetingUrl(e.target.value)}
+                placeholder="https://zoom.us/..."
+              />
+            </div>
+            <div>
+              <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
+                Horario Habitual de Transmisión
+              </label>
+              <input
+                type="text"
+                className="w-full border rounded-xl px-3 py-1.5 text-xs bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700"
+                value={localLiveScheduleNotes}
+                onChange={(e) => setLocalLiveScheduleNotes(e.target.value)}
+                placeholder="Jueves 19:00 hrs CDMX"
+              />
+            </div>
+            <div>
+              <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
+                URL del Folleto PDF Oficial
+              </label>
+              <input
+                type="url"
+                className="w-full border rounded-xl px-3 py-1.5 text-xs font-mono bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700"
+                value={localSyllabusBrochureUrl}
+                onChange={(e) => setLocalSyllabusBrochureUrl(e.target.value)}
+                placeholder="https://.../brochure.pdf"
+              />
+            </div>
+            <div>
+              <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
+                Nota Mínima Aprobatoria (%)
+              </label>
+              <input
+                type="number"
+                min={60}
+                max={100}
+                className="w-full border rounded-xl px-3 py-1.5 text-xs bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 font-bold"
+                value={localMinPassingGrade}
+                onChange={(e) => setLocalMinPassingGrade(Number(e.target.value) || 80)}
+              />
+            </div>
           </div>
 
           <div className="flex flex-wrap items-center gap-4">

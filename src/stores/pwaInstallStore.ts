@@ -57,7 +57,7 @@ export const usePWAInstallStore = create<PWAInstallState>((set, get) => ({
   closeInstallModal: () => set({ isInstallModalOpen: false }),
 
   triggerInstall: async () => {
-    const { deferredPrompt, isIOS } = get();
+    const { deferredPrompt } = get();
 
     // 1. Android & Chromium desktop: invoke native prompt
     if (deferredPrompt) {

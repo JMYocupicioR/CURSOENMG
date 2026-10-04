@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ClipboardList, CheckCircle, XCircle, GraduationCap, RotateCcw, Trash2 } from 'lucide-react';
+import { ClipboardList, CheckCircle, XCircle, GraduationCap, RotateCcw } from 'lucide-react';
 import { AdminLayout } from './AdminLayout';
 import { getAdminQuizAttempts } from '../../services/editorialService';
 import { getQuestionStats } from '../../services/quizValidationService';
@@ -24,7 +24,7 @@ export default function AdminQuizAttemptsPage() {
     if (!confirmed) return;
     setDeletingId(attempt.id);
     try {
-      await deleteQuizAttempt(attempt.id, attempt.user_id);
+      await deleteQuizAttempt(attempt.id, attempt.user_id ?? undefined);
       setAttempts((prev) => prev.filter((a) => a.id !== attempt.id));
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Error al eliminar el intento.');

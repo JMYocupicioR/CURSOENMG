@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   BookOpen,
@@ -22,6 +22,11 @@ import {
   CheckCircle2,
   Users,
   Compass,
+  Calendar,
+  UserCheck,
+  FileText,
+  Download,
+  Filter,
 } from 'lucide-react';
 import { Topic } from '../../types/content';
 import { useAuth } from '../../contexts/AuthProvider';
@@ -208,11 +213,39 @@ export default function SyllabusPage() {
   const { hasQuiz, moduleQuizCount } = useQuizTopicFlags();
   const { isCompleted, getParentTopicStats, getModuleStats } = useTopicProgress();
   const { grouped, unassigned, modulesWithOverrides, assignments, loading } = useSyllabusCatalog();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const courseFilterParam = searchParams.get('curso') || 'todos';
+  const [selectedCourseFilter, setSelectedCourseFilter] = useState<string>(courseFilterParam);
   const [activeTab, setActiveTab] = useState<'temario' | 'resumen' | 'inscripcion'>('temario');
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedModules, setExpandedModules] = useState<Set<string>>(new Set());
   const [didExpand, setDidExpand] = useState(false);
   const [milestones, setMilestones] = useState<AcademicMilestone[]>([]);
+
+  useEffect(() => {
+    const param = searchParams.get('curso');
+    if (param && param !== selectedCourseFilter) {
+      setSelectedCourseFilter(param);
+    } else if (!param && selectedCourseFilter !== 'todos') {
+      setSelectedCourseFilter('todos');
+    }
+  }, [searchParams]);
+
+  const handleSelectCourseFilter = (courseId: string) => {
+    setSelectedCourseFilter(courseId);
+    const newParams = new URLSearchParams(searchParams);
+    if (courseId === 'todos') {
+      newParams.delete('curso');
+    } else {
+      newParams.set('curso', courseId);
+    }
+    setSearchParams(newParams, { replace: true });
+  };
+
+  const displayedGrouped = useMemo(() => {
+    if (selectedCourseFilter === 'todos') return grouped;
+    return grouped.filter((g) => g.course.id === selectedCourseFilter);
+  }, [grouped, selectedCourseFilter]);
 
   useEffect(() => {
     let cancelled = false;
@@ -412,6 +445,41 @@ export default function SyllabusPage() {
       {/* ── Tab 1: Temario Completo ── */}
       {activeTab === 'temario' && (
         <section className="px-4 sm:px-6 lg:px-8 max-w-6xl mx-auto">
+          {/* Course filter pill tabs */}
+          <div className="mb-6 p-4 rounded-2xl bg-white/70 dark:bg-slate-850/70 border border-slate-200/70 dark:border-slate-750 backdrop-blur-sm shadow-2xs">
+            <div className="flex items-center gap-2 mb-3 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              <Filter className="w-3.5 h-3.5 text-blue-600 dark:text-cyan-400" />
+              <span>Filtrar temario por diplomado o curso:</span>
+            </div>
+            <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+              <button
+                type="button"
+                onClick={() => handleSelectCourseFilter('todos')}
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all ${
+                  selectedCourseFilter === 'todos'
+                    ? 'bg-blue-600 text-white shadow-sm shadow-blue-500/25 ring-2 ring-blue-500/20'
+                    : 'bg-white/90 dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200/70 dark:border-slate-700/60 hover:bg-slate-100 dark:hover:bg-slate-700'
+                }`}
+              >
+                Todos los diplomados ({totalModulesCount} módulos)
+              </button>
+              {grouped.map(({ course, modules }) => (
+                <button
+                  key={course.id}
+                  type="button"
+                  onClick={() => handleSelectCourseFilter(course.id)}
+                  className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all ${
+                    selectedCourseFilter === course.id
+                      ? 'bg-blue-600 text-white shadow-sm shadow-blue-500/25 ring-2 ring-blue-500/20'
+                      : 'bg-white/90 dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200/70 dark:border-slate-700/60 hover:bg-slate-100 dark:hover:bg-slate-700'
+                  }`}
+                >
+                  {course.title} ({modules.length})
+                </button>
+              ))}
+            </div>
+          </div>
+
           {/* Search bar and controls */}
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 mb-8">
             <div className="relative flex-1 max-w-md">
@@ -495,24 +563,107 @@ export default function SyllabusPage() {
                 </div>
               )}
             </div>
+          ) : displayedGrouped.length === 0 ? (
+            <div className="p-8 text-center rounded-2xl bg-white/60 dark:bg-slate-800/50 border border-slate-200/60 dark:border-slate-700/40">
+              <p className="text-slate-500 dark:text-slate-400 mb-3">No hay módulos asignados a este diplomado actualmente.</p>
+              <button
+                type="button"
+                onClick={() => handleSelectCourseFilter('todos')}
+                className="px-4 py-2 rounded-xl bg-blue-600 text-white text-xs font-bold hover:bg-blue-700 transition"
+              >
+                Ver todos los diplomados
+              </button>
+            </div>
           ) : (
             /* Module Accordions */
-            <div className="space-y-8">
-              {grouped.map(({ course, modules }) => {
+            <div className="space-y-10">
+              {displayedGrouped.map(({ course, modules }) => {
                 if (!modules.length) return null;
                 return (
-                  <section key={course.id} className="space-y-3">
-                    <div className="flex items-start justify-between gap-3 px-1">
-                      <div>
-                        <h2 className="text-lg font-extrabold text-slate-900 dark:text-white">{course.title}</h2>
-                        <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">{course.description}</p>
+                  <section key={course.id} className="space-y-4">
+                    {/* Rich Course Header */}
+                    <div className="p-5 sm:p-6 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-900/60 backdrop-blur-sm shadow-2xs">
+                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2 mb-2">
+                            <span className="text-xs font-bold uppercase tracking-wider text-blue-600 dark:text-cyan-400">
+                              Programa de Certificación
+                            </span>
+                            {hasCourseAccess(course.id) ? (
+                              <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 px-2.5 py-0.5 rounded-full">
+                                <Check className="w-3.5 h-3.5" /> Acceso activo
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 text-xs font-semibold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 px-2.5 py-0.5 rounded-full border border-amber-200/80">
+                                <Lock className="w-3 h-3" /> Requiere suscripción
+                              </span>
+                            )}
+                          </div>
+                          <h2 className="text-xl sm:text-2xl font-extrabold text-slate-900 dark:text-white leading-tight">
+                            {course.title}
+                          </h2>
+                          <p className="text-sm text-slate-600 dark:text-slate-300 mt-1.5 max-w-3xl leading-relaxed">
+                            {course.description}
+                          </p>
+
+                          {/* Docente & Horarios */}
+                          <div className="flex flex-wrap items-center gap-3 mt-3.5">
+                            {(course.instructor_name || course.instructor_title) && (
+                              <div className="inline-flex items-center gap-2 text-xs text-slate-700 dark:text-slate-300 bg-white/90 dark:bg-slate-800/90 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-2xs">
+                                <UserCheck className="w-3.5 h-3.5 text-blue-600 dark:text-cyan-400 shrink-0" />
+                                <span>
+                                  <strong>Docente Titular:</strong> {course.instructor_name || 'Profesor Titular'}
+                                  {course.instructor_title ? ` · ${course.instructor_title}` : ''}
+                                </span>
+                              </div>
+                            )}
+                            {course.live_schedule_notes && (
+                              <div className="inline-flex items-center gap-2 text-xs text-purple-800 dark:text-purple-200 bg-purple-50/80 dark:bg-purple-950/40 px-3 py-1.5 rounded-xl border border-purple-200/80 dark:border-purple-800/60 shadow-2xs">
+                                <Calendar className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400 shrink-0" />
+                                <span>
+                                  <strong>En vivo:</strong> {course.live_schedule_notes}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Quick Actions */}
+                        <div className="flex flex-wrap md:flex-col items-stretch sm:items-end gap-2 shrink-0">
+                          {hasCourseAccess(course.id) ? (
+                            <Link
+                              to={`/portal/curso/${course.id}`}
+                              className="inline-flex items-center justify-center gap-1.5 text-xs font-bold py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white transition shadow-sm"
+                            >
+                              <span>Ir a mi aula del curso</span>
+                              <ArrowRight className="w-3.5 h-3.5" />
+                            </Link>
+                          ) : (
+                            <Link
+                              to="/cursos"
+                              className="inline-flex items-center justify-center gap-1.5 text-xs font-bold py-2.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white transition shadow-sm shadow-blue-600/20"
+                            >
+                              <span>Solicitar inscripción</span>
+                              <ArrowRight className="w-3.5 h-3.5" />
+                            </Link>
+                          )}
+
+                          {course.syllabus_brochure_url && (
+                            <a
+                              href={course.syllabus_brochure_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center justify-center gap-1.5 text-xs font-semibold py-2 px-3.5 rounded-xl border border-rose-200 dark:border-rose-900/50 bg-rose-50/70 hover:bg-rose-100 dark:bg-rose-950/30 text-rose-800 dark:text-rose-300 transition"
+                            >
+                              <FileText className="w-3.5 h-3.5 text-rose-500" />
+                              <span>Descargar temario (PDF)</span>
+                              <Download className="w-3 h-3 text-slate-400 ml-0.5" />
+                            </a>
+                          )}
+                        </div>
                       </div>
-                      {!hasCourseAccess(course.id) && (
-                        <span className="inline-flex items-center gap-1 text-xs font-semibold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 px-2.5 py-1 rounded-full border border-amber-200/80">
-                          <Lock className="w-3 h-3" /> Bloqueado
-                        </span>
-                      )}
                     </div>
+
                     <div className="space-y-4">
               {modules.map((mod) => {
                 const isExpanded = expandedModules.has(mod.id);

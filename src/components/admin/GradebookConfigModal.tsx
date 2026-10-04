@@ -16,7 +16,7 @@ import {
   saveGradebookRubrics,
   DEFAULT_RUBRIC_CONFIG,
 } from '../../services/gradebookService';
-import type { GradebookRubricConfig, RubricItemConfig } from '../../types/academicGradebook';
+import type { GradebookRubricConfig } from '../../types/academicGradebook';
 
 interface GradebookConfigModalProps {
   isOpen: boolean;

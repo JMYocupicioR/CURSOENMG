@@ -39,8 +39,6 @@ export function QuizResults({
   returnToTopicUrl,
   onRetry,
   canRetry = true,
-  attemptCount,
-  maxAttempts,
 }: QuizResultsProps) {
   const lang = useSettingsStore((s) => s.language);
   const [expandedQuestion, setExpandedQuestion] = useState<string | null>(null);

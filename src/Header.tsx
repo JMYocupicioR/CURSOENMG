@@ -32,6 +32,7 @@ import { BrandLogo } from './components/brand/BrandLogo';
 import { CourseSidebar } from './components/CourseSidebar';
 import { BRAND } from './config/brand';
 import { OfflineIndicator } from './components/OfflineButton';
+import { PWAUpdateButton } from './components/pwa/PWAUpdateButton';
 import { UserMenu } from './components/user/UserMenu';
 import { TeacherCommentBell } from './components/admin/TeacherCommentBell';
 import { useAuth } from './contexts/AuthProvider';
@@ -278,6 +279,7 @@ export function Header() {
               </kbd>
             </button>
 
+            <PWAUpdateButton />
             <OfflineIndicator />
 
             {isSupabaseConfigured && user && (isAdmin || isEditor) && <TeacherCommentBell />}
@@ -342,6 +344,7 @@ export function Header() {
               <Search className="w-4 h-4" />
             </button>
 
+            <PWAUpdateButton />
             <OfflineIndicator />
 
             {isSupabaseConfigured && user && (isAdmin || isEditor) && (

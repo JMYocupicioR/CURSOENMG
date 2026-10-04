@@ -8,6 +8,7 @@ import {
 import type {
   ModuleAccess,
   LiveWorkshop,
+  WorkshopStatus,
   WorkshopRegistration,
   AccessTier,
   Course,
@@ -55,7 +56,7 @@ export async function setModuleAccess(
 
 export async function getWorkshops(options?: {
   moduleId?: string;
-  status?: string[];
+  status?: WorkshopStatus[];
   limit?: number;
 }): Promise<LiveWorkshop[]> {
   let query = supabase
@@ -78,12 +79,76 @@ export async function getWorkshops(options?: {
   return (data ?? []) as LiveWorkshop[];
 }
 
+export interface LiveSessionUrgency {
+  isUrgent: boolean;
+  isLiveNow: boolean;
+  startsInMinutes: number | null;
+  workshop: LiveWorkshop | null;
+}
+
+export function getLiveSessionUrgency(
+  workshops: LiveWorkshop[],
+  thresholdMinutes = 30,
+  nowDate = new Date()
+): LiveSessionUrgency {
+  if (!Array.isArray(workshops) || workshops.length === 0) {
+    return { isUrgent: false, isLiveNow: false, startsInMinutes: null, workshop: null };
+  }
+
+  const nowMs = nowDate.getTime();
+
+  // 1. Revisar si hay alguna sesión con estado explícito 'live'
+  const liveWorkshop = workshops.find((w) => w.status === 'live');
+  if (liveWorkshop) {
+    return {
+      isUrgent: true,
+      isLiveNow: true,
+      startsInMinutes: 0,
+      workshop: liveWorkshop,
+    };
+  }
+
+  // 2. Revisar si hay alguna sesión programada en curso o que empiece dentro del umbral
+  for (const w of workshops) {
+    if (w.status !== 'scheduled') continue;
+    const startMs = new Date(w.scheduled_at).getTime();
+    if (Number.isNaN(startMs)) continue;
+
+    const diffMinutes = Math.round((startMs - nowMs) / 60000);
+    const durationMin = w.duration_minutes || 90;
+
+    // Si empezó hace poco y aún está dentro de su ventana de duración
+    if (diffMinutes <= 0 && diffMinutes >= -durationMin) {
+      return {
+        isUrgent: true,
+        isLiveNow: true,
+        startsInMinutes: diffMinutes,
+        workshop: w,
+      };
+    }
+
+    // Si empieza dentro de los próximos thresholdMinutes (ej. 30 min)
+    if (diffMinutes > 0 && diffMinutes <= thresholdMinutes) {
+      return {
+        isUrgent: true,
+        isLiveNow: false,
+        startsInMinutes: diffMinutes,
+        workshop: w,
+      };
+    }
+  }
+
+  return { isUrgent: false, isLiveNow: false, startsInMinutes: null, workshop: null };
+}
+
 export async function getUpcomingWorkshops(limit = 5): Promise<LiveWorkshop[]> {
+  // Ventana de 3 horas hacia atrás para no excluir clases en curso iniciadas recientemente
+  const windowStart = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString();
   const { data, error } = await supabase
     .from('live_workshops')
     .select('*')
     .in('status', ['scheduled', 'live'])
-    .gte('scheduled_at', new Date().toISOString())
+    .gte('scheduled_at', windowStart)
     .order('scheduled_at', { ascending: true })
     .limit(limit);
   if (error) throw error;
@@ -259,9 +324,9 @@ export async function createCourse(input: {
 
 export async function updateCourseMetadata(
   courseId: CourseId,
-  updates: Partial<Pick<Course, 'title' | 'description' | 'price_display' | 'is_active' | 'sort_order' | 'is_sellable'>>
+  updates: Partial<Omit<Course, 'id' | 'updated_at' | 'updated_by'>>
 ): Promise<void> {
-  const { error } = await sb.from('courses').update(updates).eq('id', courseId);
+  const { error } = await sb.from('courses').update(updates as any).eq('id', courseId);
   if (error) throw error;
 }
 

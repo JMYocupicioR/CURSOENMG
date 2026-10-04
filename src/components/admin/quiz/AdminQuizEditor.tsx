@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
   Save,
@@ -13,11 +12,9 @@ import {
   CheckCircle2,
   AlertCircle,
   Sparkles,
-  HelpCircle,
   GraduationCap,
   Image as ImageIcon,
   Check,
-  RotateCcw,
   FolderInput,
 } from 'lucide-react';
 import { useAuth } from '../../../contexts/AuthProvider';
@@ -29,7 +26,6 @@ import {
   getQuizEditorDataForTopic,
   publishAdminQuizDirectly,
   saveRevision,
-  deleteAdminQuizDirectly,
 } from '../../../services/editorialService';
 import { defaultOptionsForType } from '../../../utils/quizScoring';
 import type {
@@ -77,7 +73,6 @@ export function AdminQuizEditor({
   onBackToCatalog,
 }: AdminQuizEditorProps) {
   const { user } = useAuth();
-  const navigate = useNavigate();
   const goBack = useGoBack('/admin/quizzes');
   const { modules: availableModules } = useAllModules();
 
@@ -950,7 +945,7 @@ export function AdminQuizEditor({
 
                       {/* Explanation / Clinical Pearl */}
                       <div>
-                        <label className="block text-xs font-semibold text-slate-500 mb-1 flex items-center gap-1.5">
+                        <label className="text-xs font-semibold text-slate-500 mb-1 flex items-center gap-1.5">
                           <Sparkles className="w-3.5 h-3.5 text-amber-500" />
                           <span>Retroalimentación Académica / Perla Clínica COMEFYR</span>
                         </label>

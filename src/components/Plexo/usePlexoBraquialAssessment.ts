@@ -1,20 +1,10 @@
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import { 
-  CONFIG, 
-  CONFIG_CONTEXTUAL,
-  AJUSTES_TEMPORALES,
-  LESIONES, 
-  INERVACION_DUAL,
   CASOS_CLINICOS_DEMO,
   MUSCULOS_EVALUACION,
   type DatosEvaluacion, 
   type ResultadoDiagnostico,
-  type Lesion,
   type HallazgoInervacionDual,
-  type CasoClinico,
-  type SeveridadLesion,
-  type AnalisisTemporal,
-  type IndicadoresConfianza
 } from './plexoBraquial';
 import { runPlexusDiagnosis, analizarInervacionDual } from './plexusDiagnosisEngine';
 
@@ -45,39 +35,6 @@ export function usePlexoBraquialAssessment() {
   const [calculoRealizado, setCalculoRealizado] = useState(false);
   const [resultadosDiagnostico, setResultadosDiagnostico] = useState<ResultadoDiagnostico[]>([]);
   const [hallazgosInervacionDual, setHallazgosInervacionDual] = useState<HallazgoInervacionDual[]>([]);
-
-  // Función para ajustar lesiones según el tipo de plexo
-  const ajustarLesionPorTipoPlexo = (lesion: Lesion, tipoPlexo: string): Lesion => {
-    const lesionAjustada = { ...lesion };
-    
-    if (tipoPlexo === 'prefijado') {
-      if (lesion.nombre.includes('C5') || lesion.nombre.includes('Tronco Superior')) {
-        lesionAjustada.musculosClave = [
-          ...lesionAjustada.musculosClave,
-          { nombre: "Trapecio Superior", peso: 0.8 },
-          { nombre: "Elevador Escápula", peso: 1.0 }
-        ];
-        lesionAjustada.areasSensibilidad = [
-          ...lesionAjustada.areasSensibilidad,
-          "Dermatoma C4"
-        ];
-      }
-    } else if (tipoPlexo === 'postfijado') {
-      if (lesion.nombre.includes('T1') || lesion.nombre.includes('Tronco Inferior')) {
-        lesionAjustada.musculosClave = [
-          ...lesionAjustada.musculosClave,
-          { nombre: "Interóseos Dorsales", peso: 1.2 },
-          { nombre: "Interóseos Palmares", peso: 1.2 }
-        ];
-        lesionAjustada.areasSensibilidad = [
-          ...lesionAjustada.areasSensibilidad,
-          "Dermatoma T2"
-        ];
-      }
-    }
-    
-    return lesionAjustada;
-  };
 
   // Funciones de actualización
   const updateFuerzaMuscular = (musculo: string, fuerza: number) => {

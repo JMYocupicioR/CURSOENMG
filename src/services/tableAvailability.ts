@@ -8,7 +8,7 @@ const KEY_MISSING_TABLES = 'neurosafe_missing_supabase_tables';
 
 // Tablas de nuevas funcionalidades cuya migración SQL puede estar pendiente en Supabase
 // Ahora que la migración ha sido ejecutada en Supabase, dejamos la lista vacía para usar Supabase
-const DEFAULT_PENDING_TABLES: string[] = [];
+export const DEFAULT_PENDING_TABLES: string[] = [];
 
 // Conjunto en memoria para respuesta síncrona inmediata
 const missingTablesSet = new Set<string>();

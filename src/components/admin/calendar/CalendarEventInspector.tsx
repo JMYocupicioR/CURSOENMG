@@ -1,11 +1,12 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { Activity, Calendar, ClipboardList, Pencil, UserCheck, Video, X } from 'lucide-react';
+import { Activity, Calendar, ClipboardList, Pencil, UserCheck, Video, X, BookOpen } from 'lucide-react';
 import type { CalendarItem } from '../../../types/academicCalendar';
 import { calendarItemStartDate } from '../../../utils/academicCalendar';
 import { calendarChipStyle, calendarEventColor, calendarTypeLabel, useCalendarColorLabels } from '../../../utils/calendarColorLabels';
 import { listWorkshopInstructorNames } from '../../../services/topicTeachingService';
 import { AssignmentMaterialsList } from '../../student/AssignmentMaterialsList';
+import { allModules } from '../../../content/modules';
 
 export function CalendarEventInspector({
   item,
@@ -27,6 +28,20 @@ export function CalendarEventInspector({
   const itemId = item?.id;
   const workshopId = item?.workshopId ?? null;
   const [instructorNames, setInstructorNames] = useState<string[]>([]);
+
+  const topicTitle = useMemo(() => {
+    if (!item?.topicId) return null;
+    for (const m of allModules) {
+      for (const t of m.topics) {
+        if (t.id === item.topicId) return t.title;
+        if (t.children) {
+          const found = t.children.find((c) => c.id === item.topicId);
+          if (found) return found.title;
+        }
+      }
+    }
+    return item.topicId;
+  }, [item?.topicId]);
 
   useEffect(() => {
     if (!workshopId) {
@@ -159,6 +174,17 @@ export function CalendarEventInspector({
               <dt className="text-slate-500 dark:text-slate-400">Modalidad</dt>
               <dd className="font-semibold text-slate-800 dark:text-slate-200">
                 {item.modality === 'online' ? 'En línea' : 'Presencial'}
+              </dd>
+            </div>
+          ) : null}
+          {topicTitle ? (
+            <div className="flex justify-between gap-3 items-center">
+              <dt className="text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+                <BookOpen className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                <span>Tema asignado</span>
+              </dt>
+              <dd className="font-semibold text-indigo-600 dark:text-indigo-400 text-right truncate max-w-[200px]" title={topicTitle}>
+                {topicTitle}
               </dd>
             </div>
           ) : null}

@@ -2,7 +2,6 @@ import { useState, useMemo, useRef } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  BookOpen,
   Award,
   Stethoscope,
   GraduationCap,

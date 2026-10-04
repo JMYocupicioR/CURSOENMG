@@ -7,6 +7,7 @@ import { LoadingSpinner } from './components/LoadingSpinner';
 import IOSInstallBanner from './components/IOSInstallBanner';
 import DeviceNotificationPromptBanner from './components/pwa/DeviceNotificationPromptBanner';
 import PWAInstallModal from './components/pwa/PWAInstallModal';
+import { PWAUpdateBanner } from './components/pwa/PWAUpdateBanner';
 import { SkipLink } from './components/a11y/SkipLink';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import { GlobalCommandPalette } from './components/common/GlobalCommandPalette';
@@ -40,6 +41,7 @@ const PublicProfilePage = lazy(() => import('./components/editorial/PublicProfil
 const QuizEditorPage = lazy(() => import('./components/quiz/QuizEditorPage'));
 const ClinicalCaseEditorPage = lazy(() => import('./components/editorial/ClinicalCaseEditorPage'));
 const StudentDashboard = lazy(() => import('./components/student/StudentDashboard'));
+const StudentCoursePage = lazy(() => import('./components/student/course/StudentCoursePage'));
 const SimulatorsHubPage = lazy(() => import('./components/pages/SimulatorsHubPage'));
 const TraceSimulatorPage = lazy(() => import('./components/pages/TraceSimulatorPage'));
 const CertificateVerifyPage = lazy(() => import('./components/pages/CertificateVerifyPage'));
@@ -99,10 +101,11 @@ function App() {
 
   return (
     <div className={isDarkMode ? 'dark' : ''}>
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50 dark:from-slate-950 dark:via-slate-900 dark:to-indigo-950 text-slate-900 dark:text-slate-100 transition-colors duration-300 pb-24 lg:pb-0">
+      <div className="min-h-screen overflow-x-hidden bg-gradient-to-br from-slate-50 via-white to-blue-50 dark:from-slate-950 dark:via-slate-900 dark:to-indigo-950 text-slate-900 dark:text-slate-100 transition-colors duration-300 pb-24 lg:pb-0">
         <SkipLink />
         <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
           <ScrollToTop />
+          <PWAUpdateBanner />
           <Header />
           <AdminStudentModeBanner />
           <DeviceNotificationPromptBanner />
@@ -173,6 +176,7 @@ function App() {
 
               {/* Portal del Estudiante / Alumno */}
               <Route path="/portal" element={<ProtectedRoute mode="student"><StudentDashboard /></ProtectedRoute>} />
+              <Route path="/portal/curso/:courseId" element={<ProtectedRoute mode="student"><StudentCoursePage /></ProtectedRoute>} />
               <Route path="/dashboard" element={<ProtectedRoute mode="student"><RedirectToPortal /></ProtectedRoute>} />
               <Route path="/estudiante" element={<ProtectedRoute mode="student"><RedirectToPortal /></ProtectedRoute>} />
 

@@ -64,10 +64,6 @@ export default function TopicQuizPage() {
     ? `/modulo/${mod?.id ?? moduleId}/${nextFlat.path.join('/')}`
     : `/modulo/${mod?.id ?? moduleId}`;
 
-  const prevFlat = currentFlatIndex > 0 ? allFlat[currentFlatIndex - 1] : null;
-  const prevTopicUrl = prevFlat
-    ? `/modulo/${mod?.id ?? moduleId}/${prevFlat.path.join('/')}`
-    : topicReadingUrl;
 
   const loadQuizInfo = useCallback(async () => {
     if (!topicId) return;

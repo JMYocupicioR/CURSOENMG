@@ -1,10 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import {
   BellRing,
   Calendar,
   Clock,
-  CheckCircle2,
-  AlertTriangle,
   Play,
   ArrowRight,
   X,

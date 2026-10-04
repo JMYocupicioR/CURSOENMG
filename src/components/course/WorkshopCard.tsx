@@ -1,5 +1,7 @@
-import { Video, Clock } from 'lucide-react';
+import { useMemo } from 'react';
+import { Video, Clock, BookOpen } from 'lucide-react';
 import type { LiveWorkshop } from '../../types/database';
+import { allModules } from '../../content/modules';
 
 interface WorkshopCardProps {
   workshop: LiveWorkshop;
@@ -10,6 +12,20 @@ export function WorkshopCard({ workshop }: WorkshopCardProps) {
   const now = new Date();
   const isPast = date < now;
   const isLive = Math.abs(date.getTime() - now.getTime()) < 2 * 60 * 60 * 1000; // within 2 hours
+
+  const topicTitle = useMemo(() => {
+    if (!workshop.topic_id) return null;
+    for (const m of allModules) {
+      for (const t of m.topics) {
+        if (t.id === workshop.topic_id) return t.title;
+        if (t.children) {
+          const found = t.children.find((c) => c.id === workshop.topic_id);
+          if (found) return found.title;
+        }
+      }
+    }
+    return workshop.topic_id;
+  }, [workshop.topic_id]);
 
   return (
     <div className="group flex flex-col p-5 sm:p-6 rounded-2xl bg-white/70 dark:bg-slate-800/50 backdrop-blur-sm border border-slate-200/60 dark:border-slate-700/40 shadow-sm hover:shadow-xl hover:shadow-blue-100/50 dark:hover:shadow-blue-900/20 transition-all duration-300">
@@ -42,6 +58,13 @@ export function WorkshopCard({ workshop }: WorkshopCardProps) {
       <h3 className="font-bold text-slate-900 dark:text-white mb-2 leading-snug group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
         {workshop.title}
       </h3>
+
+      {topicTitle && (
+        <div className="mb-3 flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-50/90 dark:bg-indigo-950/60 border border-indigo-200/80 dark:border-indigo-800/60 text-indigo-700 dark:text-indigo-300 text-xs font-medium w-fit max-w-full">
+          <BookOpen className="w-3.5 h-3.5 shrink-0 text-indigo-600 dark:text-indigo-400" />
+          <span className="truncate">Tema: {topicTitle}</span>
+        </div>
+      )}
       
       {workshop.description && (
         <p className="text-sm text-slate-500 dark:text-slate-400 mb-4 line-clamp-2">

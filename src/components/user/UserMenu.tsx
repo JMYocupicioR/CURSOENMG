@@ -2,18 +2,19 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import {
   ChevronDown,
+  ChevronRight,
   Bell,
   ClipboardList,
   LogOut,
   PenLine,
   Settings,
   Shield,
-  User,
   UserCircle,
   Crown,
   GraduationCap,
   CheckCircle2,
   Smartphone,
+  type LucideIcon,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthProvider';
 import { useStaffViewStore } from '../../stores/staffViewStore';
@@ -249,19 +250,30 @@ export function UserMenu() {
 
             {/* Cursos activos y cursando */}
             <div className="mt-3 pt-2.5 border-t border-slate-200/50 dark:border-slate-800/80">
-              <p className="text-[0.65rem] uppercase tracking-wide text-slate-400 font-semibold mb-1.5">
-                Cursos activos cursando
-              </p>
-              <div className="flex flex-wrap gap-1">
+              <div className="flex items-center justify-between mb-1.5">
+                <p className="text-[0.65rem] uppercase tracking-wide text-slate-400 font-semibold">
+                  Cursos activos cursando
+                </p>
+                {activeSellable.length > 0 && (
+                  <span className="text-[9px] text-emerald-600 dark:text-emerald-400 font-bold uppercase tracking-wider">
+                    Acceso directo
+                  </span>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-1.5">
                 {activeSellable.length > 0 ? (
                   activeSellable.map((course) => (
-                    <span
+                    <Link
                       key={course.id}
-                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-300/50"
+                      to={`/portal/curso/${course.id}`}
+                      onClick={() => setOpen(false)}
+                      title={`Ir al panel de ${courseDisplayTitle(course.id, courses)}`}
+                      className="group inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10.5px] font-bold bg-emerald-50 hover:bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:hover:bg-emerald-900/80 dark:text-emerald-300 border border-emerald-300/70 hover:border-emerald-400 dark:border-emerald-700/60 transition-all shadow-2xs hover:shadow-xs active:scale-[0.98] cursor-pointer"
                     >
-                      <CheckCircle2 className="w-2.5 h-2.5 text-emerald-600 dark:text-emerald-400" />
-                      <span>{courseDisplayTitle(course.id, courses)}</span>
-                    </span>
+                      <CheckCircle2 className="w-3 h-3 text-emerald-600 dark:text-emerald-400 group-hover:scale-110 transition-transform shrink-0" />
+                      <span className="truncate max-w-[170px]">{courseDisplayTitle(course.id, courses)}</span>
+                      <ChevronRight className="w-2.5 h-2.5 text-emerald-600/70 dark:text-emerald-400/70 group-hover:translate-x-0.5 transition-transform shrink-0" />
+                    </Link>
                   ))
                 ) : (
                   <span className="text-[10px] text-slate-400 italic">Sin cursos activos</span>
@@ -309,9 +321,6 @@ export function UserMenu() {
             )}
             <MenuLink to="/cuenta" icon={UserCircle} onClick={() => setOpen(false)}>
               Mi cuenta
-            </MenuLink>
-            <MenuLink to="/perfil" icon={User} onClick={() => setOpen(false)}>
-              Editar perfil
             </MenuLink>
             {canProposeContent && (
               <MenuLink to="/colaborador" icon={PenLine} onClick={() => setOpen(false)}>
@@ -396,7 +405,7 @@ function MenuLink({
   state,
 }: {
   to: string;
-  icon: typeof User;
+  icon: LucideIcon;
   children: React.ReactNode;
   onClick?: () => void;
   badge?: string;

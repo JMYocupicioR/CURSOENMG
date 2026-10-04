@@ -1,4 +1,5 @@
 import { Users } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import type { ReactNode } from 'react';
 import type { AdminProfileRow } from '../../../types/admin';
 import { BackButton } from '../../common/BackButton';

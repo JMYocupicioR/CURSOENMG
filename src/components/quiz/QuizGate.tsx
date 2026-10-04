@@ -1,5 +1,4 @@
 import { Link, useLocation } from 'react-router-dom';
-import { ClipboardList } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthProvider';
 import type { QuizTopicFlag } from '../../types/quiz';
 import { QuizPlayer } from './QuizPlayer';
@@ -65,30 +64,5 @@ export function QuizGate({
         nextTopicUrl={nextTopicUrl}
       />
     </div>
-  );
-}
-
-function LockedCard({
-  icon,
-  title,
-  description,
-  action,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  description: string;
-  action?: React.ReactNode;
-}) {
-  return (
-    <section className="mt-10 p-6 sm:p-8 rounded-2xl border border-indigo-200/60 dark:border-indigo-800/40 bg-gradient-to-br from-indigo-50/80 to-white dark:from-indigo-950/30 dark:to-slate-900/40">
-      <div className="flex items-start gap-4">
-        <div className="p-3 rounded-xl bg-white dark:bg-slate-800 shadow-sm">{icon}</div>
-        <div className="flex-1 min-w-0">
-          <h2 className="text-lg font-bold text-slate-900 dark:text-white mb-1">{title}</h2>
-          <p className="text-sm text-slate-600 dark:text-slate-300 mb-4">{description}</p>
-          {action}
-        </div>
-      </div>
-    </section>
   );
 }

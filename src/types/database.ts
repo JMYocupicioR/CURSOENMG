@@ -21,6 +21,14 @@ export interface Course {
   price_display: string | null;
   is_active: boolean;
   is_sellable: boolean;
+  instructor_id?: string | null;
+  instructor_name?: string | null;
+  instructor_title?: string | null;
+  live_meeting_url?: string | null;
+  live_schedule_notes?: string | null;
+  active_workshop_id?: string | null;
+  syllabus_brochure_url?: string | null;
+  min_passing_grade?: number | null;
   updated_at: string;
   updated_by: string | null;
 }
@@ -30,6 +38,7 @@ export interface CourseModuleRow {
   course_id: CourseId;
   sort_order: number;
   is_visible: boolean;
+  is_required?: boolean;
   updated_at?: string;
   updated_by?: string | null;
 }
@@ -366,7 +375,45 @@ export interface WorkshopInstructor {
   teacher_name?: string | null;
 }
 
-export interface Database {
+export type GenericRelationship = {
+  foreignKeyName: string;
+  columns: string[];
+  isOneToOne?: boolean;
+  referencedRelation: string;
+  referencedColumns: string[];
+};
+
+type MapProperties<T> = { [K in keyof T]: T[K] };
+
+type NormalizeTable<T> = {
+  Row: T extends { Row: infer R } ? MapProperties<R> : Record<string, unknown>;
+  Insert: T extends { Insert: infer I }
+    ? [I] extends [never]
+      ? Record<string, unknown>
+      : MapProperties<I>
+    : Record<string, unknown>;
+  Update: T extends { Update: infer U }
+    ? [U] extends [never]
+      ? Record<string, unknown>
+      : MapProperties<U>
+    : Record<string, unknown>;
+  Relationships: T extends { Relationships: infer Rel }
+    ? Rel extends GenericRelationship[]
+      ? Rel
+      : []
+    : [];
+};
+
+type NormalizeView<T> = {
+  Row: T extends { Row: infer R } ? MapProperties<R> : Record<string, unknown>;
+  Relationships: T extends { Relationships: infer Rel }
+    ? Rel extends GenericRelationship[]
+      ? Rel
+      : []
+    : [];
+};
+
+interface RawDatabase {
   public: {
     Tables: {
       profiles: {
@@ -671,6 +718,82 @@ export interface Database {
         Insert: { workshop_id: string; teacher_id: string; commitment_id?: string | null };
         Update: { commitment_id?: string | null };
       };
+      module_access: {
+        Row: ModuleAccess;
+        Insert: Partial<ModuleAccess> & { module_id: string; required_tier: AccessTier };
+        Update: Partial<ModuleAccess>;
+      };
+      workshops: {
+        Row: LiveWorkshop;
+        Insert: Partial<LiveWorkshop> & { title: string };
+        Update: Partial<LiveWorkshop>;
+      };
+      live_workshops: {
+        Row: LiveWorkshop;
+        Insert: Partial<LiveWorkshop> & { title: string };
+        Update: Partial<LiveWorkshop>;
+      };
+      subscriptions: {
+        Row: Subscription;
+        Insert: Partial<Subscription> & { user_id: string };
+        Update: Partial<Subscription>;
+      };
+      emg_case_templates: {
+        Row: Record<string, any>;
+        Insert: Record<string, any>;
+        Update: Record<string, any>;
+      };
+      emg_public_exercises: {
+        Row: Record<string, any>;
+        Insert: Record<string, any>;
+        Update: Record<string, any>;
+      };
+      workshop_registrations: {
+        Row: WorkshopRegistration;
+        Insert: Partial<WorkshopRegistration> & { workshop_id: string; user_id: string };
+        Update: Partial<WorkshopRegistration>;
+      };
+      student_completed_topics: {
+        Row: {
+          id: string;
+          user_id: string;
+          topic_id: string;
+          module_id: string | null;
+          completed_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          topic_id: string;
+          module_id?: string | null;
+          completed_at?: string;
+        };
+        Update: Partial<{
+          topic_id: string;
+          module_id: string | null;
+          completed_at: string;
+        }>;
+      };
+      student_activity_logs: {
+        Row: import('./studentPlan').StudentActivityLog;
+        Insert: Partial<import('./studentPlan').StudentActivityLog> & { user_id: string; action: string };
+        Update: Partial<import('./studentPlan').StudentActivityLog>;
+      };
+      student_learning_plans: {
+        Row: import('./studentPlan').StudentLearningPlan;
+        Insert: Partial<import('./studentPlan').StudentLearningPlan> & { student_id: string };
+        Update: Partial<import('./studentPlan').StudentLearningPlan>;
+      };
+      student_assignments: {
+        Row: import('./studentPlan').StudentAssignment;
+        Insert: Partial<import('./studentPlan').StudentAssignment> & { student_id: string; title: string };
+        Update: Partial<import('./studentPlan').StudentAssignment>;
+      };
+      exam_sessions: {
+        Row: import('./exam').ExamSession;
+        Insert: Partial<import('./exam').ExamSession> & { user_id: string };
+        Update: Partial<import('./exam').ExamSession>;
+      };
     };
     Functions: {
       is_admin: { Args: { check_user_id?: string }; Returns: boolean };
@@ -928,3 +1051,17 @@ export interface Database {
     };
   };
 }
+
+export type Database = {
+  public: {
+    Tables: {
+      [K in keyof RawDatabase['public']['Tables']]: NormalizeTable<RawDatabase['public']['Tables'][K]>;
+    };
+    Views: {
+      [K in keyof RawDatabase['public']['Views']]: NormalizeView<RawDatabase['public']['Views'][K]>;
+    };
+    Functions: RawDatabase['public']['Functions'];
+    Enums: Record<string, never>;
+    CompositeTypes: Record<string, never>;
+  };
+};

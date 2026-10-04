@@ -3,9 +3,6 @@ import {
   Download,
   AlertTriangle,
   CheckCircle2,
-  Clock,
-  ShieldCheck,
-  XCircle,
   Search,
   Filter,
 } from 'lucide-react';
