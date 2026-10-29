@@ -17,7 +17,6 @@ import {
   Activity,
   Layers,
   ArrowRight,
-  ShieldCheck,
   ShieldAlert,
   Building2,
   Video,
