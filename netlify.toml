@@ -4,7 +4,15 @@
 [functions."sign-agreement"]
   included_files = ["docs/legal/alumnos/*.md"]
 
+[functions."sign-physician-agreement"]
+  included_files = ["docs/legal/medicos/*.md"]
+
 [[redirects]]
   from = "/api/sign-agreement"
   to = "/.netlify/functions/sign-agreement"
+  status = 200
+
+[[redirects]]
+  from = "/api/sign-physician-agreement"
+  to = "/.netlify/functions/sign-physician-agreement"
   status = 200

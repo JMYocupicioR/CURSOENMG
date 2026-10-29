@@ -119,16 +119,13 @@ async function handleSign(req: Request, body: SignBody): Promise<Response> {
   if ('error' in auth) return json(401, { success: false, error: auth.error });
   const { supabase, user } = auth;
   const { isStaff } = await loadRoles(supabase, user.id);
-  if (isStaff) {
-    return json(403, { success: false, error: 'El personal académico no firma este expediente de alumno.' });
-  }
 
   const { data: profile } = await supabase
     .from('profiles')
     .select('enrollment_status')
     .eq('id', user.id)
     .maybeSingle();
-  if (profile?.enrollment_status !== 'approved') {
+  if (!isStaff && profile?.enrollment_status !== 'approved') {
     return json(403, { success: false, error: 'Solo un alumno admitido puede firmar estos instrumentos.' });
   }
 

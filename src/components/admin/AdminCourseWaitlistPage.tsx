@@ -36,6 +36,20 @@ const STATUS_FILTERS: { id: CourseEnrollmentStatus | 'all'; label: string }[] = 
   { id: 'all', label: 'Todos los registros' },
 ];
 
+function formatRequestedAt(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toLocaleString('es-MX', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: 'America/Mexico_City',
+  });
+}
+
 export default function AdminCourseWaitlistPage() {
   const { courses } = useSyllabusCatalog();
   const [searchParams] = useSearchParams();
@@ -351,44 +365,55 @@ export default function AdminCourseWaitlistPage() {
                 profile.specialty?.toLowerCase().includes(q)
               );
             })
-            .map((profile) => (
-              <div
-                key={profile.id}
-                className="p-5 rounded-2xl border border-amber-300/80 dark:border-amber-800 bg-amber-50/40 dark:bg-amber-950/20 shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-4"
-              >
-                <div className="min-w-0">
-                  <p className="font-bold text-slate-900 dark:text-white">{profile.display_name || 'Médico sin nombre'}</p>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    {profile.specialty || profile.institution || profile.email}
-                    {profile.cedula_profesional ? ` · Cédula: ${profile.cedula_profesional}` : ''}
-                  </p>
-                  <p className="text-[11px] font-semibold text-amber-700 dark:text-amber-300 mt-1">Perfil pendiente de aprobación</p>
+            .map((profile) => {
+              const requestedAt = formatRequestedAt(profile.enrollment_requested_at || profile.created_at);
+              return (
+                <div
+                  key={profile.id}
+                  className="p-5 rounded-2xl border border-amber-300/80 dark:border-amber-800 bg-amber-50/40 dark:bg-amber-950/20 shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-4"
+                >
+                  <div className="min-w-0">
+                    <p className="font-bold text-slate-900 dark:text-white">{profile.display_name || 'Médico sin nombre'}</p>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      {profile.specialty || profile.institution || profile.email}
+                      {profile.cedula_profesional ? ` · Cédula: ${profile.cedula_profesional}` : ''}
+                    </p>
+                    <p className="text-[11px] font-semibold text-amber-700 dark:text-amber-300 mt-1">Perfil pendiente de aprobación</p>
+                    {requestedAt && (
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 inline-flex items-center gap-1">
+                        <Clock className="w-3 h-3" />
+                        Solicitó unirse:{' '}
+                        <span className="font-semibold text-slate-700 dark:text-slate-200">{requestedAt}</span>
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      type="button"
+                      disabled={actionBusyId === profile.id}
+                      onClick={() => handleRejectProfile(profile)}
+                      className="px-3 py-2 rounded-xl border border-red-200 text-red-600 text-xs font-semibold disabled:opacity-50"
+                    >
+                      Rechazar
+                    </button>
+                    <button
+                      type="button"
+                      disabled={actionBusyId === profile.id}
+                      onClick={() => handleApproveProfile(profile)}
+                      className="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold disabled:opacity-50"
+                    >
+                      {actionBusyId === profile.id ? 'Aprobando...' : 'Aprobar'}
+                    </button>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <button
-                    type="button"
-                    disabled={actionBusyId === profile.id}
-                    onClick={() => handleRejectProfile(profile)}
-                    className="px-3 py-2 rounded-xl border border-red-200 text-red-600 text-xs font-semibold disabled:opacity-50"
-                  >
-                    Rechazar
-                  </button>
-                  <button
-                    type="button"
-                    disabled={actionBusyId === profile.id}
-                    onClick={() => handleApproveProfile(profile)}
-                    className="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold disabled:opacity-50"
-                  >
-                    {actionBusyId === profile.id ? 'Aprobando...' : 'Aprobar'}
-                  </button>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           {filteredList.map((row) => {
             const isPending = row.status === 'pending';
             const isActive = row.status === 'active';
             const isRejected = row.status === 'rejected';
             const isBusy = actionBusyId === row.enrollment_id;
+            const requestedAt = formatRequestedAt(row.requested_at);
 
             return (
               <div
@@ -453,18 +478,13 @@ export default function AdminCourseWaitlistPage() {
                         <span>{row.course_title}</span>
                       </div>
 
-                      <span className="text-slate-400">
-                        Solicitado:{' '}
-                        <strong className="text-slate-600 dark:text-slate-300">
-                          {new Date(row.requested_at).toLocaleDateString('es-MX', {
-                            day: 'numeric',
-                            month: 'short',
-                            year: 'numeric',
-                            hour: '2-digit',
-                            minute: '2-digit',
-                          })}
-                        </strong>
-                      </span>
+                      {requestedAt && (
+                        <span className="inline-flex items-center gap-1 text-slate-400">
+                          <Clock className="w-3 h-3" />
+                          Solicitó unirse:{' '}
+                          <strong className="text-slate-600 dark:text-slate-300">{requestedAt}</strong>
+                        </span>
+                      )}
 
                       {row.payment_reference && (
                         <span className="inline-flex items-center gap-1 font-mono text-[11px] text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-md">

@@ -35,6 +35,8 @@ export interface AdminProfileRow {
   admin_notes?: string | null;
   agreements_signed?: boolean | null;
   agreement_bundle_version?: string | null;
+  physician_agreements_signed?: boolean | null;
+  physician_agreement_bundle_version?: string | null;
 }
 
 export interface AdminStats {

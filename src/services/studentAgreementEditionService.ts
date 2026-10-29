@@ -8,6 +8,9 @@ import {
 import { partyFromRecord, type LegalParty } from '../content/legal/party';
 import { AGREEMENT_SOURCE_MARKDOWN } from '../content/legal/studentDocuments';
 import type { StudentAgreementEdition } from '../types/database';
+import { agreementStoreError } from './agreementStoreError';
+
+const EDITIONS_MIGRATION = '20261029030000_student_agreement_editions.sql';
 
 export interface AgreementEditorModel {
   party: LegalParty;
@@ -75,7 +78,8 @@ export async function fetchPublishedEdition(): Promise<AgreementEditionTexts | n
 
 export async function fetchAgreementEditor(): Promise<AgreementEditorModel> {
   const { data, error } = await supabase.from('student_agreement_editions').select('*');
-  if (error || !data || data.length === 0) return seedModel();
+  if (error) throw agreementStoreError(error, 'No se pudo cargar el acuerdo.', EDITIONS_MIGRATION);
+  if (!data || data.length === 0) return seedModel();
   const rows = data as StudentAgreementEdition[];
   const draft = rows.find((row) => row.status === 'draft');
   const published = rows.find((row) => row.status === 'published');
@@ -107,18 +111,19 @@ async function upsertStatus(
     updated_by: userId,
     published_at: status === 'published' ? new Date().toISOString() : null,
   };
-  const { data: existing } = await supabase
+  const { data: existing, error: readError } = await supabase
     .from('student_agreement_editions')
     .select('id')
     .eq('status', status)
     .maybeSingle();
+  if (readError) throw agreementStoreError(readError, 'No se pudo guardar la edición.', EDITIONS_MIGRATION);
   if (existing?.id) {
     const { error } = await supabase.from('student_agreement_editions').update(payload).eq('id', existing.id);
-    if (error) throw error;
+    if (error) throw agreementStoreError(error, 'No se pudo guardar la edición.', EDITIONS_MIGRATION);
     return;
   }
   const { error } = await supabase.from('student_agreement_editions').insert(payload);
-  if (error) throw error;
+  if (error) throw agreementStoreError(error, 'No se pudo guardar la edición.', EDITIONS_MIGRATION);
 }
 
 export async function saveAgreementDraft(

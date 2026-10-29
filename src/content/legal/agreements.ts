@@ -17,7 +17,7 @@ export interface AgreementSection {
 }
 
 export interface ParsedAgreement {
-  type: StudentAgreementType;
+  type: string;
   title: string;
   version: string;
   sections: AgreementSection[];
@@ -67,8 +67,9 @@ export function hasUnresolvedPartyPlaceholders(markdown: string): boolean {
 const CHECKBOX_HEADING = 'Texto de la casilla de aceptación';
 
 export function parseAgreementMarkdown(
-  type: StudentAgreementType,
-  markdown: string
+  type: string,
+  markdown: string,
+  fallbackTitle = ''
 ): ParsedAgreement {
   const normalized = markdown.replace(/\r\n/g, '\n').trim();
   const titleMatch = normalized.match(/^#\s+(.+)$/m);
@@ -89,9 +90,11 @@ export function parseAgreementMarkdown(
     sections.push({ title: heading, content: body });
   }
 
+  const studentTitle = STUDENT_AGREEMENT_META[type as StudentAgreementType]?.title;
+
   return {
     type,
-    title: titleMatch?.[1]?.trim() || STUDENT_AGREEMENT_META[type].title,
+    title: titleMatch?.[1]?.trim() || studentTitle || fallbackTitle,
     version: versionMatch?.[1]?.trim() || STUDENT_AGREEMENT_BUNDLE_VERSION,
     sections,
     checkboxText,

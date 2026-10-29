@@ -24,6 +24,7 @@ import {
   Activity,
   ChevronRight,
   Pencil,
+  FileText,
 } from 'lucide-react';
 import { AdminLayout } from './AdminLayout';
 import {
@@ -48,20 +49,33 @@ import {
 } from '../../services/courseService';
 import { useSyllabusCatalog } from '../../hooks/useSyllabusCatalog';
 import { courseDisplayTitle, sellableCourses } from '../../content/courseCatalog';
+import { isCeoEmail } from '../../content/legal/ceo';
+import { isEditorialOrSpecialist, isTeachingCollaborator } from '../../utils/physicianDirectory';
+import { PhysicianAgreementEditor } from '../agreements/PhysicianAgreementEditor';
+import { PhysicianAgreementRoster } from '../agreements/PhysicianAgreementRoster';
 
-type Tab = 'enrolled' | 'comite' | 'premium' | 'all';
+type Tab = 'enrolled' | 'comite' | 'docentes' | 'premium' | 'all' | 'acuerdos';
 
 const TAB_CONFIG: { id: Tab; label: string; icon: any }[] = [
   { id: 'enrolled', label: 'Médicos Admitidos', icon: Stethoscope },
   { id: 'comite', label: 'Comité Editorial y Especialistas', icon: Scale },
+  { id: 'docentes', label: 'Colaboradores Docentes', icon: GraduationCap },
   { id: 'premium', label: 'Usuarios Premium', icon: Sparkles },
   { id: 'all', label: 'Directorio General', icon: Users },
+  { id: 'acuerdos', label: 'Acuerdos', icon: FileText },
 ];
 
 function readInitialTab(): Tab {
   const requested = new URLSearchParams(window.location.search).get('tab');
   if (requested === 'enrollment_pending') return 'all';
-  if (requested === 'enrolled' || requested === 'comite' || requested === 'premium' || requested === 'all') {
+  if (
+    requested === 'enrolled' ||
+    requested === 'comite' ||
+    requested === 'docentes' ||
+    requested === 'premium' ||
+    requested === 'all' ||
+    requested === 'acuerdos'
+  ) {
     return requested;
   }
   return 'enrolled';
@@ -116,12 +130,9 @@ export default function AdminUsersPage() {
       case 'enrolled':
         return allUsersCache.filter((u) => u.enrollment_status === 'approved');
       case 'comite':
-        return allUsersCache.filter(
-          (u) =>
-            u.show_in_editorial_committee ||
-            u.is_public ||
-            u.roles.some((r) => r === 'editor' || r === 'admin' || r === 'contributor')
-        );
+        return allUsersCache.filter(isEditorialOrSpecialist);
+      case 'docentes':
+        return allUsersCache.filter(isTeachingCollaborator);
       case 'premium':
         return allUsersCache.filter((u) => u.has_premium);
       case 'all':
@@ -173,9 +184,16 @@ export default function AdminUsersPage() {
   const counts = useMemo(() => {
     return {
       enrolled: allUsersCache.filter((u) => u.enrollment_status === 'approved').length,
-      comite: allUsersCache.filter((u) => u.show_in_editorial_committee || u.is_public || u.roles.some((r) => r === 'editor' || r === 'admin' || r === 'contributor')).length,
+      comite: allUsersCache.filter(isEditorialOrSpecialist).length,
+      docentes: allUsersCache.filter(isTeachingCollaborator).length,
       all: allUsersCache.length,
       premium: allUsersCache.filter((u) => u.has_premium).length,
+      acuerdos: allUsersCache.filter(
+        (u) =>
+          u.roles.some((role) => role === 'admin' || role === 'editor' || role === 'contributor') &&
+          !isCeoEmail(u.email) &&
+          u.physician_agreements_signed
+      ).length,
     };
   }, [allUsersCache]);
 
@@ -226,8 +244,10 @@ export default function AdminUsersPage() {
           let count = 0;
           if (id === 'enrolled') count = counts.enrolled;
           else if (id === 'comite') count = counts.comite;
+          else if (id === 'docentes') count = counts.docentes;
           else if (id === 'all') count = counts.all;
           else if (id === 'premium') count = counts.premium;
+          else if (id === 'acuerdos') count = counts.acuerdos;
 
           const isActive = tab === id;
 
@@ -260,6 +280,25 @@ export default function AdminUsersPage() {
         })}
       </div>
 
+      {tab === 'docentes' && (
+        <p className="mb-4 max-w-3xl text-sm text-slate-600 dark:text-slate-300">
+          Médicos con rol de colaborador docente. Esta lista es la base del contrato y del reparto según la docencia hecha en la plataforma. Quien solo modifica exámenes o contenidos queda en Comité Editorial.
+        </p>
+      )}
+
+      {tab === 'acuerdos' ? (
+        <div className="space-y-6">
+          <PhysicianAgreementRoster />
+          {isCeoEmail(user?.email) ? (
+            <PhysicianAgreementEditor />
+          ) : (
+            <p className="text-sm text-slate-500">
+              El texto, los datos del prestador y la publicación solo los edita la cuenta de Dirección.
+            </p>
+          )}
+        </div>
+      ) : (
+        <>
       {/* ─── Search Bar and Quick Filters ─── */}
       <div className="rounded-2xl border border-slate-200 dark:border-slate-700/80 bg-white/70 dark:bg-slate-900/40 p-4 mb-6 backdrop-blur-md">
         <div className="flex flex-col sm:flex-row gap-3">
@@ -905,6 +944,8 @@ export default function AdminUsersPage() {
             );
           })}
         </ul>
+      )}
+        </>
       )}
 
       {/* ─── Modal de Confirmación de Eliminación Permanente ─── */}

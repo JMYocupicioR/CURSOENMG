@@ -24,7 +24,7 @@ interface LoginPageProps {
 }
 
 export default function LoginPage({ initialMode = 'password' }: LoginPageProps) {
-  const { signInWithOtp, signInWithPassword, resetPassword, user, isAdmin, isEditor, roles, isLoading, isSessionReady, needsAgreementSignature } = useAuth();
+  const { signInWithOtp, signInWithPassword, resetPassword, user, isAdmin, isEditor, roles, isLoading, isSessionReady, needsAgreementSignature, needsPhysicianAgreementSignature } = useAuth();
   const needsAgreements = needsAgreementSignature;
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -73,10 +73,11 @@ export default function LoginPage({ initialMode = 'password' }: LoginPageProps) 
         isEditor,
         isContributor: roles.includes('contributor'),
         needsAgreements,
+        needsPhysicianAgreements: needsPhysicianAgreementSignature,
       }),
       { replace: true }
     );
-  }, [user, isLoading, isSessionReady, isAdmin, isEditor, roles, nextPath, joinLive, redirectToWorkshop, needsAgreements, navigate]);
+  }, [user, isLoading, isSessionReady, isAdmin, isEditor, roles, nextPath, joinLive, redirectToWorkshop, needsAgreements, needsPhysicianAgreementSignature, navigate]);
 
   useEffect(() => {
     if (searchParams.get('verified') === '1') setSent(true);

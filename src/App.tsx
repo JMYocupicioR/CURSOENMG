@@ -10,6 +10,7 @@ import PWAInstallModal from './components/pwa/PWAInstallModal';
 import { PWAUpdateBanner } from './components/pwa/PWAUpdateBanner';
 import { SkipLink } from './components/a11y/SkipLink';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
+import { StudentAgreementLock } from './components/agreements/StudentAgreementLock';
 import { GlobalCommandPalette } from './components/common/GlobalCommandPalette';
 import { MobileBottomNav } from './components/layout/MobileBottomNav';
 import { AdminStudentModeBanner } from './components/admin/AdminStudentModeBanner';
@@ -48,6 +49,10 @@ const TraceSimulatorPage = lazy(() => import('./components/pages/TraceSimulatorP
 const CertificateVerifyPage = lazy(() => import('./components/pages/CertificateVerifyPage'));
 const AgreementsPage = lazy(() => import('./components/agreements/AgreementsPage'));
 const AgreementVerifyPage = lazy(() => import('./components/agreements/AgreementVerifyPage'));
+const PhysicianAgreementsPage = lazy(() => import('./components/agreements/PhysicianAgreementsPage'));
+const PhysicianAgreementVerifyPage = lazy(
+  () => import('./components/agreements/PhysicianAgreementVerifyPage')
+);
 const EditorialCommitteePage = lazy(() => import('./components/editorial/EditorialCommitteePage'));
 const AdminDashboard = lazy(() => import('./components/admin/AdminDashboard'));
 const AdminReviewQueue = lazy(() => import('./components/admin/AdminReviewQueue'));
@@ -113,6 +118,7 @@ function App() {
           <AdminStudentModeBanner />
           <DeviceNotificationPromptBanner />
           <AdminEntryGate />
+          <StudentAgreementLock />
           <GlobalCommandPalette />
           <MobileBottomNav />
           <LiveClassGlobalAlert />
@@ -121,6 +127,7 @@ function App() {
               <Route path="/" element={<LandingPage />} />
               <Route path="/verificar/:folio" element={<CertificateVerifyPage />} />
               <Route path="/verificar-acuerdo" element={<AgreementVerifyPage />} />
+              <Route path="/verificar-acuerdo-medico" element={<PhysicianAgreementVerifyPage />} />
               <Route path="/temario" element={<SyllabusPage />} />
               <Route path="/programa" element={<SyllabusPage />} />
               <Route path="/cursos" element={<CoursesCatalogPage />} />
@@ -186,6 +193,7 @@ function App() {
               <Route path="/estudiante" element={<ProtectedRoute mode="student"><RedirectToPortal /></ProtectedRoute>} />
 
               <Route path="/acuerdos" element={<ProtectedRoute><AgreementsPage /></ProtectedRoute>} />
+              <Route path="/acuerdos-medico" element={<ProtectedRoute><PhysicianAgreementsPage /></ProtectedRoute>} />
 
               {/* Cuenta */}
               <Route path="/cuenta" element={<ProtectedRoute><AccountPage /></ProtectedRoute>} />

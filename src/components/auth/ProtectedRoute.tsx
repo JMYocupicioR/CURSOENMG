@@ -24,7 +24,7 @@ export function ProtectedRoute({
     hasPremiumAccess,
     isPendingApproval,
     isRejected,
-    needsAgreementSignature,
+    needsPhysicianAgreementSignature,
   } = useAuth();
   const location = useLocation();
 
@@ -48,23 +48,20 @@ export function ProtectedRoute({
     }
   }
 
-  const agreementContentRoute =
-    mode === 'enrolled' ||
-    mode === 'student' ||
-    mode === 'premium' ||
-    location.pathname.startsWith('/portal') ||
-    location.pathname.startsWith('/dashboard') ||
-    location.pathname.startsWith('/estudiante') ||
-    location.pathname.startsWith('/modulo') ||
-    location.pathname.startsWith('/ejercicios') ||
-    location.pathname.startsWith('/examenes') ||
-    location.pathname.startsWith('/herramientas') ||
-    location.pathname.startsWith('/simuladores') ||
-    location.pathname.startsWith('/talleres') ||
-    location.pathname.startsWith('/taller');
+  const physicianStaffRoute =
+    mode === 'contributor' ||
+    mode === 'verified' ||
+    mode === 'editor' ||
+    mode === 'admin' ||
+    location.pathname.startsWith('/colaborador') ||
+    location.pathname.startsWith('/admin');
 
-  if (needsAgreementSignature && agreementContentRoute && !location.pathname.startsWith('/acuerdos')) {
-    return <Navigate to="/acuerdos" replace />;
+  if (
+    needsPhysicianAgreementSignature &&
+    physicianStaffRoute &&
+    !location.pathname.startsWith('/acuerdos-medico')
+  ) {
+    return <Navigate to="/acuerdos-medico" replace />;
   }
 
   // Rutas exclusivas con candado Premium (Simuladores, Calculadora de Plexo)

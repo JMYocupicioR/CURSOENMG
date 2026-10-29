@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from 'pdf-lib';
 import QRCode from 'qrcode';
+import { agreementBodyPlain } from '../src/content/legal/agreementBody';
 import type { ParsedAgreement } from '../src/content/legal/agreements';
 
 export interface StampStudentAgreementInput {
@@ -8,11 +9,13 @@ export interface StampStudentAgreementInput {
   signaturePng: Buffer;
   signerName: string;
   professionalLicense?: string | null;
+  extraSignerLines?: string[];
   signedAtIso: string;
   ipAddress: string;
   userAgent: string;
   verificationFolio: string;
   appBaseUrl: string;
+  verificationPath?: string;
 }
 
 function toWinAnsi(text: string): string {
@@ -126,7 +129,7 @@ export async function stampStudentAgreement(input: StampStudentAgreementInput): 
     const heading = wrapText(section.title, bold, 11, maxWidth);
     y = drawLines(page, heading, { x: margin, y, font: bold, size: 11, color: ink, gap: 14 });
     y -= 4;
-    const body = wrapText(section.content, font, 9, maxWidth);
+    const body = wrapText(agreementBodyPlain(section.content), font, 9, maxWidth);
     for (const line of body) {
       ensureSpace(14);
       if (line) {
@@ -138,7 +141,8 @@ export async function stampStudentAgreement(input: StampStudentAgreementInput): 
   }
 
   const signatureImage = await pdf.embedPng(input.signaturePng);
-  const verificationUrl = `${input.appBaseUrl.replace(/\/$/, '')}/verificar-acuerdo?folio=${encodeURIComponent(input.verificationFolio)}`;
+  const verifyPath = input.verificationPath || '/verificar-acuerdo';
+  const verificationUrl = `${input.appBaseUrl.replace(/\/$/, '')}${verifyPath}?folio=${encodeURIComponent(input.verificationFolio)}`;
   const qrDataUrl = await QRCode.toDataURL(verificationUrl, { margin: 1, width: 160 });
   const qrImage = await pdf.embedPng(Buffer.from(qrDataUrl.replace(/^data:image\/\w+;base64,/, ''), 'base64'));
 
@@ -203,10 +207,22 @@ export async function stampStudentAgreement(input: StampStudentAgreementInput): 
       color: muted,
     });
   }
+  const extraLines = (input.extraSignerLines ?? []).filter((line) => line.trim());
+  let extraY = input.professionalLicense ? boxY + 46 : boxY + 56;
+  for (const line of extraLines.slice(0, 3)) {
+    extraY -= 8;
+    page.drawText(toWinAnsi(line), {
+      x: boxX + 16,
+      y: extraY,
+      size: 7,
+      font,
+      color: muted,
+    });
+  }
 
   const disclaimer =
     'El firmante acepta este instrumento con una firma electrónica simple. Produce efectos entre las partes conforme a los artículos 89, 90, 93 y 97 del Código de Comercio. No es la e.firma ni una firma electrónica avanzada.';
-  let discY = input.professionalLicense ? boxY + 42 : boxY + 54;
+  let discY = extraLines.length ? extraY - 10 : input.professionalLicense ? boxY + 42 : boxY + 54;
   for (const line of wrapText(disclaimer, italic, 6, 230)) {
     page.drawText(line, { x: boxX + 16, y: discY, size: 6, font: italic, color: muted });
     discY -= 8;

@@ -9,6 +9,7 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthProvider';
+import { useStaffViewStore } from '../../stores/staffViewStore';
 import {
   documentsFromEdition,
   STUDENT_AGREEMENT_META,
@@ -25,9 +26,10 @@ import {
   submitStudentAgreement,
 } from '../../services/studentAgreementService';
 import { LoadingSpinner } from '../LoadingSpinner';
+import { AgreementMarkdown } from './AgreementMarkdown';
 import { SignaturePad } from './SignaturePad';
 
-export default function AgreementsPage() {
+export default function AgreementsPage({ embedded = false }: { embedded?: boolean }) {
   const {
     user,
     profile,
@@ -39,6 +41,7 @@ export default function AgreementsPage() {
     hasSignedCurrentAgreements,
     refreshProfile,
   } = useAuth();
+  const studentMode = useStaffViewStore((state) => state.view) === 'student';
   const navigate = useNavigate();
   const [edition, setEdition] = useState<AgreementEditionTexts | null>(null);
   const [editionLoaded, setEditionLoaded] = useState(false);
@@ -136,9 +139,9 @@ export default function AgreementsPage() {
     );
   }
 
-  if (isAdmin || isEditor) return <Navigate to="/admin" replace />;
-  if (isPendingApproval || isRejected) return <Navigate to="/portal" replace />;
-  if (hasSignedCurrentAgreements && allDone) return <Navigate to="/portal" replace />;
+  if ((isAdmin || isEditor) && !studentMode && !embedded) return <Navigate to="/admin" replace />;
+  if (!embedded && (isPendingApproval || isRejected)) return <Navigate to="/portal" replace />;
+  if (!embedded && hasSignedCurrentAgreements && allDone) return <Navigate to="/portal" replace />;
 
   const handleDownload = async (type: StudentAgreementType) => {
     setDownloading(type);
@@ -177,7 +180,7 @@ export default function AgreementsPage() {
         setStep(next);
       } else {
         await refreshProfile();
-        navigate('/portal', { replace: true });
+        if (!embedded) navigate('/portal', { replace: true });
       }
     } finally {
       setSubmitting(false);
@@ -185,7 +188,7 @@ export default function AgreementsPage() {
   };
 
   return (
-    <div id="contenido-principal" className="mx-auto max-w-3xl px-4 pb-24 pt-24">
+    <div id={embedded ? undefined : 'contenido-principal'} className={embedded ? 'mx-auto max-w-3xl px-4 pb-8 pt-4' : 'mx-auto max-w-3xl px-4 pb-24 pt-24'}>
       <div className="mb-6 space-y-2 text-center">
         <p className="inline-flex items-center gap-1.5 rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1 text-[11px] font-semibold text-indigo-700 dark:border-indigo-800 dark:bg-indigo-950/60 dark:text-indigo-300">
           <ShieldCheck className="h-3.5 w-3.5" />
@@ -285,7 +288,7 @@ export default function AgreementsPage() {
                 {active.sections.map((section) => (
                   <section key={section.title} className="space-y-2">
                     <h3 className="font-bold text-slate-900 dark:text-white">{section.title}</h3>
-                    <div className="whitespace-pre-line text-xs leading-relaxed sm:text-sm">{section.content}</div>
+                    <AgreementMarkdown source={section.content} />
                   </section>
                 ))}
                 <div ref={sentinelRef} className="border-t border-dashed border-slate-200 pt-4 text-center text-xs text-slate-400">

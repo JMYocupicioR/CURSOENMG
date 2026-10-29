@@ -38,6 +38,7 @@ import {
   ACADEMIC_CATEGORIES,
   COMMON_CREDENTIALS,
 } from '../../utils/medicalCatalog';
+import { AdminPhysicianAgreementsPanel } from '../agreements/AdminPhysicianAgreementsPanel';
 
 const MEDICAL_CATEGORIES = [
   {
@@ -476,6 +477,12 @@ export default function ProfileSetupPage() {
       </div>
 
       {editingOther ? null : enrollmentBanner()}
+
+      {routeUserId ? (
+        <div className="mb-6">
+          <AdminPhysicianAgreementsPanel physicianId={routeUserId} />
+        </div>
+      ) : null}
 
       <div className="rounded-3xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900/80 backdrop-blur-md p-6 sm:p-8 shadow-xl shadow-slate-950/5 space-y-8">
         

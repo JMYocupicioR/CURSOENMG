@@ -14,9 +14,14 @@ export function postLoginPath(options: {
   isEditor?: boolean;
   isContributor?: boolean;
   needsAgreements?: boolean;
+  needsPhysicianAgreements?: boolean;
 }): string {
   const next = options.next?.trim() || null;
   const isStaff = Boolean(options.isAdmin || options.isEditor);
+
+  if (options.needsPhysicianAgreements) {
+    return '/acuerdos-medico';
+  }
 
   if (options.needsAgreements && !isStaff) {
     return '/acuerdos';
@@ -58,7 +63,12 @@ export function shouldRedirectToStaffInbox(options: {
 export function postLoginPathFromRoles(
   roles: string[],
   next?: string | null,
-  deepLinkOptions?: { joinLive?: boolean; redirectToWorkshop?: string | null; needsAgreements?: boolean }
+  deepLinkOptions?: {
+    joinLive?: boolean;
+    redirectToWorkshop?: string | null;
+    needsAgreements?: boolean;
+    needsPhysicianAgreements?: boolean;
+  }
 ): string {
   return postLoginPath({
     next,
@@ -68,5 +78,6 @@ export function postLoginPathFromRoles(
     isEditor: roles.includes('editor'),
     isContributor: roles.includes('contributor'),
     needsAgreements: deepLinkOptions?.needsAgreements,
+    needsPhysicianAgreements: deepLinkOptions?.needsPhysicianAgreements,
   });
 }

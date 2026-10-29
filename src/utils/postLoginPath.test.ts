@@ -32,6 +32,14 @@ describe('postLoginPath', () => {
     expect(postLoginPath({ needsAgreements: true, isAdmin: true })).toBe('/admin');
   });
 
+  it('sends an unsigned collaborator to /acuerdos-medico before admin', () => {
+    expect(postLoginPath({ needsPhysicianAgreements: true, isAdmin: true })).toBe('/acuerdos-medico');
+    expect(postLoginPath({ needsPhysicianAgreements: true, isContributor: true })).toBe('/acuerdos-medico');
+    expect(
+      postLoginPath({ needsPhysicianAgreements: true, needsAgreements: true, isEditor: true, next: '/admin' })
+    ).toBe('/acuerdos-medico');
+  });
+
   it('honors direct deep linking parameters for live sessions and workshops', () => {
     expect(postLoginPath({ joinLive: true })).toBe('/portal?join_live=true');
     expect(postLoginPath({ redirectToWorkshop: 'ws-emg-101' })).toBe('/taller/ws-emg-101');

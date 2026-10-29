@@ -1,8 +1,41 @@
+import fs from 'node:fs';
 import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 import path from 'path';
 import { lookupSepCedula, normalizeCedula } from './server/sepCedulaLookup.js';
+
+const SERVER_ENV_KEYS = [
+  'SUPABASE_URL',
+  'SUPABASE_SERVICE_ROLE_KEY',
+  'VITE_SUPABASE_URL',
+  'PUBLIC_SITE_URL',
+] as const;
+
+/** Vite solo vuelca al proceso las variables VITE_. La firma las lee en el servidor. */
+function loadServerEnvFromFile() {
+  const file = path.resolve(__dirname, '.env');
+  if (!fs.existsSync(file)) return;
+  for (const line of fs.readFileSync(file, 'utf8').split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    const eq = trimmed.indexOf('=');
+    if (eq < 1) continue;
+    const key = trimmed.slice(0, eq).trim();
+    if (!SERVER_ENV_KEYS.includes(key as (typeof SERVER_ENV_KEYS)[number])) continue;
+    if (process.env[key]) continue;
+    let value = trimmed.slice(eq + 1).trim();
+    if (
+      (value.startsWith('"') && value.endsWith('"')) ||
+      (value.startsWith("'") && value.endsWith("'"))
+    ) {
+      value = value.slice(1, -1);
+    }
+    if (value) process.env[key] = value;
+  }
+}
+
+loadServerEnvFromFile();
 
 function sepCedulaProxyPlugin(): Plugin {
   return {
@@ -73,7 +106,9 @@ function signAgreementProxyPlugin(): Plugin {
     name: 'sign-agreement-proxy',
     configureServer(server) {
       server.middlewares.use(async (req, res, next) => {
-        if (!req.url?.startsWith('/api/sign-agreement')) {
+        const isStudent = req.url?.startsWith('/api/sign-agreement');
+        const isPhysician = req.url?.startsWith('/api/sign-physician-agreement');
+        if (!isStudent && !isPhysician) {
           return next();
         }
 
@@ -87,6 +122,7 @@ function signAgreementProxyPlugin(): Plugin {
         }
 
         try {
+          loadServerEnvFromFile();
           const body = await new Promise<Buffer>((resolve) => {
             const chunks: Buffer[] = [];
             req.on('data', (chunk) => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
@@ -102,8 +138,9 @@ function signAgreementProxyPlugin(): Plugin {
             headers,
             body: req.method === 'GET' || req.method === 'HEAD' ? undefined : body,
           });
-          const { handleSignAgreementRequest } = await import('./server/signAgreementHandler');
-          const response = await handleSignAgreementRequest(request);
+          const response = isPhysician
+            ? await (await import('./server/signPhysicianAgreementHandler')).handleSignPhysicianAgreementRequest(request)
+            : await (await import('./server/signAgreementHandler')).handleSignAgreementRequest(request);
           res.statusCode = response.status;
           response.headers.forEach((value, key) => res.setHeader(key, value));
           res.end(Buffer.from(await response.arrayBuffer()));
@@ -184,6 +221,9 @@ export default defineConfig({
       },
     }),
   ],
+  server: {
+    port: 5173,
+  },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),

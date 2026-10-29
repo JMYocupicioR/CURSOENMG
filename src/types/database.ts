@@ -133,11 +133,17 @@ export interface Profile {
   portal_guide_version?: number;
   agreements_signed?: boolean | null;
   agreement_bundle_version?: string | null;
+  physician_agreements_signed?: boolean | null;
+  physician_agreement_bundle_version?: string | null;
   created_at: string;
   updated_at: string;
 }
 
 export type StudentAgreementDocumentType = 'contrato' | 'reglamento' | 'normas';
+
+export type PhysicianAgreementDocumentType = 'contrato' | 'anexo' | 'reglamento';
+
+export type PhysicianMarkedRole = 'profesor' | 'editor' | 'ambos';
 
 export interface StudentAgreementEdition {
   id: string;
@@ -161,6 +167,41 @@ export interface StudentAgreement {
   document_sha256: string;
   full_name_typed: string;
   professional_license: string | null;
+  signature_image_path: string;
+  pdf_signed_path: string;
+  verification_folio: string;
+  ip_address: string;
+  user_agent: string;
+  signed_at: string;
+  created_at: string;
+}
+
+export interface PhysicianAgreementEdition {
+  id: string;
+  status: 'draft' | 'published';
+  bundle_version: string;
+  party: import('../content/legal/physicianAgreements').PhysicianParty;
+  contrato_markdown: string;
+  anexo_markdown: string;
+  reglamento_markdown: string;
+  aviso_markdown: string;
+  updated_at: string;
+  updated_by: string | null;
+  published_at: string | null;
+}
+
+export interface PhysicianAgreement {
+  id: string;
+  user_id: string;
+  document_type: PhysicianAgreementDocumentType;
+  document_version: string;
+  document_sha256: string;
+  full_name_typed: string;
+  professional_license: string | null;
+  rfc: string | null;
+  clabe: string | null;
+  bank: string | null;
+  marked_role: PhysicianMarkedRole | null;
   signature_image_path: string;
   pdf_signed_path: string;
   verification_folio: string;
@@ -926,6 +967,33 @@ interface RawDatabase {
         };
         Update: Partial<StudentAgreement>;
       };
+      physician_agreement_editions: {
+        Row: PhysicianAgreementEdition;
+        Insert: Partial<PhysicianAgreementEdition> & {
+          status: 'draft' | 'published';
+          bundle_version: string;
+          contrato_markdown: string;
+          anexo_markdown: string;
+          reglamento_markdown: string;
+          aviso_markdown: string;
+        };
+        Update: Partial<PhysicianAgreementEdition>;
+      };
+      physician_agreements: {
+        Row: PhysicianAgreement;
+        Insert: Partial<PhysicianAgreement> & {
+          user_id: string;
+          document_type: PhysicianAgreementDocumentType;
+          document_sha256: string;
+          full_name_typed: string;
+          signature_image_path: string;
+          pdf_signed_path: string;
+          verification_folio: string;
+          ip_address: string;
+          user_agent: string;
+        };
+        Update: Partial<PhysicianAgreement>;
+      };
     };
     Functions: {
       is_admin: { Args: { check_user_id?: string }; Returns: boolean };
@@ -1139,6 +1207,8 @@ interface RawDatabase {
       issue_my_certificate: { Args: { p_course_id?: string | null }; Returns: unknown };
       verify_certificate: { Args: { p_folio: string }; Returns: unknown };
       verify_student_agreement: { Args: { p_folio: string }; Returns: unknown };
+      verify_physician_agreement: { Args: { p_folio: string }; Returns: unknown };
+      is_platform_ceo: { Args: Record<string, never>; Returns: boolean };
       topic_discussion_directory: {
         Args: { p_topic_id: string };
         Returns: { user_id: string; display_name: string; is_staff: boolean }[];

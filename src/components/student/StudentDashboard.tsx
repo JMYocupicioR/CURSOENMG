@@ -185,6 +185,7 @@ export default function StudentDashboard() {
     courseIds,
     pendingCourseIds,
     refreshProfile,
+    needsAgreementSignature,
   } = useAuth();
   const { quizGate } = useQuizTopicFlags();
   const { grouped, assignments: courseAssignments, courses } = useSyllabusCatalog();
@@ -542,6 +543,10 @@ export default function StudentDashboard() {
 
   // Apertura de la inducción de primer ingreso al portal con bypass para clases en vivo y snooze
   useEffect(() => {
+    if (needsAgreementSignature) {
+      if (guideOpen) setGuideOpen(false);
+      return;
+    }
     if (loading || !user || !profile || guideDismissedThisVisit) return;
 
     const isExamActive = Boolean(activeExamLock && (remainingActiveSeconds ?? 1) > 0);
@@ -571,6 +576,7 @@ export default function StudentDashboard() {
     guidePublishedVersion,
     isLiveSessionImminent,
     isGuideSnoozedInSession,
+    needsAgreementSignature,
   ]);
 
   useEffect(() => {

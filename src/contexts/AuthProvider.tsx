@@ -13,7 +13,9 @@ import type { AppRole, CourseId, EnrollmentStatus, Profile, Subscription } from 
 import { recordUserActivity } from '../services/studentPlanService';
 import { hasActivePremiumSubscription, isEnrolledInCourse as enrolledInCourse } from '../utils/courseEnrollment';
 import { shouldRedirectToAgreements } from '../content/legal/agreements';
+import { shouldRedirectToPhysicianAgreements } from '../content/legal/physicianAgreements';
 import { fetchPublishedAgreementMeta } from '../services/studentAgreementEditionService';
+import { fetchPublishedPhysicianAgreementMeta } from '../services/physicianAgreementEditionService';
 import { readAuthSnapshot, writeAuthSnapshot } from '../lib/authSnapshot';
 import { useStaffViewStore } from '../stores/staffViewStore';
 import { resetAutoOpenClassWizardSession } from '../utils/classWizardPreferences';
@@ -61,6 +63,8 @@ interface AuthContextValue {
   isRejected: boolean;
   hasSignedCurrentAgreements: boolean;
   needsAgreementSignature: boolean;
+  hasSignedCurrentPhysicianAgreements: boolean;
+  needsPhysicianAgreementSignature: boolean;
   isCommitteeMember: boolean;
   bootstrapAvailable: boolean;
   refreshProfile: () => Promise<void>;
@@ -212,6 +216,7 @@ function applyAuthSnapshot(userId: string, apply: (snapshot: { roles: AppRole[];
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const staffView = useStaffViewStore((state) => state.view);
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [roles, setRoles] = useState<AppRole[]>([]);
@@ -224,6 +229,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(isSupabaseConfigured);
   const [loadedUserId, setLoadedUserId] = useState<string | null>(null);
   const [publishedAgreement, setPublishedAgreement] = useState({
+    ready: false,
+    version: null as string | null,
+    partyComplete: false,
+  });
+  const [publishedPhysicianAgreement, setPublishedPhysicianAgreement] = useState({
     ready: false,
     version: null as string | null,
     partyComplete: false,
@@ -264,23 +274,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const refreshProfile = useCallback(async () => {
     if (!session?.user.id) return;
     await loadUserData(session.user.id);
-    const meta = await fetchPublishedAgreementMeta().catch(() => ({ version: null, partyComplete: false }));
-    setPublishedAgreement({ ready: true, ...meta });
+    const [studentMeta, physicianMeta] = await Promise.all([
+      fetchPublishedAgreementMeta().catch(() => ({ version: null, partyComplete: false })),
+      fetchPublishedPhysicianAgreementMeta().catch(() => ({ version: null, partyComplete: false })),
+    ]);
+    setPublishedAgreement({ ready: true, ...studentMeta });
+    setPublishedPhysicianAgreement({ ready: true, ...physicianMeta });
   }, [loadUserData, session?.user.id]);
 
   useEffect(() => {
     if (!session?.user.id) {
       setPublishedAgreement({ ready: true, version: null, partyComplete: false });
+      setPublishedPhysicianAgreement({ ready: true, version: null, partyComplete: false });
       return;
     }
     let cancelled = false;
-    fetchPublishedAgreementMeta()
-      .then((meta) => {
-        if (!cancelled) setPublishedAgreement({ ready: true, ...meta });
-      })
-      .catch(() => {
-        if (!cancelled) setPublishedAgreement({ ready: true, version: null, partyComplete: false });
-      });
+    Promise.all([
+      fetchPublishedAgreementMeta().catch(() => ({ version: null, partyComplete: false })),
+      fetchPublishedPhysicianAgreementMeta().catch(() => ({ version: null, partyComplete: false })),
+    ]).then(([studentMeta, physicianMeta]) => {
+      if (cancelled) return;
+      setPublishedAgreement({ ready: true, ...studentMeta });
+      setPublishedPhysicianAgreement({ ready: true, ...physicianMeta });
+    });
     return () => {
       cancelled = true;
     };
@@ -620,16 +636,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       !isAdmin && !isEditor && (enrollmentStatus === 'pending' || enrollmentStatus === 'none');
     const isRejected =
       !isAdmin && !isEditor && enrollmentStatus === 'rejected';
+    const previewingCourseAsStudent = (isAdmin || isEditor) && staffView === 'student';
     const hasSignedCurrentAgreements =
       Boolean(publishedAgreement.version) &&
       profile?.agreement_bundle_version === publishedAgreement.version;
     const needsAgreementSignature = shouldRedirectToAgreements({
-      isStaff: isAdmin || isEditor,
-      isPendingOrRejected: isPendingApproval || isRejected,
-      isApprovedStudent: enrollmentStatus === 'approved',
+      isStaff: (isAdmin || isEditor) && !previewingCourseAsStudent,
+      isPendingOrRejected: previewingCourseAsStudent ? false : isPendingApproval || isRejected,
+      isApprovedStudent: previewingCourseAsStudent || enrollmentStatus === 'approved',
       bundleVersion: profile?.agreement_bundle_version,
       partyComplete: publishedAgreement.ready && publishedAgreement.partyComplete,
       currentVersion: publishedAgreement.version ?? undefined,
+    });
+    const hasSignedCurrentPhysicianAgreements =
+      Boolean(publishedPhysicianAgreement.version) &&
+      profile?.physician_agreement_bundle_version === publishedPhysicianAgreement.version;
+    const needsPhysicianAgreementSignature = shouldRedirectToPhysicianAgreements({
+      email: session?.user.email,
+      isCollaborator: isAdmin || isEditor || hasContributorRole,
+      bundleVersion: profile?.physician_agreement_bundle_version,
+      partyComplete: publishedPhysicianAgreement.ready && publishedPhysicianAgreement.partyComplete,
+      currentVersion: publishedPhysicianAgreement.version,
     });
     const isCommitteeMember = isAdmin || isEditor;
     const effectivePremium = hasPremiumAccess;
@@ -681,6 +708,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isRejected,
       hasSignedCurrentAgreements,
       needsAgreementSignature,
+      hasSignedCurrentPhysicianAgreements,
+      needsPhysicianAgreementSignature,
       isCommitteeMember,
       bootstrapAvailable,
       refreshProfile,
@@ -706,6 +735,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       courseSchemaReady,
       subscription,
       publishedAgreement,
+      publishedPhysicianAgreement,
+      staffView,
       bootstrapAvailable,
       refreshProfile,
       signInWithOtp,

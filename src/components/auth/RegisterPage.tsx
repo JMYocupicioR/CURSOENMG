@@ -81,7 +81,7 @@ const MEDICAL_CATEGORIES = [
 ];
 
 export default function RegisterPage() {
-  const { signUpStudent, user, isAdmin, isEditor, roles, needsAgreementSignature } = useAuth();
+  const { signUpStudent, user, isAdmin, isEditor, roles, needsAgreementSignature, needsPhysicianAgreementSignature } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const nextPath = searchParams.get('next') ?? undefined;
@@ -128,6 +128,7 @@ export default function RegisterPage() {
           isEditor,
           isContributor: roles.includes('contributor'),
           needsAgreements: needsAgreementSignature,
+          needsPhysicianAgreements: needsPhysicianAgreementSignature,
         }),
         { replace: true }
       );

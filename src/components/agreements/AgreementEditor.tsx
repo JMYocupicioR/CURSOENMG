@@ -64,7 +64,11 @@ export function AgreementEditor() {
   }, []);
 
   if (loading || !model) {
-    return <p className="text-sm text-slate-500">{error ?? 'Cargando acuerdos…'}</p>;
+    return (
+      <p className={error ? 'text-sm text-rose-600' : 'text-sm text-slate-500'}>
+        {error ?? 'Cargando acuerdos…'}
+      </p>
+    );
   }
 
   const publishProblem = validateEditionForPublish(model);
