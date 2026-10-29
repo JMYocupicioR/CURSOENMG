@@ -26,6 +26,12 @@ describe('postLoginPath', () => {
     expect(postLoginPath({ next: '/portal' })).toBe('/portal');
   });
 
+  it('sends an unsigned student to /acuerdos before the portal', () => {
+    expect(postLoginPath({ needsAgreements: true })).toBe('/acuerdos');
+    expect(postLoginPath({ needsAgreements: true, next: '/portal' })).toBe('/acuerdos');
+    expect(postLoginPath({ needsAgreements: true, isAdmin: true })).toBe('/admin');
+  });
+
   it('honors direct deep linking parameters for live sessions and workshops', () => {
     expect(postLoginPath({ joinLive: true })).toBe('/portal?join_live=true');
     expect(postLoginPath({ redirectToWorkshop: 'ws-emg-101' })).toBe('/taller/ws-emg-101');

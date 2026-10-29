@@ -1,0 +1,10 @@
+[functions]
+  directory = "netlify/functions"
+
+[functions."sign-agreement"]
+  included_files = ["docs/legal/alumnos/*.md"]
+
+[[redirects]]
+  from = "/api/sign-agreement"
+  to = "/.netlify/functions/sign-agreement"
+  status = 200

@@ -13,6 +13,7 @@ import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import { GlobalCommandPalette } from './components/common/GlobalCommandPalette';
 import { MobileBottomNav } from './components/layout/MobileBottomNav';
 import { AdminStudentModeBanner } from './components/admin/AdminStudentModeBanner';
+import { LiveClassGlobalAlert } from './components/course/LiveClassGlobalAlert';
 import { useAuth } from './contexts/AuthProvider';
 import { useStaffViewStore } from './stores/staffViewStore';
 import { shouldRedirectToStaffInbox } from './utils/postLoginPath';
@@ -45,6 +46,8 @@ const StudentCoursePage = lazy(() => import('./components/student/course/Student
 const SimulatorsHubPage = lazy(() => import('./components/pages/SimulatorsHubPage'));
 const TraceSimulatorPage = lazy(() => import('./components/pages/TraceSimulatorPage'));
 const CertificateVerifyPage = lazy(() => import('./components/pages/CertificateVerifyPage'));
+const AgreementsPage = lazy(() => import('./components/agreements/AgreementsPage'));
+const AgreementVerifyPage = lazy(() => import('./components/agreements/AgreementVerifyPage'));
 const EditorialCommitteePage = lazy(() => import('./components/editorial/EditorialCommitteePage'));
 const AdminDashboard = lazy(() => import('./components/admin/AdminDashboard'));
 const AdminReviewQueue = lazy(() => import('./components/admin/AdminReviewQueue'));
@@ -112,10 +115,12 @@ function App() {
           <AdminEntryGate />
           <GlobalCommandPalette />
           <MobileBottomNav />
+          <LiveClassGlobalAlert />
           <Suspense fallback={<LoadingSpinner />}>
             <Routes>
               <Route path="/" element={<LandingPage />} />
               <Route path="/verificar/:folio" element={<CertificateVerifyPage />} />
+              <Route path="/verificar-acuerdo" element={<AgreementVerifyPage />} />
               <Route path="/temario" element={<SyllabusPage />} />
               <Route path="/programa" element={<SyllabusPage />} />
               <Route path="/cursos" element={<CoursesCatalogPage />} />
@@ -179,6 +184,8 @@ function App() {
               <Route path="/portal/curso/:courseId" element={<ProtectedRoute mode="student"><StudentCoursePage /></ProtectedRoute>} />
               <Route path="/dashboard" element={<ProtectedRoute mode="student"><RedirectToPortal /></ProtectedRoute>} />
               <Route path="/estudiante" element={<ProtectedRoute mode="student"><RedirectToPortal /></ProtectedRoute>} />
+
+              <Route path="/acuerdos" element={<ProtectedRoute><AgreementsPage /></ProtectedRoute>} />
 
               {/* Cuenta */}
               <Route path="/cuenta" element={<ProtectedRoute><AccountPage /></ProtectedRoute>} />

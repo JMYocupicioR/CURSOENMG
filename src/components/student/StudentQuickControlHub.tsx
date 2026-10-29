@@ -23,7 +23,12 @@ import {
   Video,
 } from 'lucide-react';
 import type { LiveWorkshop, Profile } from '../../types/database';
-import type { StudentNotification } from '../../services/studentService';
+import {
+  getHighestUnreadNotificationTone,
+  resolveNotificationTone,
+  type NotificationColorTone,
+  type StudentNotification,
+} from '../../services/studentService';
 import type { StudentAssignment, StudentLearningPlan } from '../../types/studentPlan';
 import type { StudentKardexData } from '../../types/academicGradebook';
 import type { StudentPortalTab } from './StudentPortalTabBar';
@@ -49,6 +54,124 @@ const NOTIFICATION_TYPE_LABELS: Record<StudentNotification['type'], string> = {
 
 export function getNotificationTypeLabel(type: StudentNotification['type']): string {
   return NOTIFICATION_TYPE_LABELS[type] || 'Aviso';
+}
+
+export interface NotificationVisualStyle {
+  tone: NotificationColorTone;
+  cardUnread: string;
+  statusBadge: string;
+  statusDot: string;
+  statusLabel: string;
+  typeBadgeUnread: string;
+  titleUnread: string;
+  messageUnread: string;
+  actionLinkUnread: string;
+  markReadBtn: string;
+  headerIcon: string;
+  headerBadge: string;
+  markAllBtn: string;
+  containerBorder: string;
+}
+
+const TONE_PRIORITY_ORDER: Record<NotificationColorTone, number> = {
+  urgent: 0,
+  warning: 1,
+  info: 2,
+  success: 3,
+};
+
+export function getNotificationToneStyle(tone: NotificationColorTone): NotificationVisualStyle {
+  switch (tone) {
+    case 'urgent':
+      return {
+        tone: 'urgent',
+        cardUnread:
+          'border-l-4 border-l-rose-600 border-rose-300 dark:border-rose-800/90 bg-rose-50/75 dark:bg-rose-950/35 cursor-pointer',
+        statusBadge: 'bg-rose-600 text-white',
+        statusDot: 'bg-white animate-pulse',
+        statusLabel: 'Urgente · Por atender',
+        typeBadgeUnread: 'bg-rose-100 text-rose-900 dark:bg-rose-900/70 dark:text-rose-200',
+        titleUnread: 'text-rose-950 dark:text-rose-100',
+        messageUnread: 'text-rose-900/90 dark:text-rose-200/90',
+        actionLinkUnread: 'text-rose-700 dark:text-rose-300 hover:underline',
+        markReadBtn:
+          'bg-white dark:bg-slate-900 text-rose-700 dark:text-rose-300 border border-rose-300 dark:border-rose-700 hover:bg-rose-100 dark:hover:bg-rose-900/50',
+        headerIcon: 'bg-rose-600 text-white',
+        headerBadge: 'bg-rose-600 text-white',
+        markAllBtn:
+          'bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-200 border border-rose-200 dark:border-rose-800 hover:bg-rose-100 dark:hover:bg-rose-900/70',
+        containerBorder: 'border-rose-300 dark:border-rose-800',
+      };
+    case 'warning':
+      return {
+        tone: 'warning',
+        cardUnread:
+          'border-l-4 border-l-amber-500 border-amber-300 dark:border-amber-800/80 bg-amber-50/75 dark:bg-amber-950/30 cursor-pointer',
+        statusBadge: 'bg-amber-500 text-white',
+        statusDot: 'bg-white',
+        statusLabel: 'Próximo · Por atender',
+        typeBadgeUnread: 'bg-amber-100 text-amber-900 dark:bg-amber-900/70 dark:text-amber-200',
+        titleUnread: 'text-amber-950 dark:text-amber-100',
+        messageUnread: 'text-amber-900/90 dark:text-amber-200/90',
+        actionLinkUnread: 'text-amber-800 dark:text-amber-300 hover:underline',
+        markReadBtn:
+          'bg-white dark:bg-slate-900 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-700 hover:bg-amber-100 dark:hover:bg-amber-900/50',
+        headerIcon: 'bg-amber-500 text-white',
+        headerBadge: 'bg-amber-500 text-white',
+        markAllBtn:
+          'bg-amber-50 dark:bg-amber-950/60 text-amber-800 dark:text-amber-200 border border-amber-200 dark:border-amber-800 hover:bg-amber-100 dark:hover:bg-amber-900/70',
+        containerBorder: 'border-amber-300 dark:border-amber-800',
+      };
+    case 'success':
+      return {
+        tone: 'success',
+        cardUnread:
+          'border-l-4 border-l-emerald-500 border-emerald-300 dark:border-emerald-800/80 bg-emerald-50/75 dark:bg-emerald-950/30 cursor-pointer',
+        statusBadge: 'bg-emerald-600 text-white',
+        statusDot: 'bg-white',
+        statusLabel: 'Acreditado · Nuevo',
+        typeBadgeUnread:
+          'bg-emerald-100 text-emerald-900 dark:bg-emerald-900/70 dark:text-emerald-200',
+        titleUnread: 'text-emerald-950 dark:text-emerald-100',
+        messageUnread: 'text-emerald-900/90 dark:text-emerald-200/90',
+        actionLinkUnread: 'text-emerald-700 dark:text-emerald-300 hover:underline',
+        markReadBtn:
+          'bg-white dark:bg-slate-900 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700 hover:bg-emerald-100 dark:hover:bg-emerald-900/50',
+        headerIcon: 'bg-emerald-600 text-white',
+        headerBadge: 'bg-emerald-600 text-white',
+        markAllBtn:
+          'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-200 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100 dark:hover:bg-emerald-900/70',
+        containerBorder: 'border-emerald-300 dark:border-emerald-800',
+      };
+    case 'info':
+    default:
+      return {
+        tone: 'info',
+        cardUnread:
+          'border-l-4 border-l-sky-500 border-sky-300 dark:border-sky-800/80 bg-sky-50/75 dark:bg-sky-950/30 cursor-pointer',
+        statusBadge: 'bg-sky-600 text-white',
+        statusDot: 'bg-white',
+        statusLabel: 'Sistema · Por atender',
+        typeBadgeUnread: 'bg-sky-100 text-sky-900 dark:bg-sky-900/70 dark:text-sky-200',
+        titleUnread: 'text-sky-950 dark:text-sky-100',
+        messageUnread: 'text-sky-900/90 dark:text-sky-200/90',
+        actionLinkUnread: 'text-sky-700 dark:text-sky-300 hover:underline',
+        markReadBtn:
+          'bg-white dark:bg-slate-900 text-sky-700 dark:text-sky-300 border border-sky-300 dark:border-sky-700 hover:bg-sky-100 dark:hover:bg-sky-900/50',
+        headerIcon: 'bg-sky-600 text-white',
+        headerBadge: 'bg-sky-600 text-white',
+        markAllBtn:
+          'bg-sky-50 dark:bg-sky-950/60 text-sky-700 dark:text-sky-200 border border-sky-200 dark:border-sky-800 hover:bg-sky-100 dark:hover:bg-sky-900/70',
+        containerBorder: 'border-sky-300 dark:border-sky-800',
+      };
+  }
+}
+
+export function getNotificationVisualStyle(
+  notif: StudentNotification,
+  nowMs = Date.now()
+): NotificationVisualStyle {
+  return getNotificationToneStyle(resolveNotificationTone(notif, nowMs));
 }
 
 interface StudentQuickControlHubProps {
@@ -98,13 +221,32 @@ export function StudentQuickControlHub({
   onOpenKardexModal,
   onRecordResumeClick,
 }: StudentQuickControlHubProps) {
-  // Prioritize unread notifications first, then sort by newest
+  // Prioritize unread notifications first, then by urgency tone, then by newest
+  const nowMs = Date.now();
   const prioritizedNotifications = [...notifications]
     .sort((a, b) => {
       if (a.isRead !== b.isRead) return a.isRead ? 1 : -1;
+      if (!a.isRead && !b.isRead) {
+        const toneDiff =
+          TONE_PRIORITY_ORDER[resolveNotificationTone(a, nowMs)] -
+          TONE_PRIORITY_ORDER[resolveNotificationTone(b, nowMs)];
+        if (toneDiff !== 0) return toneDiff;
+      }
       return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
     })
     .slice(0, 4);
+
+  const highestUnreadTone = getHighestUnreadNotificationTone(notifications, nowMs);
+  const headerToneStyle = getNotificationToneStyle(highestUnreadTone);
+  const unreadUrgentCount = notifications.filter(
+    (n) => !n.isRead && resolveNotificationTone(n, nowMs) === 'urgent'
+  ).length;
+  const unreadWarningCount = notifications.filter(
+    (n) => !n.isRead && resolveNotificationTone(n, nowMs) === 'warning'
+  ).length;
+  const unreadInfoCount = notifications.filter(
+    (n) => !n.isRead && resolveNotificationTone(n, nowMs) === 'info'
+  ).length;
 
   // Categorize assignments
   const actionRequiredAssignments = assignments.filter(
@@ -147,7 +289,7 @@ export function StudentQuickControlHub({
       <div className="hidden md:flex p-3.5 sm:px-5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs flex-col lg:flex-row lg:items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <span className="text-xs font-semibold uppercase tracking-wider text-slate-900 dark:text-white">
-            Código de Estado:
+            Código de Alertas:
           </span>
         </div>
 
@@ -156,57 +298,48 @@ export function StudentQuickControlHub({
             type="button"
             onClick={() => onSelectTab('notifications')}
             className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md font-semibold border transition cursor-pointer ${
-              unreadCount > 0
+              unreadUrgentCount > 0
                 ? 'bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-200 border-rose-300 dark:border-rose-700'
                 : 'bg-slate-50 dark:bg-slate-800/60 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'
             }`}
           >
             <span
               className={`w-2 h-2 rounded-full ${
-                unreadCount > 0 ? 'bg-rose-600 animate-pulse' : 'bg-rose-500'
+                unreadUrgentCount > 0 ? 'bg-rose-600 animate-pulse' : 'bg-rose-500'
               }`}
             />
-            <span>Rojo: Avisos por atender / Urgente</span>
-            {unreadCount > 0 && (
+            <span>Rojo: Exámenes, Tareas (&lt;24h) y Clase (≤5 min)</span>
+            {unreadUrgentCount > 0 && (
               <span className="px-1.5 py-0.2 rounded bg-rose-600 text-white text-[11px] font-mono tabular-nums">
-                {unreadCount}
+                {unreadUrgentCount}
               </span>
             )}
           </button>
 
           <button
             type="button"
-            onClick={() => onSelectTab('assignments')}
+            onClick={() => onSelectTab('notifications')}
             className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md font-semibold bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-200 border border-amber-300/80 dark:border-amber-800/70 transition cursor-pointer"
           >
             <span className="w-2 h-2 rounded-full bg-amber-500" />
-            <span>Ámbar: Pendiente de entrega</span>
-            {actionRequiredAssignments.length > 0 && (
+            <span>Amarillo: Clase futura (&gt;5 min) y Entregas en tiempo</span>
+            {(unreadWarningCount > 0 || actionRequiredAssignments.length > 0) && (
               <span className="px-1.5 py-0.2 rounded bg-amber-500 text-white text-[11px] font-mono tabular-nums">
-                {actionRequiredAssignments.length}
+                {unreadWarningCount || actionRequiredAssignments.length}
               </span>
             )}
           </button>
 
           <button
             type="button"
-            onClick={() => onSelectTab('modules')}
-            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md font-semibold bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-200 border border-blue-200 dark:border-blue-800/70 transition cursor-pointer"
+            onClick={() => onSelectTab('notifications')}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md font-semibold bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-200 border border-sky-200 dark:border-sky-800/70 transition cursor-pointer"
           >
-            <span className="w-2 h-2 rounded-full bg-blue-600" />
-            <span>Azul: Clases en curso</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => onSelectTab('assignments')}
-            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md font-semibold bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-200 border border-indigo-200 dark:border-indigo-800/70 transition cursor-pointer"
-          >
-            <span className="w-2 h-2 rounded-full bg-indigo-600" />
-            <span>Índigo: Tarea enviada</span>
-            {inReviewCount > 0 && (
-              <span className="px-1.5 py-0.2 rounded bg-indigo-600 text-white text-[11px] font-mono tabular-nums">
-                {inReviewCount}
+            <span className="w-2 h-2 rounded-full bg-sky-500" />
+            <span>Azul claro: Recordatorios y Sistema</span>
+            {unreadInfoCount > 0 && (
+              <span className="px-1.5 py-0.2 rounded bg-sky-600 text-white text-[11px] font-mono tabular-nums">
+                {unreadInfoCount}
               </span>
             )}
           </button>
@@ -226,12 +359,12 @@ export function StudentQuickControlHub({
       {/* ─── GRID PRINCIPAL DE 4 PILARES EN LA PRIMERA PÁGINA ─── */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 sm:gap-5">
         {/* ══════════════════════════════════════════════════════════════════
-            PILAR 1: AVISOS Y NOTIFICACIONES (ROJO SI NO ESTÁ ATENDIDO -> NORMAL AL ATENDERSE)
+            PILAR 1: AVISOS Y NOTIFICACIONES (SEMÁNTICO POR URGENCIA -> GRIS AL ATENDERSE)
             ══════════════════════════════════════════════════════════════════ */}
         <div
           className={`p-4 sm:p-6 rounded-2xl border transition-all flex flex-col justify-between ${
             unreadCount > 0
-              ? 'border-rose-300 dark:border-rose-800 bg-white dark:bg-slate-900 shadow-sm'
+              ? `${headerToneStyle.containerBorder} bg-white dark:bg-slate-900 shadow-sm`
               : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs'
           }`}
         >
@@ -242,7 +375,7 @@ export function StudentQuickControlHub({
                 <div
                   className={`p-2 rounded-xl shrink-0 transition-colors ${
                     unreadCount > 0
-                      ? 'bg-rose-600 text-white'
+                      ? headerToneStyle.headerIcon
                       : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
                   }`}
                 >
@@ -253,8 +386,14 @@ export function StudentQuickControlHub({
                     Avisos y Notificaciones
                   </h2>
                   {unreadCount > 0 ? (
-                    <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-xs font-semibold bg-rose-600 text-white font-mono tabular-nums">
-                      <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping" />
+                    <span
+                      className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-xs font-semibold font-mono tabular-nums ${headerToneStyle.headerBadge}`}
+                    >
+                      <span
+                        className={`w-1.5 h-1.5 rounded-full bg-white ${
+                          highestUnreadTone === 'urgent' ? 'animate-ping' : ''
+                        }`}
+                      />
                       {unreadCount} por atender
                     </span>
                   ) : (
@@ -270,7 +409,7 @@ export function StudentQuickControlHub({
                   <button
                     type="button"
                     onClick={onMarkAllNotifsRead}
-                    className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-200 border border-rose-200 dark:border-rose-800 hover:bg-rose-100 dark:hover:bg-rose-900/70 transition cursor-pointer flex items-center gap-1"
+                    className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition cursor-pointer flex items-center gap-1 ${headerToneStyle.markAllBtn}`}
                   >
                     <Check className="w-3.5 h-3.5" />
                     <span>Atender todos</span>
@@ -301,6 +440,7 @@ export function StudentQuickControlHub({
               <div className="space-y-2.5">
                 {prioritizedNotifications.map((notif) => {
                   const isUnread = !notif.isRead;
+                  const visual = getNotificationVisualStyle(notif, nowMs);
                   return (
                     <div
                       key={notif.id}
@@ -309,16 +449,18 @@ export function StudentQuickControlHub({
                       }}
                       className={`p-3.5 rounded-xl border transition-all ${
                         isUnread
-                          ? 'border-l-4 border-l-rose-600 border-rose-300 dark:border-rose-800/90 bg-rose-50/75 dark:bg-rose-950/35 cursor-pointer'
+                          ? visual.cardUnread
                           : 'border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/40'
                       }`}
                     >
                       <div className="flex items-start justify-between gap-2">
                         <div className="flex items-center gap-2 flex-wrap">
                           {isUnread ? (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider bg-rose-600 text-white">
-                              <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
-                              Por atender
+                            <span
+                              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider ${visual.statusBadge}`}
+                            >
+                              <span className={`w-1.5 h-1.5 rounded-full ${visual.statusDot}`} />
+                              {visual.statusLabel}
                             </span>
                           ) : (
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300">
@@ -329,7 +471,7 @@ export function StudentQuickControlHub({
                           <span
                             className={`px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider ${
                               isUnread
-                                ? 'bg-rose-100 text-rose-900 dark:bg-rose-900/70 dark:text-rose-200'
+                                ? visual.typeBadgeUnread
                                 : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
                             }`}
                           >
@@ -347,7 +489,7 @@ export function StudentQuickControlHub({
                       <p
                         className={`text-sm font-semibold mt-1.5 line-clamp-1 ${
                           isUnread
-                            ? 'text-rose-950 dark:text-rose-100'
+                            ? visual.titleUnread
                             : 'text-slate-800 dark:text-slate-200'
                         }`}
                       >
@@ -356,7 +498,7 @@ export function StudentQuickControlHub({
                       <p
                         className={`text-xs mt-0.5 line-clamp-2 leading-relaxed ${
                           isUnread
-                            ? 'text-rose-900/90 dark:text-rose-200/90'
+                            ? visual.messageUnread
                             : 'text-slate-500 dark:text-slate-400'
                         }`}
                       >
@@ -373,7 +515,7 @@ export function StudentQuickControlHub({
                             }}
                             className={`inline-flex items-center gap-1 text-xs font-semibold cursor-pointer ${
                               isUnread
-                                ? 'text-rose-700 dark:text-rose-300 hover:underline'
+                                ? visual.actionLinkUnread
                                 : 'text-blue-600 dark:text-cyan-400 hover:underline'
                             }`}
                           >
@@ -391,7 +533,7 @@ export function StudentQuickControlHub({
                               e.stopPropagation();
                               onMarkNotifRead(notif.id);
                             }}
-                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-semibold bg-white dark:bg-slate-900 text-rose-700 dark:text-rose-300 border border-rose-300 dark:border-rose-700 hover:bg-rose-100 dark:hover:bg-rose-900/50 transition cursor-pointer"
+                            className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-semibold transition cursor-pointer ${visual.markReadBtn}`}
                           >
                             <Check className="w-3 h-3" />
                             <span>Marcar atendido</span>
@@ -408,7 +550,9 @@ export function StudentQuickControlHub({
           <div className="pt-3 mt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs">
             <span className="text-slate-500 dark:text-slate-400">
               {unreadCount > 0
-                ? `Tienes ${unreadCount} aviso(s) en rojo esperando confirmación`
+                ? unreadUrgentCount > 0
+                  ? `Tienes ${unreadUrgentCount} alerta(s) urgente(s) en rojo por atender`
+                  : `Tienes ${unreadCount} aviso(s) pendientes de lectura`
                 : 'Bandeja de avisos al día'}
             </span>
             <button

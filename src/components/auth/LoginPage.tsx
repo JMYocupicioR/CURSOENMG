@@ -24,7 +24,8 @@ interface LoginPageProps {
 }
 
 export default function LoginPage({ initialMode = 'password' }: LoginPageProps) {
-  const { signInWithOtp, signInWithPassword, resetPassword, user, isAdmin, isEditor, roles, isLoading, isSessionReady } = useAuth();
+  const { signInWithOtp, signInWithPassword, resetPassword, user, isAdmin, isEditor, roles, isLoading, isSessionReady, needsAgreementSignature } = useAuth();
+  const needsAgreements = needsAgreementSignature;
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const nextPath = searchParams.get('next') ?? undefined;
@@ -71,10 +72,11 @@ export default function LoginPage({ initialMode = 'password' }: LoginPageProps) 
         isAdmin,
         isEditor,
         isContributor: roles.includes('contributor'),
+        needsAgreements,
       }),
       { replace: true }
     );
-  }, [user, isLoading, isSessionReady, isAdmin, isEditor, roles, nextPath, joinLive, redirectToWorkshop, navigate]);
+  }, [user, isLoading, isSessionReady, isAdmin, isEditor, roles, nextPath, joinLive, redirectToWorkshop, needsAgreements, navigate]);
 
   useEffect(() => {
     if (searchParams.get('verified') === '1') setSent(true);

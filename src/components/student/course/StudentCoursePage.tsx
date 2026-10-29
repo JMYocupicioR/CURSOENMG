@@ -3,6 +3,7 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import {
   GraduationCap,
   ArrowLeft,
+  ArrowRight,
   ChevronDown,
   ChevronRight,
   Play,
@@ -201,11 +202,14 @@ export default function StudentCoursePage() {
     const streamUrl = activeWorkshop?.stream_url || currentCourse.live_meeting_url;
 
     if (urgency.isLiveNow || urgency.isUrgent) {
+      const allowedStreamUrl = urgency.canAccessStream ? streamUrl : null;
       return {
         title: activeWorkshop?.title || `Sesión en vivo de ${currentCourse.title}`,
         scheduledAt: activeWorkshop?.scheduled_at || currentCourse.live_schedule_notes || 'En curso',
         isLiveNow: urgency.isLiveNow,
-        streamUrl,
+        streamUrl: allowedStreamUrl,
+        workshopId: activeWorkshop?.id || null,
+        canAccess: urgency.canAccessStream,
         type: 'workshop',
       };
     }
@@ -465,9 +469,17 @@ export default function StudentCoursePage() {
                 <span>Entrar a la clase en vivo</span>
                 <ExternalLink className="w-4 h-4" />
               </a>
+            ) : liveSessionAlert.workshopId ? (
+              <Link
+                to={`/taller/${liveSessionAlert.workshopId}`}
+                className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-white text-slate-900 hover:bg-slate-100 font-bold text-xs sm:text-sm shadow-lg transition active:scale-95 shrink-0"
+              >
+                <span>Ver Sala (Acceso abre 5 min antes)</span>
+                <ArrowRight className="w-4 h-4" />
+              </Link>
             ) : (
               <span className="text-xs font-semibold bg-white/20 px-3 py-2 rounded-xl text-center">
-                El enlace se habilitará al iniciar
+                El enlace se habilitará 5 minutos antes
               </span>
             )}
           </div>

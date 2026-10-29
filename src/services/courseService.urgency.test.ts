@@ -47,8 +47,18 @@ describe('getLiveSessionUrgency', () => {
     const res = getLiveSessionUrgency([baseWorkshop], 30, now);
     expect(res.isUrgent).toBe(true);
     expect(res.isLiveNow).toBe(false);
+    expect(res.canAccessStream).toBe(false); // Más de 5 minutos, acceso protegido
     expect(res.startsInMinutes).toBe(15);
     expect(res.workshop?.id).toBe('ws-1');
+  });
+
+  it('permite el acceso directo al stream cuando faltan 5 minutos o menos', () => {
+    const now = new Date('2026-10-03T17:56:00.000Z'); // Faltan 4 minutos
+    const res = getLiveSessionUrgency([baseWorkshop], 30, now);
+    expect(res.isUrgent).toBe(true);
+    expect(res.isLiveNow).toBe(false);
+    expect(res.canAccessStream).toBe(true); // <= 5 minutos, acceso habilitado
+    expect(res.startsInMinutes).toBe(4);
   });
 
   it('ignores a scheduled session starting in 60 minutes when threshold is 30', () => {

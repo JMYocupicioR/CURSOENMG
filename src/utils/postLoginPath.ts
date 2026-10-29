@@ -13,9 +13,14 @@ export function postLoginPath(options: {
   isAdmin?: boolean;
   isEditor?: boolean;
   isContributor?: boolean;
+  needsAgreements?: boolean;
 }): string {
   const next = options.next?.trim() || null;
   const isStaff = Boolean(options.isAdmin || options.isEditor);
+
+  if (options.needsAgreements && !isStaff) {
+    return '/acuerdos';
+  }
 
   // Deep linking prioritario a sesión en vivo o taller específico
   if (options.redirectToWorkshop?.trim()) {
@@ -53,7 +58,7 @@ export function shouldRedirectToStaffInbox(options: {
 export function postLoginPathFromRoles(
   roles: string[],
   next?: string | null,
-  deepLinkOptions?: { joinLive?: boolean; redirectToWorkshop?: string | null }
+  deepLinkOptions?: { joinLive?: boolean; redirectToWorkshop?: string | null; needsAgreements?: boolean }
 ): string {
   return postLoginPath({
     next,
@@ -62,5 +67,6 @@ export function postLoginPathFromRoles(
     isAdmin: roles.includes('admin'),
     isEditor: roles.includes('editor'),
     isContributor: roles.includes('contributor'),
+    needsAgreements: deepLinkOptions?.needsAgreements,
   });
 }

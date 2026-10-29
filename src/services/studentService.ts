@@ -26,12 +26,16 @@ export interface LastVisitedTopic {
   updatedAt: string;
 }
 
+export type NotificationColorTone = 'urgent' | 'warning' | 'info' | 'success';
+
 export interface StudentNotification {
   id: string;
   title: string;
   message: string;
   type: 'academic' | 'workshop' | 'quiz' | 'cedula' | 'system';
-  severity?: 'info' | 'success' | 'warning';
+  severity?: NotificationColorTone;
+  scheduledAt?: string;
+  dueDate?: string;
   createdAt: string;
   linkUrl?: string;
   isRead: boolean;
@@ -836,6 +840,7 @@ export function getStudentNotifications(
       const dueTime = new Date(asg.due_date).getTime();
       const now = Date.now();
       const isUrgent = dueTime - now < 24 * 60 * 60 * 1000;
+      const isCriticalRed = isExam || isUrgent || asg.priority === 'high';
       const daysRemaining = Math.ceil((dueTime - now) / 86400000);
       const dueStr = new Date(asg.due_date).toLocaleDateString('es-MX', {
         day: 'numeric',
@@ -846,10 +851,11 @@ export function getStudentNotifications(
 
       notifs.push({
         id: `notif_asg_${asg.id}`,
-        title: `${isUrgent ? '⏰ ¡Urgente! ' : '📋 '}${typeLabel}: ${asg.title}`,
+        title: `${isCriticalRed ? '⏰ ¡Urgente! ' : '📋 '}${typeLabel}: ${asg.title}`,
         message: `${asg.description || 'Actividad requerida por tu profesor.'} Fecha límite: ${dueStr} (${daysRemaining <= 1 ? '¡vence pronto!' : `quedan ${daysRemaining} días`}).`,
         type: 'quiz',
-        severity: isUrgent ? 'warning' : 'info',
+        severity: isCriticalRed ? 'urgent' : 'warning',
+        dueDate: asg.due_date,
         createdAt: asg.created_at,
         linkUrl: `/portal?tab=assignments`,
         isRead: !!readMap[`notif_asg_${asg.id}`],
@@ -863,7 +869,8 @@ export function getStudentNotifications(
         title: `Corrección solicitada: ${asg.title}`,
         message: `${asg.feedback ? `Observación del profesor: "${asg.feedback}"` : 'Tu profesor solicitó ajustes en tu entrega antes de asentar la calificación.'}`,
         type: 'academic',
-        severity: 'warning',
+        severity: 'urgent',
+        dueDate: asg.due_date,
         createdAt: asg.reviewed_at || asg.updated_at || asg.created_at,
         linkUrl: `/portal?tab=assignments`,
         isRead: !!readMap[`notif_asg_revision_${asg.id}`],
@@ -872,12 +879,13 @@ export function getStudentNotifications(
 
     // Evaluated / Graded by Teacher
     if (asg.grade != null && asg.reviewed_at) {
+      const isPassingGrade = (asg.grade ?? 0) >= (asg.min_score ?? 70);
       notifs.push({
         id: `notif_asg_reviewed_${asg.id}`,
         title: `⭐ Calificación: ${asg.title}`,
         message: `Tu profesor ha evaluado tu entrega con ${asg.grade}/100 pts.${asg.feedback ? ` Comentario: "${asg.feedback}"` : ''}`,
         type: 'academic',
-        severity: (asg.grade ?? 0) >= (asg.min_score ?? 70) ? 'success' : 'warning',
+        severity: isPassingGrade ? 'success' : 'urgent',
         createdAt: asg.reviewed_at || asg.updated_at,
         linkUrl: `/portal?tab=assignments`,
         isRead: !!readMap[`notif_asg_reviewed_${asg.id}`],
@@ -921,16 +929,31 @@ export function getStudentNotifications(
     });
   }
 
-  // 2. Upcoming Workshops
+  // 2. Upcoming Workshops (Rojo si faltan <= 5 min o está en vivo; Amarillo si falta más de 5 min)
   const activeWorkshops = workshops.filter((w) => w.status === 'scheduled' || w.status === 'live');
   if (activeWorkshops.length > 0) {
     const nextW = activeWorkshops[0];
+    const startMs = new Date(nextW.scheduled_at).getTime();
+    const diffMinutes = !Number.isNaN(startMs) ? Math.round((startMs - Date.now()) / 60000) : null;
+    const durationMin = nextW.duration_minutes || 90;
+    const isImminent5Min =
+      nextW.status === 'live' ||
+      (diffMinutes !== null && diffMinutes <= 5 && diffMinutes >= -durationMin);
+
+    const workshopTitle =
+      nextW.status === 'live'
+        ? `🔴 ¡En Vivo Ahora! Taller: ${nextW.title}`
+        : isImminent5Min
+        ? `🔴 ¡Comienza en ${Math.max(0, diffMinutes ?? 0)} min! ${nextW.title}`
+        : `📅 Taller Programado: ${nextW.title}`;
+
     notifs.push({
       id: `notif_workshop_${nextW.id}`,
-      title: `Taller en Vivo: ${nextW.title}`,
+      title: workshopTitle,
       message: `Sesión interactiva de discusión de casos clínicos. Programado para el ${new Date(nextW.scheduled_at).toLocaleDateString('es-MX', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })}.`,
       type: 'workshop',
-      severity: 'info',
+      severity: isImminent5Min ? 'urgent' : 'warning',
+      scheduledAt: nextW.scheduled_at,
       createdAt: nextW.created_at || '2026-09-11T10:00:00Z',
       linkUrl: `/taller/${nextW.id}`,
       isRead: !!readMap[`notif_workshop_${nextW.id}`],
@@ -973,6 +996,66 @@ export function getStudentNotifications(
   });
 
   return notifs.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+}
+
+/**
+ * Determina el tono cromático semántico de una notificación:
+ * - 'urgent' (Rojo / rose): Exámenes, tareas urgentes (<24h o corrección) y clase en vivo en <= 5 min.
+ * - 'warning' (Amarillo / amber): Clase a futuro (> 5 min), tareas con varios días de margen, recordatorios de cédula.
+ * - 'info' (Azul claro / sky): Mensajes del sistema y avisos informativos.
+ * - 'success' (Verde / emerald): Calificaciones aprobatorias y cédula SEP verificada.
+ */
+export function resolveNotificationTone(
+  notif: StudentNotification,
+  nowMs = Date.now()
+): NotificationColorTone {
+  // 1. Re-evaluación dinámica en tiempo real para talleres en vivo con fecha programada
+  if (notif.type === 'workshop' && notif.scheduledAt) {
+    const startMs = new Date(notif.scheduledAt).getTime();
+    if (!Number.isNaN(startMs)) {
+      const diffMinutes = (startMs - nowMs) / 60000;
+      if (diffMinutes <= 5 && diffMinutes >= -120) {
+        return 'urgent';
+      }
+      return 'warning';
+    }
+  }
+
+  // 2. Re-evaluación dinámica de fecha límite si una tarea pendiente entra en las últimas 24h
+  if (notif.dueDate && notif.severity === 'warning') {
+    const dueMs = new Date(notif.dueDate).getTime();
+    if (!Number.isNaN(dueMs) && dueMs - nowMs < 24 * 60 * 60 * 1000) {
+      return 'urgent';
+    }
+  }
+
+  // 3. Severidad explícita asignada
+  if (notif.severity) {
+    return notif.severity;
+  }
+
+  // 4. Fallback por tipo cuando no se definió severity
+  if (notif.type === 'system') return 'info';
+  if (notif.type === 'workshop') return 'warning';
+  return 'urgent';
+}
+
+/**
+ * Obtiene el tono de mayor prioridad entre las notificaciones no leídas
+ * (urgent > warning > info > success).
+ */
+export function getHighestUnreadNotificationTone(
+  notifications: StudentNotification[],
+  nowMs = Date.now()
+): NotificationColorTone {
+  const unread = notifications.filter((n) => !n.isRead);
+  if (unread.length === 0) return 'info';
+
+  const tones = new Set(unread.map((n) => resolveNotificationTone(n, nowMs)));
+  if (tones.has('urgent')) return 'urgent';
+  if (tones.has('warning')) return 'warning';
+  if (tones.has('info')) return 'info';
+  return 'success';
 }
 
 export function isNotificationReadLocally(userId: string, notifId: string): boolean {

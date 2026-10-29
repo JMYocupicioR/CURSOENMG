@@ -71,6 +71,7 @@ import {
   fetchLastVisitedTopic,
   setLastVisitedTopic,
   getStudentNotifications,
+  getHighestUnreadNotificationTone,
   isNotificationReadLocally,
   markAllNotificationsAsRead,
   markNotificationAsRead,
@@ -103,12 +104,19 @@ import {
 } from '../../services/studentPlanService';
 import { AssignmentDeliveryEditor } from './AssignmentDeliveryPanel';
 import { AssignmentMaterialsList } from './AssignmentMaterialsList';
+import { AssignmentReadingChecklist } from './AssignmentReadingChecklist';
+import { assignmentRequiresDelivery, describeReadingAssignment } from '../../utils/readingAssignments';
 import { fetchServerNotifications, markAllServerNotificationsRead, markServerNotificationRead, mergeServerNotifications } from '../../services/assignmentSubmissionService';
 import { StudentStudyHub } from './StudentStudyHub';
 import { StudentCertificatePanel } from './StudentCertificatePanel';
 import { StudentPerformancePanel } from './StudentPerformancePanel';
 import { StudentPortalTabBar, type StudentPortalTab } from './StudentPortalTabBar';
-import { StudentQuickControlHub, getNotificationTypeLabel } from './StudentQuickControlHub';
+import {
+  StudentQuickControlHub,
+  getNotificationTypeLabel,
+  getNotificationVisualStyle,
+  getNotificationToneStyle,
+} from './StudentQuickControlHub';
 import { calculateStudentKardex } from '../../services/gradebookService';
 import type { StudentKardexData } from '../../types/academicGradebook';
 import { savePushSubscription } from '../../services/studentToolsService';
@@ -434,7 +442,7 @@ export default function StudentDashboard() {
     if (loading || !liveUrgency.isUrgent || !liveUrgency.workshop) return;
     const joinLive = searchParams.get('join_live') === 'true';
     if (joinLive) {
-      if (liveUrgency.workshop.stream_url) {
+      if (liveUrgency.canAccessStream && liveUrgency.workshop.stream_url) {
         window.open(liveUrgency.workshop.stream_url, '_blank');
       } else {
         navigate(`/taller/${liveUrgency.workshop.id}`);
@@ -696,9 +704,30 @@ export default function StudentDashboard() {
     return notifications.filter((n) => !n.isRead).length;
   }, [notifications]);
 
-  const pendingAssignmentsCount = useMemo(() => {
-    return assignments.filter((a) => a.status === 'pending').length;
+  const highestUnreadNotificationTone = useMemo(() => {
+    return getHighestUnreadNotificationTone(notifications);
+  }, [notifications]);
+
+  const notificationHeaderStyle = useMemo(() => {
+    return getNotificationToneStyle(highestUnreadNotificationTone);
+  }, [highestUnreadNotificationTone]);
+
+  const pendingAssignments = useMemo(() => {
+    return assignments.filter((a) => a.status === 'pending');
   }, [assignments]);
+
+  const pendingAssignmentsCount = pendingAssignments.length;
+
+  const pendingBannerLabel = useMemo(() => {
+    if (pendingAssignmentsCount === 0) return '';
+    const readingOnly = pendingAssignments.filter(
+      (assignment) => describeReadingAssignment(assignment).readingOnly
+    ).length;
+    if (readingOnly === pendingAssignmentsCount) {
+      return pendingAssignmentsCount === 1 ? 'lectura pendiente' : 'lecturas pendientes';
+    }
+    return pendingAssignmentsCount === 1 ? 'actividad pendiente' : 'actividades pendientes';
+  }, [pendingAssignments, pendingAssignmentsCount]);
 
   const handleSubmitAssignment = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -955,7 +984,7 @@ export default function StudentDashboard() {
             </div>
 
             <div className="flex items-center gap-2.5 shrink-0 self-end md:self-center">
-              {liveUrgency.workshop.stream_url ? (
+              {liveUrgency.canAccessStream && liveUrgency.workshop.stream_url ? (
                 <a
                   href={liveUrgency.workshop.stream_url}
                   target="_blank"
@@ -1544,7 +1573,7 @@ export default function StudentDashboard() {
                     Actividades Pendientes de tu Profesor
                   </span>
                   <span className="text-xs font-bold text-amber-950 dark:text-amber-200">
-                    {pendingAssignmentsCount} {pendingAssignmentsCount === 1 ? 'actividad requiere tu entrega' : 'actividades requieren tu entrega'}
+                    {pendingAssignmentsCount} {pendingBannerLabel}
                   </span>
                 </div>
                 <p className="text-xs sm:text-sm text-slate-700 dark:text-slate-200 mt-1 font-medium">
@@ -1603,6 +1632,7 @@ export default function StudentDashboard() {
       <StudentPortalTabBar
         activeTab={activeTab}
         onSelect={selectTab}
+        notificationTone={highestUnreadNotificationTone}
         counts={{
           assignments: pendingAssignmentsCount,
           notifications: unreadCount,
@@ -2602,6 +2632,7 @@ export default function StudentDashboard() {
                 const now = Date.now();
                 const isOverdue = dueTime < now && asg.status === 'pending';
                 const daysRemaining = Math.ceil((dueTime - now) / 86400000);
+                const reading = describeReadingAssignment(asg, now);
 
                 const isExam = asg.type === 'exam';
                 const isCase = asg.type === 'clinical_case';
@@ -2643,9 +2674,11 @@ export default function StudentDashboard() {
                             ? 'Caso Clínico'
                             : asg.type === 'emg_report'
                             ? 'Reporte de Trazo EMG'
-                            : asg.type === 'practical_task'
-                            ? 'Tarea práctica'
-                            : 'Tarea de Lectura'}
+                            : reading.readingOnly
+                            ? 'Lectura'
+                            : reading.hasReading
+                            ? 'Lectura y entrega'
+                            : 'Tarea práctica'}
                         </span>
 
                         <span
@@ -2665,7 +2698,9 @@ export default function StudentDashboard() {
                               : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
                           }`}
                         >
-                          {isExam && retakeStatus === 'requested'
+                          {reading.statusLabel
+                            ? reading.statusLabel
+                            : isExam && retakeStatus === 'requested'
                             ? 'Reintento Solicitado ⏳'
                             : isExam && retakeStatus === 'approved'
                             ? 'Reintento Autorizado ✓'
@@ -2694,6 +2729,17 @@ export default function StudentDashboard() {
                       </p>
                       {!(isCase && asg.status !== 'approved') && (
                         <AssignmentMaterialsList materials={asg.materials} />
+                      )}
+                      {reading.hasReading && (
+                        <div className="space-y-1.5">
+                          {reading.progressLabel && (
+                            <p className="text-[11px] font-bold text-amber-800 dark:text-amber-200">
+                              {reading.progressLabel}
+                              {reading.requiresDelivery ? '. La entrega se revisa aparte.' : ''}
+                            </p>
+                          )}
+                          <AssignmentReadingChecklist topicIds={reading.topicIds} doneIds={reading.doneIds} />
+                        </div>
                       )}
 
                       {/* Tags de configuración del examen */}
@@ -2767,7 +2813,15 @@ export default function StudentDashboard() {
                         </p>
 
                         <p className="text-[11px] text-slate-500">
-                          {asg.status === 'approved' || asg.status === 'submitted' ? (
+                          {reading.readingOnly && reading.complete ? (
+                            <span className="text-emerald-600 font-medium">
+                              Leída el{' '}
+                              {asg.reading_completed_at
+                                ? new Date(asg.reading_completed_at).toLocaleDateString('es-MX')
+                                : 'esta sesión'}
+                              {reading.late ? ' · fuera de fecha' : ''}
+                            </span>
+                          ) : asg.status === 'approved' || asg.status === 'submitted' ? (
                             <span className="text-emerald-600 font-medium">
                               Entregada el {asg.submitted_at ? new Date(asg.submitted_at).toLocaleDateString('es-MX') : 'recientemente'}
                             </span>
@@ -2956,6 +3010,12 @@ export default function StudentDashboard() {
                             <span>Resolver Caso Clínico Asignado</span>
                           </button>
                         )
+                      ) : reading.readingOnly ? (
+                        <div className="w-full py-2 rounded-xl bg-slate-100/80 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-bold text-center">
+                          {reading.complete
+                            ? reading.statusLabel
+                            : 'Abre cada tema. Se marca leído al llegar al final.'}
+                        </div>
                       ) : asg.status === 'needs_revision' ? (
                         <button
                           type="button"
@@ -3353,8 +3413,14 @@ export default function StudentDashboard() {
                   Bandeja de Notificaciones y Avisos
                 </h2>
                 {unreadCount > 0 ? (
-                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-xs font-semibold bg-rose-600 text-white font-mono tabular-nums">
-                    <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping" />
+                  <span
+                    className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-xs font-semibold font-mono tabular-nums ${notificationHeaderStyle.headerBadge}`}
+                  >
+                    <span
+                      className={`w-1.5 h-1.5 rounded-full bg-white ${
+                        highestUnreadNotificationTone === 'urgent' ? 'animate-ping' : ''
+                      }`}
+                    />
                     {unreadCount} por atender
                   </span>
                 ) : (
@@ -3400,16 +3466,24 @@ export default function StudentDashboard() {
                   onClick={() => setNotifFilter('unread')}
                   className={`px-2.5 py-1 rounded-md text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 ${
                     notifFilter === 'unread'
-                      ? 'bg-rose-600 text-white shadow-xs'
+                      ? `${notificationHeaderStyle.headerBadge} shadow-xs`
                       : unreadCount > 0
-                        ? 'text-rose-700 dark:text-rose-300 hover:bg-rose-50 dark:hover:bg-rose-950/40'
+                        ? 'text-slate-800 dark:text-slate-200 hover:bg-white/60 dark:hover:bg-slate-700/60'
                         : 'text-slate-600 dark:text-slate-400'
                   }`}
                 >
                   {unreadCount > 0 && (
                     <span
                       className={`w-1.5 h-1.5 rounded-full ${
-                        notifFilter === 'unread' ? 'bg-white' : 'bg-rose-600'
+                        notifFilter === 'unread'
+                          ? 'bg-white'
+                          : highestUnreadNotificationTone === 'urgent'
+                            ? 'bg-rose-600'
+                            : highestUnreadNotificationTone === 'warning'
+                              ? 'bg-amber-500'
+                              : highestUnreadNotificationTone === 'success'
+                                ? 'bg-emerald-600'
+                                : 'bg-sky-600'
                       }`}
                     />
                   )}
@@ -3432,7 +3506,7 @@ export default function StudentDashboard() {
                 <button
                   type="button"
                   onClick={handleMarkAllNotifsRead}
-                  className="px-2.5 py-1.5 rounded-lg text-xs font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition cursor-pointer inline-flex items-center gap-1"
+                  className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer inline-flex items-center gap-1 ${notificationHeaderStyle.markAllBtn}`}
                 >
                   <Check className="w-3.5 h-3.5" />
                   <span>Marcar todas leídas</span>
@@ -3503,6 +3577,7 @@ export default function StudentDashboard() {
               })
               .map((notif) => {
                 const isUnread = !notif.isRead;
+                const visual = getNotificationVisualStyle(notif);
                 return (
                   <div
                     key={notif.id}
@@ -3511,16 +3586,18 @@ export default function StudentDashboard() {
                     }}
                     className={`p-4 sm:p-5 rounded-2xl border transition-all ${
                       isUnread
-                        ? 'border-l-4 border-l-rose-600 border-rose-300 dark:border-rose-800/90 bg-rose-50/80 dark:bg-rose-950/35 shadow-sm cursor-pointer'
+                        ? `${visual.cardUnread} shadow-sm`
                         : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900'
                     }`}
                   >
                     <div className="flex items-start justify-between gap-3 mb-2">
                       <div className="flex items-center gap-2 flex-wrap">
                         {isUnread ? (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-[10px] font-semibold uppercase tracking-wider bg-rose-600 text-white">
-                            <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
-                            Por atender
+                          <span
+                            className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-[10px] font-semibold uppercase tracking-wider ${visual.statusBadge}`}
+                          >
+                            <span className={`w-1.5 h-1.5 rounded-full ${visual.statusDot}`} />
+                            {visual.statusLabel}
                           </span>
                         ) : (
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold uppercase tracking-wider bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
@@ -3532,7 +3609,7 @@ export default function StudentDashboard() {
                         <span
                           className={`px-2 py-0.5 rounded-md text-[10px] font-semibold uppercase tracking-wider ${
                             isUnread
-                              ? 'bg-rose-100 text-rose-900 dark:bg-rose-900/80 dark:text-rose-200'
+                              ? visual.typeBadgeUnread
                               : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
                           }`}
                         >
@@ -3542,7 +3619,7 @@ export default function StudentDashboard() {
                         <h3
                           className={`text-sm font-bold ${
                             isUnread
-                              ? 'text-rose-950 dark:text-rose-100'
+                              ? visual.titleUnread
                               : 'text-slate-800 dark:text-slate-200'
                           }`}
                         >
@@ -3560,7 +3637,7 @@ export default function StudentDashboard() {
                     <p
                       className={`text-xs sm:text-sm leading-relaxed mb-3 ${
                         isUnread
-                          ? 'text-rose-900/90 dark:text-rose-200/90'
+                          ? visual.messageUnread
                           : 'text-slate-600 dark:text-slate-400'
                       }`}
                     >
@@ -3577,7 +3654,7 @@ export default function StudentDashboard() {
                           }}
                           className={`inline-flex items-center gap-1 text-xs font-semibold cursor-pointer ${
                             isUnread
-                              ? 'text-rose-700 dark:text-rose-300 hover:underline'
+                              ? visual.actionLinkUnread
                               : 'text-blue-600 dark:text-cyan-400 hover:underline'
                           }`}
                         >
@@ -3595,7 +3672,7 @@ export default function StudentDashboard() {
                             e.stopPropagation();
                             handleMarkNotifRead(notif.id);
                           }}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white dark:bg-slate-900 text-rose-700 dark:text-rose-300 border border-rose-300 dark:border-rose-700 hover:bg-rose-100 dark:hover:bg-rose-900/50 transition cursor-pointer"
+                          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${visual.markReadBtn}`}
                         >
                           <Check className="w-3.5 h-3.5" />
                           <span>Marcar como atendido</span>
@@ -3816,7 +3893,10 @@ export default function StudentDashboard() {
           }}
           onSelectOther={(asg) => {
             selectTab('assignments');
-            setSubmittingAsg(asg);
+            if (assignmentRequiresDelivery(asg)) {
+              setSubmittingAsg(asg);
+              setSubmitNotes('');
+            }
           }}
           onGoToAllAssignments={() => {
             selectTab('assignments');

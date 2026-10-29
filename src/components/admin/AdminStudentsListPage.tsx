@@ -369,6 +369,17 @@ export default function AdminStudentsListPage() {
                             >
                               {isApproved ? 'Admitido' : 'Pendiente'}
                             </span>
+                            {isApproved && (
+                              <span
+                                className={`text-[10px] px-2 py-0.5 rounded-full font-bold shrink-0 ${
+                                  student.agreements_signed
+                                    ? 'bg-teal-100 text-teal-800 dark:bg-teal-950 dark:text-teal-300'
+                                    : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
+                                }`}
+                              >
+                                {student.agreements_signed ? 'Acuerdos firmados' : 'Sin firmar'}
+                              </span>
+                            )}
                           </div>
 
                           <p className="text-xs text-slate-500 truncate max-w-lg">

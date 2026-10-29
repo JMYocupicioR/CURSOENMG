@@ -82,6 +82,7 @@ export async function getWorkshops(options?: {
 export interface LiveSessionUrgency {
   isUrgent: boolean;
   isLiveNow: boolean;
+  canAccessStream: boolean;
   startsInMinutes: number | null;
   workshop: LiveWorkshop | null;
 }
@@ -92,7 +93,7 @@ export function getLiveSessionUrgency(
   nowDate = new Date()
 ): LiveSessionUrgency {
   if (!Array.isArray(workshops) || workshops.length === 0) {
-    return { isUrgent: false, isLiveNow: false, startsInMinutes: null, workshop: null };
+    return { isUrgent: false, isLiveNow: false, canAccessStream: false, startsInMinutes: null, workshop: null };
   }
 
   const nowMs = nowDate.getTime();
@@ -103,6 +104,7 @@ export function getLiveSessionUrgency(
     return {
       isUrgent: true,
       isLiveNow: true,
+      canAccessStream: true,
       startsInMinutes: 0,
       workshop: liveWorkshop,
     };
@@ -122,6 +124,7 @@ export function getLiveSessionUrgency(
       return {
         isUrgent: true,
         isLiveNow: true,
+        canAccessStream: true,
         startsInMinutes: diffMinutes,
         workshop: w,
       };
@@ -129,16 +132,18 @@ export function getLiveSessionUrgency(
 
     // Si empieza dentro de los próximos thresholdMinutes (ej. 30 min)
     if (diffMinutes > 0 && diffMinutes <= thresholdMinutes) {
+      const canAccessStream = diffMinutes <= 5;
       return {
         isUrgent: true,
         isLiveNow: false,
+        canAccessStream,
         startsInMinutes: diffMinutes,
         workshop: w,
       };
     }
   }
 
-  return { isUrgent: false, isLiveNow: false, startsInMinutes: null, workshop: null };
+  return { isUrgent: false, isLiveNow: false, canAccessStream: false, startsInMinutes: null, workshop: null };
 }
 
 export async function getUpcomingWorkshops(limit = 5): Promise<LiveWorkshop[]> {

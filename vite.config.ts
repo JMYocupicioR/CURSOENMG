@@ -68,11 +68,62 @@ function sepCedulaProxyPlugin(): Plugin {
   };
 }
 
+function signAgreementProxyPlugin(): Plugin {
+  return {
+    name: 'sign-agreement-proxy',
+    configureServer(server) {
+      server.middlewares.use(async (req, res, next) => {
+        if (!req.url?.startsWith('/api/sign-agreement')) {
+          return next();
+        }
+
+        if (req.method === 'OPTIONS') {
+          res.statusCode = 204;
+          res.setHeader('Access-Control-Allow-Origin', '*');
+          res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+          res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+          res.end();
+          return;
+        }
+
+        try {
+          const body = await new Promise<Buffer>((resolve) => {
+            const chunks: Buffer[] = [];
+            req.on('data', (chunk) => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
+            req.on('end', () => resolve(Buffer.concat(chunks)));
+          });
+          const headers = new Headers();
+          for (const [key, value] of Object.entries(req.headers)) {
+            if (typeof value === 'string') headers.set(key, value);
+            else if (Array.isArray(value)) headers.set(key, value.join(', '));
+          }
+          const request = new Request(new URL(req.url, 'http://localhost:5173'), {
+            method: req.method,
+            headers,
+            body: req.method === 'GET' || req.method === 'HEAD' ? undefined : body,
+          });
+          const { handleSignAgreementRequest } = await import('./server/signAgreementHandler');
+          const response = await handleSignAgreementRequest(request);
+          res.statusCode = response.status;
+          response.headers.forEach((value, key) => res.setHeader(key, value));
+          res.end(Buffer.from(await response.arrayBuffer()));
+        } catch (err: unknown) {
+          res.statusCode = 500;
+          res.setHeader('Content-Type', 'application/json; charset=utf-8');
+          const message = err instanceof Error ? err.message : 'Error al procesar el acuerdo';
+          res.end(JSON.stringify({ success: false, error: message }));
+        }
+      });
+    },
+  };
+}
+
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [
     react(),
     sepCedulaProxyPlugin(),
+    signAgreementProxyPlugin(),
     VitePWA({
       registerType: 'prompt',
       devOptions: { enabled: false },

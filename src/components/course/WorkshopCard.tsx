@@ -1,7 +1,8 @@
 import { useMemo } from 'react';
-import { Video, Clock, BookOpen } from 'lucide-react';
+import { Video, Clock, BookOpen, Lock } from 'lucide-react';
 import type { LiveWorkshop } from '../../types/database';
 import { allModules } from '../../content/modules';
+import { canAccessLiveWorkshop } from '../../utils/liveSessionUtils';
 
 interface WorkshopCardProps {
   workshop: LiveWorkshop;
@@ -12,6 +13,7 @@ export function WorkshopCard({ workshop }: WorkshopCardProps) {
   const now = new Date();
   const isPast = date < now;
   const isLive = Math.abs(date.getTime() - now.getTime()) < 2 * 60 * 60 * 1000; // within 2 hours
+  const canAccess = canAccessLiveWorkshop(workshop, now);
 
   const topicTitle = useMemo(() => {
     if (!workshop.topic_id) return null;
@@ -79,12 +81,19 @@ export function WorkshopCard({ workshop }: WorkshopCardProps) {
         </div>
         
         {workshop.stream_url && !isPast && (
-          <div className="flex items-center gap-2 text-xs text-blue-600 dark:text-blue-400 font-medium">
-            <Video className="w-3.5 h-3.5 flex-shrink-0" />
-            <a href={workshop.stream_url} target="_blank" rel="noreferrer" className="hover:underline" onClick={(e) => e.stopPropagation()}>
-              Entrar a la sesión en vivo →
-            </a>
-          </div>
+          canAccess ? (
+            <div className="flex items-center gap-2 text-xs text-red-600 dark:text-red-400 font-bold">
+              <Video className="w-3.5 h-3.5 flex-shrink-0 animate-pulse" />
+              <a href={workshop.stream_url} target="_blank" rel="noreferrer" className="hover:underline" onClick={(e) => e.stopPropagation()}>
+                Entrar al stream en vivo →
+              </a>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+              <Lock className="w-3.5 h-3.5 flex-shrink-0" />
+              <span>Sala disponible 5 min antes</span>
+            </div>
+          )
         )}
 
         {workshop.recording_url && (

@@ -8,7 +8,11 @@ import EditorialCommitteeModal from '../editorial/EditorialCommitteeModal';
 import { getLiveSessionUrgency } from '../../services/courseService';
 import { shouldShowPortalGuide } from '../../services/portalGuideService';
 import type { LiveWorkshop, Profile } from '../../types/database';
-import type { StudentNotification } from '../../services/studentService';
+import {
+  getStudentNotifications,
+  resolveNotificationTone,
+  type StudentNotification,
+} from '../../services/studentService';
 import type { StudentAssignment } from '../../types/studentPlan';
 
 describe('StudentDashboard UX & Fast-Track Architecture', () => {
@@ -307,5 +311,69 @@ describe('StudentDashboard UX & Fast-Track Architecture', () => {
     expect(hubHtml).toContain('Radar de Acreditación y Pendientes Clave');
     expect(hubHtml).toContain('Cédula Profesional SEP');
     expect(hubHtml).toContain('Asistencia a Sesiones (20% del Kardex)');
+  });
+
+  it('Caso H: clasifica las notificaciones en 4 colores semánticos (Rojo: examen/tarea <24h/clase <=5min, Amarillo: clase >5min/tarea en tiempo, Azul claro: sistema, Verde: logros)', () => {
+    const now = Date.now();
+    const workshopIn4Min: LiveWorkshop = {
+      ...sampleWorkshop,
+      id: 'ws-4min',
+      scheduled_at: new Date(now + 4 * 60 * 1000).toISOString(),
+    };
+    const workshopTomorrow: LiveWorkshop = {
+      ...sampleWorkshop,
+      id: 'ws-tomorrow',
+      scheduled_at: new Date(now + 24 * 60 * 60 * 1000).toISOString(),
+    };
+
+    const examAssignment: StudentAssignment = {
+      id: 'asg-exam-1',
+      student_id: 's1',
+      title: 'Examen Parcial de Neuroconducción',
+      type: 'exam',
+      description: 'Evaluación oficial',
+      due_date: new Date(now + 5 * 24 * 3600 * 1000).toISOString(),
+      status: 'pending',
+      priority: 'normal',
+      created_at: new Date(now).toISOString(),
+      updated_at: new Date(now).toISOString(),
+    };
+
+    const calmTaskAssignment: StudentAssignment = {
+      id: 'asg-task-calm',
+      student_id: 's1',
+      title: 'Tarea de Práctica con 5 días de margen',
+      type: 'practical_task',
+      description: 'Subir resumen',
+      due_date: new Date(now + 5 * 24 * 3600 * 1000).toISOString(),
+      status: 'pending',
+      priority: 'normal',
+      created_at: new Date(now).toISOString(),
+      updated_at: new Date(now).toISOString(),
+    };
+
+    const notifsImminent = getStudentNotifications(
+      's1',
+      { cedula_verified: true, cedula_profesional: '1234567' } as unknown as Profile,
+      [workshopIn4Min],
+      [examAssignment, calmTaskAssignment]
+    );
+
+    const wsImminentNotif = notifsImminent.find((n) => n.id === 'notif_workshop_ws-4min')!;
+    const examNotif = notifsImminent.find((n) => n.id === 'notif_asg_asg-exam-1')!;
+    const calmTaskNotif = notifsImminent.find((n) => n.id === 'notif_asg_asg-task-calm')!;
+    const systemNotif = notifsImminent.find((n) => n.id === 'notif_plexo_tool')!;
+    const cedulaOkNotif = notifsImminent.find((n) => n.id === 'notif_cedula_verified')!;
+
+    expect(resolveNotificationTone(wsImminentNotif, now)).toBe('urgent'); // Rojo (<= 5 min)
+    expect(resolveNotificationTone(examNotif, now)).toBe('urgent'); // Rojo (Examen)
+    expect(resolveNotificationTone(calmTaskNotif, now)).toBe('warning'); // Amarillo (Tarea >= 24h)
+    expect(resolveNotificationTone(systemNotif, now)).toBe('info'); // Azul claro (Sistema)
+    expect(resolveNotificationTone(cedulaOkNotif, now)).toBe('success'); // Verde (Cédula verificada)
+
+    // Si la clase es mañana (> 5 min), debe ser Amarilla ('warning')
+    const notifsFuture = getStudentNotifications('s1', null, [workshopTomorrow], []);
+    const wsFutureNotif = notifsFuture.find((n) => n.id === 'notif_workshop_ws-tomorrow')!;
+    expect(resolveNotificationTone(wsFutureNotif, now)).toBe('warning');
   });
 });

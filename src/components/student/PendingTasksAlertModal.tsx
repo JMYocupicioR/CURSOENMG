@@ -11,6 +11,7 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 import type { StudentAssignment } from '../../types/studentPlan';
+import { describeReadingAssignment } from '../../utils/readingAssignments';
 import {
   getNotificationPermission,
   requestNotificationPermission,
@@ -180,6 +181,7 @@ export default function PendingTasksAlertModal({
               const daysRemaining = Math.ceil((dueTime - now) / 86400000);
               const isExam = asg.type === 'exam';
               const isCase = asg.type === 'clinical_case';
+              const reading = describeReadingAssignment(asg, now);
 
               return (
                 <div
@@ -198,7 +200,15 @@ export default function PendingTasksAlertModal({
                               : 'bg-slate-200 text-slate-800 dark:bg-slate-800 dark:text-slate-300'
                           }`}
                         >
-                          {isExam ? 'Examen Asignado' : isCase ? 'Caso Clínico' : 'Tarea Práctica'}
+                          {isExam
+                            ? 'Examen Asignado'
+                            : isCase
+                            ? 'Caso Clínico'
+                            : reading.readingOnly
+                            ? 'Lectura'
+                            : reading.hasReading
+                            ? 'Lectura y entrega'
+                            : 'Tarea práctica'}
                         </span>
 
                         <span
@@ -281,7 +291,7 @@ export default function PendingTasksAlertModal({
                           }}
                           className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-750 transition cursor-pointer"
                         >
-                          <span>Entregar Tarea</span>
+                          <span>{reading.readingOnly ? 'Ver temas' : 'Entregar tarea'}</span>
                         </button>
                       )}
                     </div>

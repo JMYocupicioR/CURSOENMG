@@ -24,6 +24,7 @@ export function ProtectedRoute({
     hasPremiumAccess,
     isPendingApproval,
     isRejected,
+    needsAgreementSignature,
   } = useAuth();
   const location = useLocation();
 
@@ -45,6 +46,25 @@ export function ProtectedRoute({
     if (mode === 'enrolled' || mode === 'student' || mode === 'premium' || location.pathname.startsWith('/dashboard') || location.pathname.startsWith('/portal') || location.pathname.startsWith('/estudiante') || location.pathname.startsWith('/modulo') || location.pathname.startsWith('/ejercicios') || location.pathname.startsWith('/examenes') || location.pathname.startsWith('/herramientas')) {
       return <PendingApprovalGate />;
     }
+  }
+
+  const agreementContentRoute =
+    mode === 'enrolled' ||
+    mode === 'student' ||
+    mode === 'premium' ||
+    location.pathname.startsWith('/portal') ||
+    location.pathname.startsWith('/dashboard') ||
+    location.pathname.startsWith('/estudiante') ||
+    location.pathname.startsWith('/modulo') ||
+    location.pathname.startsWith('/ejercicios') ||
+    location.pathname.startsWith('/examenes') ||
+    location.pathname.startsWith('/herramientas') ||
+    location.pathname.startsWith('/simuladores') ||
+    location.pathname.startsWith('/talleres') ||
+    location.pathname.startsWith('/taller');
+
+  if (needsAgreementSignature && agreementContentRoute && !location.pathname.startsWith('/acuerdos')) {
+    return <Navigate to="/acuerdos" replace />;
   }
 
   // Rutas exclusivas con candado Premium (Simuladores, Calculadora de Plexo)

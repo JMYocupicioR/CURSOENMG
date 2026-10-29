@@ -1,5 +1,6 @@
 import { supabase } from '../lib/supabase';
 import type { StudentAssignment } from '../types/studentPlan';
+import { describeReadingAssignment, dueSoonCopy } from '../utils/readingAssignments';
 
 const KEY_DEVICE_NOTIFS_ENABLED = 'neurosafe_device_notifs_enabled_';
 const KEY_NOTIFIED_ASSIGNMENTS = 'neurosafe_notified_asgs_';
@@ -191,10 +192,15 @@ export async function sendTestNotification(role?: 'admin' | 'student'): Promise<
  */
 export async function sendAssignmentDeviceNotification(assignment: StudentAssignment): Promise<boolean> {
   const isExam = assignment.type === 'exam';
+  const reading = describeReadingAssignment(assignment);
   const typeLabel = isExam
     ? 'Examen Asignado'
     : assignment.type === 'clinical_case'
     ? 'Caso Clínico'
+    : reading.readingOnly
+    ? 'Lectura'
+    : reading.hasReading
+    ? 'Lectura y entrega'
     : 'Tarea Asignada';
 
   const formattedDueDate = new Date(assignment.due_date).toLocaleDateString('es-MX', {
@@ -247,11 +253,12 @@ export async function checkAndNotifyPendingAssignments(
       notifiedMap[asg.id] = true;
       updatedMap = true;
     } else {
-      // 2. Deadline warning (due in less than 24h)
+      // Aviso de fecha: 48 h si hay lectura pendiente, 24 h si solo hay entrega.
       const dueTime = new Date(asg.due_date).getTime();
       const hoursLeft = (dueTime - now) / (1000 * 60 * 60);
+      const soon = dueSoonCopy(asg, hoursLeft);
 
-      if (hoursLeft > 0 && hoursLeft <= 24) {
+      if (soon) {
         const todayStr = new Date().toISOString().slice(0, 10);
         const urgentKey = `${asg.id}_${todayStr}`;
 
@@ -259,17 +266,11 @@ export async function checkAndNotifyPendingAssignments(
           const lastUrgent = localStorage.getItem(`${KEY_URGENT_NOTIFIED_DATE}${studentId}`);
           const urgentMap: Record<string, boolean> = lastUrgent ? JSON.parse(lastUrgent) : {};
 
-          const isCase = asg.type === 'clinical_case';
-          const notifTitle = isCase ? 'Caso Clínico' : asg.title;
-          const notifBody = isCase
-            ? `Tu caso clínico asignado vence en ${Math.round(hoursLeft)} horas (${new Date(asg.due_date).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}). Toca para resolverlo.`
-            : `Vence en ${Math.round(hoursLeft)} horas (${new Date(asg.due_date).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}). Toca para resolverla.`;
-
           if (!urgentMap[urgentKey]) {
             await sendDeviceNotification({
-              title: `⏳ Entrega Próxima: ${notifTitle}`,
-              body: notifBody,
-              url: `/dashboard?tab=assignments&asgId=${asg.id}`,
+              title: soon.title,
+              body: soon.body,
+              url: `/portal?tab=assignments`,
               tag: `asg-urgent-${asg.id}`,
             });
             urgentMap[urgentKey] = true;

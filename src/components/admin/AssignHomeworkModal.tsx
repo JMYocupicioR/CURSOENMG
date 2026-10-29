@@ -16,8 +16,11 @@ import {
   type AssignmentMaterial,
 } from '../../utils/assignmentMaterials';
 import { useAuth } from '../../contexts/AuthProvider';
+import { findModuleIdByTopicId } from '../../services/studentService';
 import type { AdminProfileRow } from '../../types/admin';
 import type { AssignmentPriority } from '../../types/studentPlan';
+import { type HomeworkKind } from '../../utils/readingAssignments';
+import { ReadingTopicPicker } from './ReadingTopicPicker';
 
 interface DraftFile {
   id: string;
@@ -62,6 +65,8 @@ export default function AssignHomeworkModal({
   const [studentResidencyFilter, setStudentResidencyFilter] = useState('all');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
+  const [kind, setKind] = useState<HomeworkKind>('delivery');
+  const [selectedTopicIds, setSelectedTopicIds] = useState<string[]>([]);
   const [priority, setPriority] = useState<AssignmentPriority>('normal');
   const [dueDate, setDueDate] = useState(() => {
     const d = new Date(Date.now() + 7 * 86400000);
@@ -101,6 +106,8 @@ export default function AssignHomeworkModal({
     setDraftLinks([]);
     setLinkDraft('');
     setLinkLabel('');
+    setKind('delivery');
+    setSelectedTopicIds([]);
   }, [isOpen]);
 
   const filteredProfiles = useMemo(() => {
@@ -185,6 +192,10 @@ export default function AssignHomeworkModal({
       setError('Indica la fecha límite.');
       return;
     }
+    if (kind !== 'delivery' && selectedTopicIds.length === 0) {
+      setError('Elige al menos un tema para la lectura.');
+      return;
+    }
 
     if (draftFiles.length > 0 && !user?.id) {
       setError('Inicia sesión de nuevo para subir archivos.');
@@ -206,17 +217,34 @@ export default function AssignHomeworkModal({
         if (uploaded.storage_path) uploadedPaths.push(uploaded.storage_path);
         materials.push(uploaded);
       }
+      const topicIds = kind === 'delivery' ? [] : selectedTopicIds;
+      const moduleIds = [
+        ...new Set(
+          topicIds
+            .map((topicId) => findModuleIdByTopicId(topicId))
+            .filter((moduleId): moduleId is string => Boolean(moduleId))
+        ),
+      ];
+      const defaultDescription =
+        kind === 'reading'
+          ? 'Lee los temas indicados antes de la fecha. La lectura se marca sola al llegar al final de cada uno.'
+          : kind === 'reading_delivery'
+            ? 'Lee los temas y entrega la actividad. La lectura se marca sola; la entrega la revisa el profesor.'
+            : 'Entrega un archivo (PDF o imagen) o un enlace de Drive, OneDrive o Dropbox.';
       const created = await createBatchAssignments(finalRecipientIds, {
         title: title.trim(),
-        type: 'practical_task',
-        description:
-          description.trim() ||
-          'Entrega un archivo (PDF o imagen) o un enlace de Drive, OneDrive o Dropbox.',
+        type: kind === 'delivery' ? 'practical_task' : 'reading',
+        description: description.trim() || defaultDescription,
         due_date: new Date(dueDate).toISOString(),
         status: 'pending',
         priority,
         assigned_by: user?.id ?? null,
         materials,
+        batch_id: crypto.randomUUID(),
+        reading_topic_ids: topicIds,
+        requires_delivery: kind !== 'reading',
+        target_module_id: moduleIds.length === 1 ? moduleIds[0] : null,
+        target_topic_id: topicIds.length === 1 ? topicIds[0] : null,
       });
       if (created.length === 0) {
         throw new Error('No se pudo asignar la tarea. Revisa la conexión e inténtalo de nuevo.');
@@ -229,17 +257,26 @@ export default function AssignHomeworkModal({
       }
       setTitle('');
       setDescription('');
+      setKind('delivery');
+      setSelectedTopicIds([]);
       setDraftFiles([]);
       setDraftLinks([]);
       onClose();
     } catch (err) {
       if (!published) await removeAssignmentMaterialFiles(uploadedPaths);
       const message = err instanceof Error ? err.message : 'No se pudo enviar la tarea.';
-      const missingColumn = message.toLowerCase().includes('materials');
+      const lower = message.toLowerCase();
+      const missingMaterials = lower.includes('materials');
+      const missingReading =
+        lower.includes('reading_topic_ids') ||
+        lower.includes('requires_delivery') ||
+        lower.includes('batch_id');
       setError(
-        missingColumn
+        missingMaterials
           ? 'Falta aplicar la migración de material de tareas (20260927053609_assignment_teacher_materials) en Supabase.'
-          : message
+          : missingReading
+            ? 'Falta aplicar la migración de lecturas (20261029040000_assignment_reading_requirements) en Supabase.'
+            : message
       );
     } finally {
       setSubmitting(false);
@@ -259,7 +296,7 @@ export default function AssignHomeworkModal({
             <div>
               <h2 className="text-lg font-bold text-slate-900 dark:text-white">Nueva tarea</h2>
               <p className="text-xs text-slate-500">
-                La misma entrega para toda la cohorte o para los alumnos que elijas
+                Lectura, entrega, o las dos. El examen y el caso clínico se publican aparte.
               </p>
             </div>
           </div>
@@ -398,13 +435,46 @@ export default function AssignHomeworkModal({
           </div>
 
           <div className="space-y-3">
+            <div className="space-y-2">
+              <span className="font-bold text-slate-700 dark:text-slate-300">Qué debe hacer el alumno</span>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                {(
+                  [
+                    ['reading', 'Solo lectura', 'Se cumple al leer los temas'],
+                    ['reading_delivery', 'Lectura y entrega', 'La lectura sola; tú revisas la entrega'],
+                    ['delivery', 'Solo entrega', 'Archivo, enlace o texto'],
+                  ] as const
+                ).map(([value, label, hint]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setKind(value)}
+                    className={`rounded-xl border px-3 py-2 text-left ${
+                      kind === value
+                        ? 'border-amber-400 bg-amber-50 text-amber-950 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-100'
+                        : 'border-slate-200 bg-white text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300'
+                    }`}
+                  >
+                    <span className="block font-bold">{label}</span>
+                    <span className="mt-0.5 block text-[10px] leading-snug opacity-80">{hint}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+            {kind !== 'delivery' && (
+              <ReadingTopicPicker selectedIds={selectedTopicIds} onChange={setSelectedTopicIds} />
+            )}
             <label className="block space-y-1">
               <span className="font-bold text-slate-700 dark:text-slate-300">Título</span>
               <input
                 required
                 value={title}
                 onChange={(event) => setTitle(event.target.value)}
-                placeholder="Ej. Reporte de latencias del mediano"
+                placeholder={
+                  kind === 'delivery'
+                    ? 'Ej. Reporte de latencias del mediano'
+                    : 'Ej. Lectura de la semana: nervio mediano'
+                }
                 className="w-full p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700"
               />
             </label>
@@ -414,7 +484,11 @@ export default function AssignHomeworkModal({
                 rows={4}
                 value={description}
                 onChange={(event) => setDescription(event.target.value)}
-                placeholder="Qué debe entregar el alumno. Puede subir PDF/imagen o un enlace de Drive."
+                placeholder={
+                  kind === 'reading'
+                    ? 'Opcional. El alumno ve la lista de temas y la fecha.'
+                    : 'Qué debe entregar el alumno. Puede subir PDF/imagen o un enlace de Drive.'
+                }
                 className="w-full p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700"
               />
             </label>

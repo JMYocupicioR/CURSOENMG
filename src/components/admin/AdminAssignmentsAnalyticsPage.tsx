@@ -15,7 +15,12 @@ import {
   loadGradeableStudents,
   getCohortAssignmentAnalytics,
 } from '../../services/academicAnalyticsService';
-import { deleteAssignment } from '../../services/studentPlanService';
+import {
+  deleteAssignment,
+  deleteAssignmentBatch,
+  updateAssignmentBatchDueDate,
+} from '../../services/studentPlanService';
+import { describeReadingAssignment, toDatetimeLocalValue } from '../../utils/readingAssignments';
 import { filterAssignments, average } from '../../utils/academicAnalytics';
 import { useAuth } from '../../contexts/AuthProvider';
 import type { AdminProfileRow } from '../../types/admin';
@@ -61,7 +66,14 @@ export default function AdminAssignmentsAnalyticsPage() {
 
   // Estado para confirmación de eliminación
   const [assignmentToDelete, setAssignmentToDelete] = useState<AssignmentAnalyticsRow | null>(null);
+  const [batchSchedule, setBatchSchedule] = useState<{
+    batchId: string;
+    title: string;
+    due: string;
+    count: number;
+  } | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isSavingBatch, setIsSavingBatch] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const load = async () => {
@@ -87,7 +99,10 @@ export default function AdminAssignmentsAnalyticsPage() {
     [rows, filters, studentId]
   );
 
-  const submitted = filtered.filter((row) => row.status === 'submitted' || row.status === 'approved' || row.submitted_at);
+  const submitted = filtered.filter((row) => {
+    if (describeReadingAssignment(row).readingOnly) return false;
+    return row.status === 'submitted' || row.status === 'approved' || Boolean(row.submitted_at);
+  });
   const graded = filtered.filter((row) => typeof row.grade === 'number');
   const avgGrade = average(graded.map((row) => row.grade || 0));
 
@@ -111,19 +126,43 @@ export default function AdminAssignmentsAnalyticsPage() {
     setParams(next, { replace: true });
   };
 
-  const handleConfirmDelete = async () => {
+  const batchSize = (batchId: string | null | undefined) =>
+    batchId ? rows.filter((row) => row.batch_id === batchId).length : 0;
+
+  const handleConfirmDelete = async (wholeBatch: boolean) => {
     if (!assignmentToDelete) return;
     setIsDeleting(true);
     try {
-      await deleteAssignment(assignmentToDelete.id, assignmentToDelete.student_id);
+      if (wholeBatch && assignmentToDelete.batch_id) {
+        const removed = await deleteAssignmentBatch(assignmentToDelete.batch_id);
+        setToastMessage(`Se quitó la tarea a ${removed} alumno${removed === 1 ? '' : 's'}.`);
+      } else {
+        await deleteAssignment(assignmentToDelete.id, assignmentToDelete.student_id);
+        setToastMessage('Tarea asignada eliminada del historial del alumno.');
+      }
       setAssignmentToDelete(null);
-      setToastMessage('Tarea asignada eliminada del historial del alumno.');
       await load();
       setTimeout(() => setToastMessage(null), 4000);
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Error al eliminar la tarea.');
     } finally {
       setIsDeleting(false);
+    }
+  };
+
+  const handleSaveBatchDueDate = async () => {
+    if (!batchSchedule) return;
+    setIsSavingBatch(true);
+    try {
+      await updateAssignmentBatchDueDate(batchSchedule.batchId, batchSchedule.due);
+      setBatchSchedule(null);
+      setToastMessage('Fecha actualizada para todo el grupo.');
+      await load();
+      setTimeout(() => setToastMessage(null), 4000);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'No se pudo cambiar la fecha.');
+    } finally {
+      setIsSavingBatch(false);
     }
   };
 
@@ -266,7 +305,10 @@ export default function AdminAssignmentsAnalyticsPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                  {filtered.map((row) => (
+                  {filtered.map((row) => {
+                    const reading = describeReadingAssignment(row);
+                    const mates = batchSize(row.batch_id);
+                    return (
                     <tr key={row.id} className="bg-white/70 dark:bg-slate-900/40 hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition">
                       <td className="px-4 py-3">
                         <p className="font-semibold text-slate-800 dark:text-slate-100">{row.studentName}</p>
@@ -277,19 +319,57 @@ export default function AdminAssignmentsAnalyticsPage() {
                         <p className="text-xs text-slate-400">
                           Límite: {row.due_date ? new Date(row.due_date).toLocaleDateString('es-MX') : '—'}
                         </p>
+                        {reading.progressLabel && (
+                          <p className="text-xs font-semibold text-amber-700 dark:text-amber-300">{reading.progressLabel}</p>
+                        )}
+                        {reading.readingOnly && reading.complete && (
+                          <p className="text-xs font-semibold text-emerald-700 dark:text-emerald-300">
+                            {reading.late ? 'Lectura cumplida con retraso' : `Lectura ${reading.done}/${reading.total}`}
+                          </p>
+                        )}
                       </td>
-                      <td className="px-4 py-3 text-xs font-bold">{TYPE_LABELS[row.type] || row.type}</td>
+                      <td className="px-4 py-3 text-xs font-bold">
+                        {reading.readingOnly
+                          ? 'Lectura'
+                          : reading.hasReading
+                          ? 'Lectura y entrega'
+                          : TYPE_LABELS[row.type] || row.type}
+                      </td>
                       <td className="px-4 py-3">
-                        <span className="text-xs font-bold">{STATUS_LABELS[row.status] || row.status}</span>
+                        <span className="text-xs font-bold">
+                          {reading.statusLabel || STATUS_LABELS[row.status] || row.status}
+                        </span>
                       </td>
                       <td className="px-4 py-3 text-xs text-slate-500 whitespace-nowrap">
-                        {row.submitted_at ? new Date(row.submitted_at).toLocaleString('es-MX') : 'Sin entregar'}
+                        {reading.readingOnly
+                          ? reading.complete
+                            ? 'Lectura cumplida'
+                            : 'Sin leer'
+                          : row.submitted_at
+                          ? new Date(row.submitted_at).toLocaleString('es-MX')
+                          : 'Sin entregar'}
                       </td>
                       <td className="px-4 py-3 font-black">
                         {typeof row.grade === 'number' ? row.grade : '—'}
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2">
+                          {mates > 1 && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setBatchSchedule({
+                                  batchId: row.batch_id!,
+                                  title: row.title,
+                                  due: toDatetimeLocalValue(row.due_date),
+                                  count: mates,
+                                })
+                              }
+                              className="text-xs font-bold text-amber-700 hover:underline cursor-pointer"
+                            >
+                              Fecha del grupo
+                            </button>
+                          )}
                           {row.status === 'submitted' && (
                             <button
                               type="button"
@@ -326,7 +406,8 @@ export default function AdminAssignmentsAnalyticsPage() {
                         </div>
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -356,6 +437,46 @@ export default function AdminAssignmentsAnalyticsPage() {
           load();
         }}
       />
+
+      {batchSchedule && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-xs">
+          <div className="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl dark:border-slate-800 dark:bg-slate-900 space-y-4">
+            <div>
+              <h3 className="text-base font-bold text-slate-900 dark:text-white">Fecha para todo el grupo</h3>
+              <p className="mt-1 text-xs text-slate-500">
+                {batchSchedule.title}. Cambia el límite de los {batchSchedule.count} alumnos de esta publicación.
+              </p>
+            </div>
+            <label className="block space-y-1 text-xs">
+              <span className="font-bold text-slate-700 dark:text-slate-300">Nueva fecha límite</span>
+              <input
+                type="datetime-local"
+                value={batchSchedule.due}
+                onChange={(event) => setBatchSchedule({ ...batchSchedule, due: event.target.value })}
+                className="w-full rounded-xl border border-slate-200 bg-slate-50 p-2.5 dark:border-slate-700 dark:bg-slate-800"
+              />
+            </label>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                disabled={isSavingBatch}
+                onClick={() => setBatchSchedule(null)}
+                className="px-4 py-2 text-xs font-bold text-slate-500"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={isSavingBatch || !batchSchedule.due}
+                onClick={handleSaveBatchDueDate}
+                className="rounded-xl bg-amber-500 px-4 py-2 text-xs font-bold text-white disabled:opacity-50"
+              >
+                {isSavingBatch ? 'Guardando…' : 'Guardar fecha'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal de Confirmación para Eliminar Tarea */}
       {assignmentToDelete && (
@@ -396,7 +517,7 @@ export default function AdminAssignmentsAnalyticsPage() {
               </p>
             </div>
 
-            <div className="flex items-center justify-end gap-3 pt-2">
+            <div className="flex flex-wrap items-center justify-end gap-3 pt-2">
               <button
                 type="button"
                 disabled={isDeleting}
@@ -408,12 +529,28 @@ export default function AdminAssignmentsAnalyticsPage() {
               <button
                 type="button"
                 disabled={isDeleting}
-                onClick={handleConfirmDelete}
+                onClick={() => handleConfirmDelete(false)}
                 className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold shadow-sm transition cursor-pointer disabled:opacity-50"
               >
                 <Trash2 className="w-3.5 h-3.5" />
-                <span>{isDeleting ? 'Eliminando...' : 'Sí, eliminar tarea'}</span>
+                <span>
+                  {isDeleting
+                    ? 'Eliminando...'
+                    : assignmentToDelete.batch_id && batchSize(assignmentToDelete.batch_id) > 1
+                    ? 'Solo este alumno'
+                    : 'Sí, eliminar'}
+                </span>
               </button>
+              {assignmentToDelete.batch_id && batchSize(assignmentToDelete.batch_id) > 1 && (
+                <button
+                  type="button"
+                  disabled={isDeleting}
+                  onClick={() => handleConfirmDelete(true)}
+                  className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl border border-rose-300 text-rose-700 text-xs font-bold transition cursor-pointer disabled:opacity-50 dark:border-rose-800 dark:text-rose-300"
+                >
+                  Quitar a los {batchSize(assignmentToDelete.batch_id)}
+                </button>
+              )}
             </div>
           </div>
         </div>

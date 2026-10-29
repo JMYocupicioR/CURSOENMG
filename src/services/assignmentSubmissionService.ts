@@ -1,5 +1,5 @@
 import { supabase, sb } from '../lib/supabase';
-import type { StudentNotification } from './studentService';
+import type { StudentNotification, NotificationColorTone } from './studentService';
 import {
   submissionFileError,
   submissionFileExtension,
@@ -30,7 +30,7 @@ export interface ServerStudentNotification {
   title: string;
   message: string;
   type: string;
-  severity: 'info' | 'success' | 'warning';
+  severity: NotificationColorTone;
   link_url?: string | null;
   source_key: string;
   is_read: boolean;
@@ -147,6 +147,16 @@ export function mergeServerNotifications(
 ): StudentNotification[] {
   if (server.length === 0) return local;
   const keys = new Set(server.map((row) => row.source_key));
+  const localBySourceKey = new Map<string, StudentNotification>();
+  for (const item of local) {
+    if (item.id.startsWith('notif_asg_reviewed_')) {
+      const assignmentId = item.id.slice('notif_asg_reviewed_'.length);
+      localBySourceKey.set(`assignment_grade:${assignmentId}`, item);
+    } else if (item.id.startsWith('notif_asg_')) {
+      const assignmentId = item.id.slice('notif_asg_'.length);
+      localBySourceKey.set(`assignment:${assignmentId}`, item);
+    }
+  }
   const kept = local.filter((item) => {
     if (item.id.startsWith('notif_asg_reviewed_')) {
       const assignmentId = item.id.slice('notif_asg_reviewed_'.length);
@@ -158,16 +168,27 @@ export function mergeServerNotifications(
     }
     return true;
   });
-  const mapped: StudentNotification[] = server.map((row) => ({
-    id: row.id,
-    title: row.title,
-    message: row.message,
-    type: 'academic',
-    severity: row.severity,
-    createdAt: row.created_at,
-    linkUrl: row.link_url || '/portal?tab=assignments',
-    isRead: row.is_read,
-  }));
+  const mapped: StudentNotification[] = server.map((row) => {
+    const matchedLocal =
+      localBySourceKey.get(row.source_key) ??
+      (row.source_key.startsWith('assignment_grade:')
+        ? localBySourceKey.get(row.source_key.split(':').slice(0, 2).join(':'))
+        : undefined);
+    const nextNotification: StudentNotification = {
+      id: row.id,
+      title: row.title,
+      message: row.message,
+      type: 'academic',
+      severity: matchedLocal?.severity ?? row.severity,
+      createdAt: row.created_at,
+      linkUrl: row.link_url || '/portal?tab=assignments',
+      isRead: row.is_read,
+    };
+    if (matchedLocal?.dueDate) {
+      nextNotification.dueDate = matchedLocal.dueDate;
+    }
+    return nextNotification;
+  });
   return [...mapped, ...kept].sort(
     (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
   );

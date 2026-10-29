@@ -344,7 +344,36 @@ export async function deleteLearningPlan(planId: string, studentId: string): Pro
 
 // ─── Assignments (Tareas y Exámenes Calendarizados) ─────────────────────────
 
+async function syncOwnReadingAssignments(studentId: string): Promise<void> {
+  try {
+    const { data } = await supabase.auth.getSession();
+    if (data.session?.user?.id !== studentId) return;
+    const { error } = await supabase.rpc('sync_my_reading_assignments');
+    if (error && !/sync_my_reading_assignments|schema cache|PGRST202|42883/i.test(error.message)) {
+      console.warn('[studentPlanService] No se pudo actualizar la lectura de las tareas:', error.message);
+    }
+  } catch {
+    // La tarea sigue visible aunque el recálculo no esté disponible.
+  }
+}
+
+function readingAssignmentColumns(assignment: {
+  batch_id?: string | null;
+  reading_topic_ids?: string[] | null;
+  requires_delivery?: boolean | null;
+}) {
+  const topicIds = (assignment.reading_topic_ids ?? []).map((id) => id.trim()).filter(Boolean);
+  return {
+    ...(assignment.batch_id ? { batch_id: assignment.batch_id } : {}),
+    ...(topicIds.length > 0 ? { reading_topic_ids: topicIds } : {}),
+    ...(typeof assignment.requires_delivery === 'boolean'
+      ? { requires_delivery: assignment.requires_delivery }
+      : {}),
+  };
+}
+
 export async function getStudentAssignments(studentId: string): Promise<StudentAssignment[]> {
+  await syncOwnReadingAssignments(studentId);
   try {
     const { data, error } = await supabase
       .from('student_assignments')
@@ -436,6 +465,7 @@ export async function createAssignment(
       min_score: assignment.min_score ?? null,
       assigned_by: assignment.assigned_by ?? null,
       ...(assignment.materials && assignment.materials.length > 0 ? { materials: assignment.materials } : {}),
+      ...readingAssignmentColumns(assignment),
     })
     .select()
     .single();
@@ -491,6 +521,7 @@ export async function createBatchAssignments(
     min_score: assignmentData.min_score ?? null,
     assigned_by: assignmentData.assigned_by ?? null,
     ...(hasMaterials ? { materials: assignmentData.materials } : {}),
+    ...readingAssignmentColumns(assignmentData),
   }));
 
   try {
@@ -1075,15 +1106,54 @@ export async function gradeAssignment(
   }).catch(() => undefined);
 }
 
-export async function deleteAssignment(assignmentId: string, studentId: string): Promise<void> {
+function forgetLocalAssignment(studentId: string, assignmentId: string) {
   try {
     const raw = localStorage.getItem(`${KEY_LOCAL_ASSIGNMENTS}${studentId}`);
-    if (raw) {
-      const list: StudentAssignment[] = JSON.parse(raw);
-      const filtered = list.filter((a) => a.id !== assignmentId);
-      localStorage.setItem(`${KEY_LOCAL_ASSIGNMENTS}${studentId}`, JSON.stringify(filtered));
-    }
+    if (!raw) return;
+    const list: StudentAssignment[] = JSON.parse(raw);
+    localStorage.setItem(
+      `${KEY_LOCAL_ASSIGNMENTS}${studentId}`,
+      JSON.stringify(list.filter((item) => item.id !== assignmentId))
+    );
   } catch {}
+}
+
+export async function updateAssignmentBatchDueDate(batchId: string, dueDate: string): Promise<void> {
+  const due = new Date(dueDate);
+  if (!batchId || Number.isNaN(due.getTime())) {
+    throw new Error('Indica una fecha válida para el grupo.');
+  }
+  const iso = due.toISOString();
+  const { data, error } = await supabase
+    .from('student_assignments')
+    .update({ due_date: iso, updated_at: iso })
+    .eq('batch_id', batchId)
+    .select('id, student_id');
+  if (error) throw error;
+  for (const row of data ?? []) {
+    patchLocalAssignment(row.student_id, row.id, { due_date: iso, updated_at: iso });
+  }
+}
+
+export async function deleteAssignmentBatch(batchId: string): Promise<number> {
+  if (!batchId) return 0;
+  const { data, error } = await supabase
+    .from('student_assignments')
+    .select('id, student_id')
+    .eq('batch_id', batchId);
+  if (error) throw error;
+  const rows = data ?? [];
+  const { error: deleteError } = await supabase
+    .from('student_assignments')
+    .delete()
+    .eq('batch_id', batchId);
+  if (deleteError) throw deleteError;
+  for (const row of rows) forgetLocalAssignment(row.student_id, row.id);
+  return rows.length;
+}
+
+export async function deleteAssignment(assignmentId: string, studentId: string): Promise<void> {
+  forgetLocalAssignment(studentId, assignmentId);
 
   try {
     const { error } = await supabase.from('student_assignments').delete().eq('id', assignmentId);
@@ -1234,6 +1304,7 @@ export async function getStudentFullDossier(studentId: string): Promise<StudentF
     activityLogs,
     learningPlans,
     assignments,
+    agreementsRes,
   ] = await Promise.all([
     Promise.resolve(
       supabase
@@ -1254,6 +1325,13 @@ export async function getStudentFullDossier(studentId: string): Promise<StudentF
     getStudentActivityLogs(studentId, 30),
     getStudentLearningPlans(studentId),
     getStudentAssignments(studentId),
+    Promise.resolve(
+      supabase
+        .from('student_agreements')
+        .select('*')
+        .eq('user_id', studentId)
+        .order('signed_at', { ascending: true })
+    ).catch(() => ({ data: null })),
   ]);
 
   const roles: string[] =
@@ -1368,6 +1446,7 @@ export async function getStudentFullDossier(studentId: string): Promise<StudentF
     activityLogs,
     learningPlans,
     assignments,
+    agreements: (agreementsRes.data ?? []) as import('../types/database').StudentAgreement[],
   };
 }
 

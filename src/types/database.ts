@@ -131,8 +131,43 @@ export interface Profile {
   completed_topics?: string[] | null;
   portal_guide_completed_at?: string | null;
   portal_guide_version?: number;
+  agreements_signed?: boolean | null;
+  agreement_bundle_version?: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export type StudentAgreementDocumentType = 'contrato' | 'reglamento' | 'normas';
+
+export interface StudentAgreementEdition {
+  id: string;
+  status: 'draft' | 'published';
+  bundle_version: string;
+  party: import('../content/legal/party').LegalParty;
+  contrato_markdown: string;
+  reglamento_markdown: string;
+  normas_markdown: string;
+  aviso_markdown: string;
+  updated_at: string;
+  updated_by: string | null;
+  published_at: string | null;
+}
+
+export interface StudentAgreement {
+  id: string;
+  user_id: string;
+  document_type: StudentAgreementDocumentType;
+  document_version: string;
+  document_sha256: string;
+  full_name_typed: string;
+  professional_license: string | null;
+  signature_image_path: string;
+  pdf_signed_path: string;
+  verification_folio: string;
+  ip_address: string;
+  user_agent: string;
+  signed_at: string;
+  created_at: string;
 }
 
 export type PortalWelcomeAudience = 'all' | 'enrolled' | 'waitlist' | 'no_course';
@@ -864,6 +899,33 @@ interface RawDatabase {
         Insert: Partial<import('./exam').ExamSession> & { user_id: string };
         Update: Partial<import('./exam').ExamSession>;
       };
+      student_agreement_editions: {
+        Row: StudentAgreementEdition;
+        Insert: Partial<StudentAgreementEdition> & {
+          status: 'draft' | 'published';
+          bundle_version: string;
+          contrato_markdown: string;
+          reglamento_markdown: string;
+          normas_markdown: string;
+          aviso_markdown: string;
+        };
+        Update: Partial<StudentAgreementEdition>;
+      };
+      student_agreements: {
+        Row: StudentAgreement;
+        Insert: Partial<StudentAgreement> & {
+          user_id: string;
+          document_type: StudentAgreementDocumentType;
+          document_sha256: string;
+          full_name_typed: string;
+          signature_image_path: string;
+          pdf_signed_path: string;
+          verification_folio: string;
+          ip_address: string;
+          user_agent: string;
+        };
+        Update: Partial<StudentAgreement>;
+      };
     };
     Functions: {
       is_admin: { Args: { check_user_id?: string }; Returns: boolean };
@@ -1076,6 +1138,7 @@ interface RawDatabase {
       get_exam_gap_analysis: { Args: { p_user_id?: string | null }; Returns: unknown };
       issue_my_certificate: { Args: { p_course_id?: string | null }; Returns: unknown };
       verify_certificate: { Args: { p_folio: string }; Returns: unknown };
+      verify_student_agreement: { Args: { p_folio: string }; Returns: unknown };
       topic_discussion_directory: {
         Args: { p_topic_id: string };
         Returns: { user_id: string; display_name: string; is_staff: boolean }[];
@@ -1146,6 +1209,10 @@ interface RawDatabase {
           p_items: { topic_id: string; module_id: string | null }[];
           p_completed: boolean;
         };
+        Returns: void;
+      };
+      sync_my_reading_assignments: {
+        Args: Record<string, never>;
         Returns: void;
       };
       get_course_teachers: {

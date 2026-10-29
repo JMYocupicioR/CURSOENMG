@@ -12,6 +12,8 @@ import { supabase, isSupabaseConfigured, sb } from '../lib/supabase';
 import type { AppRole, CourseId, EnrollmentStatus, Profile, Subscription } from '../types/database';
 import { recordUserActivity } from '../services/studentPlanService';
 import { hasActivePremiumSubscription, isEnrolledInCourse as enrolledInCourse } from '../utils/courseEnrollment';
+import { shouldRedirectToAgreements } from '../content/legal/agreements';
+import { fetchPublishedAgreementMeta } from '../services/studentAgreementEditionService';
 import { readAuthSnapshot, writeAuthSnapshot } from '../lib/authSnapshot';
 import { useStaffViewStore } from '../stores/staffViewStore';
 import { resetAutoOpenClassWizardSession } from '../utils/classWizardPreferences';
@@ -57,6 +59,8 @@ interface AuthContextValue {
   isEnrollmentPending: boolean;
   isPendingApproval: boolean;
   isRejected: boolean;
+  hasSignedCurrentAgreements: boolean;
+  needsAgreementSignature: boolean;
   isCommitteeMember: boolean;
   bootstrapAvailable: boolean;
   refreshProfile: () => Promise<void>;
@@ -219,6 +223,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [subscription, setSubscription] = useState<Subscription | null>(null);
   const [isLoading, setIsLoading] = useState(isSupabaseConfigured);
   const [loadedUserId, setLoadedUserId] = useState<string | null>(null);
+  const [publishedAgreement, setPublishedAgreement] = useState({
+    ready: false,
+    version: null as string | null,
+    partyComplete: false,
+  });
 
   const loadUserData = useCallback(async (userId: string) => {
     applyAuthSnapshot(userId, (snap) => {
@@ -255,7 +264,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const refreshProfile = useCallback(async () => {
     if (!session?.user.id) return;
     await loadUserData(session.user.id);
+    const meta = await fetchPublishedAgreementMeta().catch(() => ({ version: null, partyComplete: false }));
+    setPublishedAgreement({ ready: true, ...meta });
   }, [loadUserData, session?.user.id]);
+
+  useEffect(() => {
+    if (!session?.user.id) {
+      setPublishedAgreement({ ready: true, version: null, partyComplete: false });
+      return;
+    }
+    let cancelled = false;
+    fetchPublishedAgreementMeta()
+      .then((meta) => {
+        if (!cancelled) setPublishedAgreement({ ready: true, ...meta });
+      })
+      .catch(() => {
+        if (!cancelled) setPublishedAgreement({ ready: true, version: null, partyComplete: false });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [session?.user.id]);
 
   useEffect(() => {
     if (!isSupabaseConfigured) {
@@ -591,6 +620,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       !isAdmin && !isEditor && (enrollmentStatus === 'pending' || enrollmentStatus === 'none');
     const isRejected =
       !isAdmin && !isEditor && enrollmentStatus === 'rejected';
+    const hasSignedCurrentAgreements =
+      Boolean(publishedAgreement.version) &&
+      profile?.agreement_bundle_version === publishedAgreement.version;
+    const needsAgreementSignature = shouldRedirectToAgreements({
+      isStaff: isAdmin || isEditor,
+      isPendingOrRejected: isPendingApproval || isRejected,
+      isApprovedStudent: enrollmentStatus === 'approved',
+      bundleVersion: profile?.agreement_bundle_version,
+      partyComplete: publishedAgreement.ready && publishedAgreement.partyComplete,
+      currentVersion: publishedAgreement.version ?? undefined,
+    });
     const isCommitteeMember = isAdmin || isEditor;
     const effectivePremium = hasPremiumAccess;
     const staffOrPremium = isAdmin || isEditor || effectivePremium;
@@ -639,6 +679,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isEnrollmentPending: enrollmentStatus === 'pending',
       isPendingApproval,
       isRejected,
+      hasSignedCurrentAgreements,
+      needsAgreementSignature,
       isCommitteeMember,
       bootstrapAvailable,
       refreshProfile,
@@ -663,6 +705,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       pendingCourseIds,
       courseSchemaReady,
       subscription,
+      publishedAgreement,
       bootstrapAvailable,
       refreshProfile,
       signInWithOtp,

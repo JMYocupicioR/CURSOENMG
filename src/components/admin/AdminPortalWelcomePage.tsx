@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ChevronDown, ChevronUp, Eye, ImageIcon, Link2, Plus, Sparkles, Trash2, Video, X } from 'lucide-react';
+import { ChevronDown, ChevronUp, Eye, FileText, ImageIcon, Link2, Plus, Sparkles, Trash2, Video, X } from 'lucide-react';
+import { AgreementEditor } from '../agreements/AgreementEditor';
+import { AgreementRoster } from '../agreements/AgreementRoster';
 import { AdminLayout } from './AdminLayout';
 import { StudentPortalGuide } from '../student/StudentPortalGuide';
 import { PortalGuideMediaView } from '../student/PortalGuideMediaView';
@@ -229,6 +231,7 @@ export default function AdminPortalWelcomePage() {
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewStep, setPreviewStep] = useState(0);
   const [lens, setLens] = useState<PortalGuideCourseState>('active');
+  const [section, setSection] = useState<'guide' | 'agreements'>('guide');
   const [mediaTab, setMediaTab] = useState<PortalWelcomeMediaItemKind>('image');
 
   const load = useCallback(async (initial = false) => {
@@ -543,9 +546,48 @@ export default function AdminPortalWelcomePage() {
     <AdminLayout
       fullBleed
       title="Inducción"
-      subtitle="La guía que ve el alumno la primera vez. Cada pantalla puede llevar varias fotos, videos o enlaces."
+      subtitle={
+        section === 'agreements'
+          ? 'Texto que el alumno lee y firma antes de entrar al diplomado.'
+          : 'La guía que ve el alumno la primera vez. Cada pantalla puede llevar varias fotos, videos o enlaces.'
+      }
     >
       <div className="space-y-4">
+        <div className="grid grid-cols-2 gap-1 rounded-2xl bg-slate-100 p-1 dark:bg-slate-800 sm:max-w-md" role="group" aria-label="Sección">
+          <button
+            type="button"
+            aria-pressed={section === 'guide'}
+            onClick={() => setSection('guide')}
+            className={`min-h-11 rounded-xl px-3 text-sm font-semibold ${
+              section === 'guide'
+                ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-950 dark:text-white'
+                : 'text-slate-600 dark:text-slate-300'
+            }`}
+          >
+            Guía
+          </button>
+          <button
+            type="button"
+            aria-pressed={section === 'agreements'}
+            onClick={() => setSection('agreements')}
+            className={`inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-3 text-sm font-semibold ${
+              section === 'agreements'
+                ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-950 dark:text-white'
+                : 'text-slate-600 dark:text-slate-300'
+            }`}
+          >
+            <FileText className="h-4 w-4" />
+            Acuerdos
+          </button>
+        </div>
+        {section === 'agreements' ? (
+          <>
+            <AgreementRoster />
+            <AgreementEditor />
+          </>
+        ) : null}
+        {section === 'guide' ? (
+        <>
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <p className="text-sm text-slate-600 dark:text-slate-300">
             Versión publicada: <strong>{publishedVersion}</strong>
@@ -948,6 +990,8 @@ export default function AdminPortalWelcomePage() {
             </aside>
           </div>
         )}
+        </>
+        ) : null}
       </div>
 
       <StudentPortalGuide

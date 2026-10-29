@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { Video, Calendar, Clock, CheckCircle, Users } from 'lucide-react';
+import { Calendar, Clock } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthProvider';
 import { useCourseStore } from '../../stores/courseStore';
 import { BackButton } from '../common/BackButton';
+import { LiveClassCountdown } from '../course/LiveClassCountdown';
 import type { LiveWorkshop } from '../../types/database';
 
 export default function WorkshopDetailPage() {
@@ -54,7 +55,6 @@ export default function WorkshopDetailPage() {
   }
 
   const date = new Date(workshop.scheduled_at);
-  const isPast = date < new Date();
 
   const handleRegister = async () => {
     if (!user || !workshopId) return;
@@ -101,51 +101,12 @@ export default function WorkshopDetailPage() {
         </div>
 
         {isEnrolledPhysician ? (
-          <div className="p-6 rounded-2xl bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700">
-            {isPast ? (
-              <div className="text-center">
-                <h3 className="text-lg font-bold mb-2">Este taller ya finalizó</h3>
-                {workshop.recording_url ? (
-                  <a href={workshop.recording_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-blue-600 text-white font-medium hover:bg-blue-500">
-                    <Video className="w-5 h-5" /> Ver grabación
-                  </a>
-                ) : (
-                  <p className="text-slate-500">La grabación aún no está disponible.</p>
-                )}
-              </div>
-            ) : (
-              <div className="flex flex-col sm:flex-row items-center justify-between gap-6">
-                <div>
-                  <h3 className="text-lg font-bold mb-1">Registro al taller</h3>
-                  <p className="text-sm text-slate-500">
-                    {isRegistered ? 'Ya estás registrado para asistir.' : 'Regístrate para recibir el acceso al stream.'}
-                  </p>
-                </div>
-                {isRegistered ? (
-                  <div className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 font-medium">
-                    <CheckCircle className="w-5 h-5" /> Registrado
-                  </div>
-                ) : (
-                  <button
-                    onClick={handleRegister}
-                    disabled={loadingReg}
-                    className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-blue-600 text-white font-medium hover:bg-blue-500 disabled:opacity-50"
-                  >
-                    <Users className="w-5 h-5" /> Registrarme
-                  </button>
-                )}
-              </div>
-            )}
-            
-            {isRegistered && !isPast && workshop.stream_url && (
-              <div className="mt-6 pt-6 border-t border-slate-200 dark:border-slate-700 text-center">
-                <p className="text-sm text-slate-500 mb-3">El enlace de transmisión está disponible:</p>
-                <a href={workshop.stream_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-red-600 text-white font-medium hover:bg-red-500">
-                  <Video className="w-5 h-5" /> Entrar al Stream en Vivo
-                </a>
-              </div>
-            )}
-          </div>
+          <LiveClassCountdown
+            workshop={workshop}
+            isRegistered={isRegistered}
+            onRegister={handleRegister}
+            loadingReg={loadingReg}
+          />
         ) : (
           <div className="p-6 rounded-2xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700/50 text-center">
             <h3 className="text-lg font-bold text-amber-900 dark:text-amber-100 mb-2">Acceso Premium Requerido</h3>

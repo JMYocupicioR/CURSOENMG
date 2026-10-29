@@ -33,6 +33,8 @@ export interface AdminProfileRow {
   orcid_id?: string | null;
   clinical_interests?: string[] | null;
   admin_notes?: string | null;
+  agreements_signed?: boolean | null;
+  agreement_bundle_version?: string | null;
 }
 
 export interface AdminStats {

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Crown, Mail, Settings, Shield, User, CheckCircle2, AlertCircle } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthProvider';
+import { StudentAgreementsCard } from '../agreements/StudentAgreementsCard';
 import {
   ENROLLMENT_META,
   getPermissionSummary,
@@ -221,6 +222,8 @@ export default function AccountPage() {
           </p>
         )}
       </section>
+
+      {user && !isAdmin && !isEditor && <StudentAgreementsCard userId={user.id} />}
 
       <section className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white/60 dark:bg-slate-900/30 p-5 mb-6">
         <h2 className="font-semibold text-slate-900 dark:text-white mb-4">Estado de inscripción</h2>

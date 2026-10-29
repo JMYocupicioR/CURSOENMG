@@ -103,6 +103,19 @@ export interface StudentAssignment {
   priority: AssignmentPriority;
   min_score?: number | null;
   assigned_by?: string | null;
+  /** Misma publicación para varios alumnos. */
+  batch_id?: string | null;
+  /** Temas que esta tarea pide leer. Vacío si no hay lectura. */
+  reading_topic_ids?: string[] | null;
+  /** Temas de la lista que el alumno ya leyó. */
+  reading_done_ids?: string[] | null;
+  /** Primera vez que quedaron leídos todos los temas pedidos. */
+  reading_completed_at?: string | null;
+  /**
+   * True si hay una entrega que el profesor debe revisar.
+   * Null en tareas anteriores: se infiere del tipo.
+   */
+  requires_delivery?: boolean | null;
   // Entrega del alumno
   submitted_at?: string | null;
   student_notes?: string | null;
@@ -223,6 +236,7 @@ export interface StudentFullDossier {
   activityLogs: StudentActivityLog[];
   learningPlans: StudentLearningPlan[];
   assignments: StudentAssignment[];
+  agreements: import('./database').StudentAgreement[];
 }
 
 export interface TeacherPendingReviewItem {

@@ -1,7 +1,9 @@
 import { useEffect, useState, useMemo } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useSearchParams } from 'react-router-dom';
 import { BackButton } from '../common/BackButton';
 import { AssignmentMaterialsList } from '../student/AssignmentMaterialsList';
+import { AssignmentReadingChecklist } from '../student/AssignmentReadingChecklist';
+import { describeReadingAssignment } from '../../utils/readingAssignments';
 import {
   Activity,
   Award,
@@ -59,8 +61,10 @@ import type {
   StudentAssignment,
 } from '../../types/studentPlan';
 import StudentKardexModal from './StudentKardexModal';
+import { AdminStudentAgreementsPanel } from '../agreements/AdminStudentAgreementsPanel';
+import { STUDENT_AGREEMENT_TYPES } from '../../content/legal/agreements';
 
-type Tab = 'summary' | 'exams' | 'domains' | 'activity' | 'dossier' | 'plans';
+type Tab = 'summary' | 'exams' | 'domains' | 'activity' | 'dossier' | 'agreements' | 'plans';
 
 // ─── Subcomponents for Granular Topic & Subtopic Progress Breakdown ─────────
 
@@ -386,12 +390,15 @@ function ModuleTopicsBreakdown({
 
 export default function AdminStudentProgressPage() {
   const { studentId } = useParams<{ studentId: string }>();
+  const [searchParams] = useSearchParams();
   const { user } = useAuth();
 
   const [dossier, setDossier] = useState<StudentFullDossier | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<Tab>('summary');
+  const [activeTab, setActiveTab] = useState<Tab>(
+    searchParams.get('tab') === 'agreements' ? 'agreements' : 'summary'
+  );
   const [showKardexModal, setShowKardexModal] = useState(false);
 
   // Exam Detail state (Question by question breakdown)
@@ -812,6 +819,7 @@ export default function AdminStudentProgressPage() {
             { id: 'domains', label: 'Áreas de Oportunidad', icon: Target },
             { id: 'activity', label: 'Logins & Racha', icon: Flame },
             { id: 'dossier', label: 'Expediente & CV', icon: FileText },
+            { id: 'agreements', label: `Acuerdos (${STUDENT_AGREEMENT_TYPES.filter((type) => (dossier.agreements ?? []).some((row) => row.document_type === type)).length}/3)`, icon: FileCheck },
             { id: 'plans', label: `Planes & Tareas (${assignments.length})`, icon: Calendar },
           ].map((t) => {
             const Icon = t.icon;
@@ -1583,6 +1591,10 @@ export default function AdminStudentProgressPage() {
         )}
 
         {/* ─── TAB 5: EXPEDIENTE & CURRÍCULUM MÉDICO ─── */}
+        {activeTab === 'agreements' && studentId && (
+          <AdminStudentAgreementsPanel studentId={studentId} agreements={dossier.agreements ?? []} />
+        )}
+
         {activeTab === 'dossier' && (
           <div className="space-y-6">
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -1854,6 +1866,7 @@ export default function AdminStudentProgressPage() {
                 <div className="space-y-3">
                   {assignments.map((asg) => {
                     const isOverdue = new Date(asg.due_date).getTime() < Date.now() && asg.status === 'pending';
+                    const reading = describeReadingAssignment(asg);
 
                     return (
                       <div
@@ -1877,6 +1890,10 @@ export default function AdminStudentProgressPage() {
                                 ? 'Caso Clínico'
                                 : asg.type === 'emg_report'
                                 ? 'Reporte EMG'
+                                : reading.readingOnly
+                                ? 'Lectura'
+                                : reading.hasReading
+                                ? 'Lectura y entrega'
                                 : 'Tarea'}
                             </span>
 
@@ -1891,7 +1908,9 @@ export default function AdminStudentProgressPage() {
                                   : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
                               }`}
                             >
-                              {asg.status === 'approved'
+                              {reading.statusLabel
+                                ? reading.statusLabel
+                                : asg.status === 'approved'
                                 ? 'Aprobada'
                                 : asg.status === 'submitted'
                                 ? 'Entregada (Revisar)'
@@ -1928,6 +1947,14 @@ export default function AdminStudentProgressPage() {
                             {asg.description}
                           </p>
                           <AssignmentMaterialsList materials={asg.materials} />
+                          {reading.progressLabel && (
+                            <p className="text-[11px] font-bold text-amber-800 dark:text-amber-200">
+                              {reading.progressLabel}
+                            </p>
+                          )}
+                          {reading.hasReading && (
+                            <AssignmentReadingChecklist topicIds={reading.topicIds} doneIds={reading.doneIds} />
+                          )}
 
                           <p className="text-[11px] text-slate-400 flex items-center gap-1 pt-1">
                             <Clock className="w-3 h-3 text-slate-400" />
