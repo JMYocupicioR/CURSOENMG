@@ -112,11 +112,11 @@ export interface ExamSession {
   id: string;
   user_id: string;
   mode: ExamMode;
-  module_id?: string;
+  module_id?: string | null;
   selected_topics: string[];
-  question_count_config?: number;
+  question_count_config?: number | null;
   feedback_mode: FeedbackMode;
-  time_limit_seconds?: number;
+  time_limit_seconds?: number | null;
   total_questions: number;
   correct_answers: number;
   score_percentage: number;
@@ -124,7 +124,7 @@ export interface ExamSession {
   passed: boolean;             // score_percentage >= 70
   status: 'IN_PROGRESS' | 'COMPLETED' | 'ABANDONED';
   started_at: string;
-  completed_at?: string;
+  completed_at?: string | null;
 }
 
 export interface ExamAnswerRecord {

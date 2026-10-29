@@ -267,8 +267,8 @@ export default function AdminDashboard() {
 
   const loadData = async () => {
     try {
-      const [allActiveProfiles, waitlistData, pendingProfiles, revisionsData, quizzesData] = await Promise.all([
-        getAdminProfiles(false, 'all').catch(() => []),
+      const [allActiveProfiles, waitlistData, revisionsData, quizzesData] = await Promise.all([
+        getAdminProfiles(false, 'all').catch(() => [] as AdminProfileRow[]),
         getAdminCourseWaitlist(null, 'pending')
           .then((rows) => {
             setWaitlistError(null);
@@ -279,7 +279,6 @@ export default function AdminDashboard() {
             setWaitlistError(message);
             return [] as CourseWaitlistRow[];
           }),
-        getAdminProfiles(false, 'enrollment_pending').catch(() => [] as AdminProfileRow[]),
         getPendingRevisions().catch(() => []),
         listQuizzesForValidation().catch(() => []),
       ]);
@@ -287,7 +286,7 @@ export default function AdminDashboard() {
       setWaitlistItems(waitlistData);
       const queuedIds = new Set(waitlistData.map((row) => row.user_id));
       setProfilePending(
-        pendingProfiles.filter(
+        allActiveProfiles.filter(
           (profile) => profile.enrollment_status === 'pending' && !queuedIds.has(profile.id)
         )
       );
@@ -562,23 +561,15 @@ export default function AdminDashboard() {
     <AdminLayout
       title="Bandeja"
       subtitle="Decisiones que esperan tu firma y gestión directa de la cohorte."
-    >
-      {/* ── Barra Chica de Acciones de Clase (3 Acciones) ── */}
-      <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 sm:p-4 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-sm mb-6">
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-black uppercase tracking-wider text-slate-400 dark:text-slate-500 pl-1">
-            Acciones de clase:
-          </span>
-        </div>
-
+      headerActions={
         <div className="flex items-center gap-2 flex-wrap">
           {/* 1. Pase de lista */}
           <button
             type="button"
             onClick={() => setShowAttendanceModal(true)}
-            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-2xl bg-slate-100 hover:bg-slate-200/80 dark:bg-slate-800 dark:hover:bg-slate-700/80 text-slate-800 dark:text-slate-200 text-xs font-bold transition shadow-2xs cursor-pointer"
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 border border-slate-200/90 dark:border-slate-700 text-slate-800 dark:text-slate-200 text-xs font-bold transition shadow-2xs cursor-pointer"
           >
-            <UserCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+            <UserCheck className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
             <span>Pase de lista</span>
           </button>
 
@@ -587,9 +578,9 @@ export default function AdminDashboard() {
             <button
               type="button"
               onClick={() => setShowAssignDropdown(!showAssignDropdown)}
-              className="inline-flex items-center gap-2 px-3.5 py-2 rounded-2xl bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/60 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 text-xs font-bold transition border border-indigo-200/80 dark:border-indigo-800/80 shadow-2xs cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/60 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 text-xs font-bold transition border border-indigo-200/80 dark:border-indigo-800/80 shadow-2xs cursor-pointer"
             >
-              <Sparkles className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+              <Sparkles className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
               <span>Asignar</span>
               <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showAssignDropdown ? 'rotate-180' : ''}`} />
             </button>
@@ -637,14 +628,15 @@ export default function AdminDashboard() {
           <button
             type="button"
             onClick={() => setShowCreateLiveClassModal(true)}
-            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-2xl bg-gradient-to-r from-indigo-600 via-purple-600 to-rose-600 hover:from-indigo-500 hover:to-rose-500 text-white text-xs font-black transition shadow-sm shadow-indigo-600/20 cursor-pointer"
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-indigo-600 via-purple-600 to-rose-600 hover:from-indigo-500 hover:to-rose-500 text-white text-xs font-black transition shadow-sm shadow-indigo-600/20 cursor-pointer"
             title="Abrir el Asistente Guiado para configurar una clase en 3 minutos"
           >
-            <Sparkles className="w-4 h-4" />
-            <span>Asistente de Clase (Modo Fácil)</span>
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>Asistente de Clase</span>
           </button>
         </div>
-      </div>
+      }
+    >
 
       {/* Success Notification Alert */}
       {successMessage && (

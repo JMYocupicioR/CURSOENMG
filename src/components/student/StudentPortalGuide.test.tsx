@@ -127,4 +127,42 @@ describe('StudentPortalGuide', () => {
     expect(html).toContain('alt="Portada del curso"');
     expect(html).toContain('Paso 1 de 1');
   });
+
+  it('shows the first photo of a carousel and keeps videos and links beside it', () => {
+    const html = renderToStaticMarkup(
+      <StudentPortalGuide
+        open={true}
+        courseState="active"
+        finalActionLabel="Empezar"
+        onBack={() => undefined}
+        onNext={() => undefined}
+        onSkip={() => undefined}
+        onFinish={() => undefined}
+        stepIndex={0}
+        saving={false}
+        saveError={null}
+        steps={[
+          {
+            id: 'mix',
+            kicker: 'Bienvenida',
+            title: 'Recorrido',
+            body: 'Fotos, un video y un enlace.',
+            media: [
+              { kind: 'image', src: 'https://images.unsplash.com/photo-1.jpg', alt: 'Primera pantalla' },
+              { kind: 'image', src: 'https://images.unsplash.com/photo-2.jpg', alt: 'Segunda pantalla' },
+              { kind: 'video', src: 'https://www.youtube.com/embed/dQw4w9WgXcQ', alt: 'Clase en video' },
+              { kind: 'link', href: 'https://example.com/guia', label: 'Guía externa' },
+            ],
+          },
+        ]}
+      />
+    );
+
+    expect(html).toContain('alt="Primera pantalla"');
+    expect(html).not.toContain('alt="Segunda pantalla"');
+    expect(html).toContain('1 de 2');
+    expect(html).toContain('Foto siguiente');
+    expect(html).toContain('Clase en video');
+    expect(html).toContain('Guía externa');
+  });
 });

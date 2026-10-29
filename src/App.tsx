@@ -127,7 +127,7 @@ function App() {
               
               {/* Simuladores y herramientas con candado exclusivo Premium */}
               <Route path="/simuladores/publico" element={<ExerciseMode publicMode />} />
-              <Route path="/simuladores" element={<ProtectedRoute mode="premium"><SimulatorsHubPage /></ProtectedRoute>} />
+              <Route path="/simuladores" element={<ProtectedRoute mode="enrolled"><SimulatorsHubPage /></ProtectedRoute>} />
               <Route path="/simuladores/trazos" element={<ProtectedRoute mode="premium"><TraceSimulatorPage /></ProtectedRoute>} />
               <Route path="/ejercicios" element={<ProtectedRoute mode="premium"><ExerciseMode /></ProtectedRoute>} />
               <Route path="/herramientas/plexo-braquial" element={<ProtectedRoute mode="premium"><PlexoCalculatorPage /></ProtectedRoute>} />

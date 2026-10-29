@@ -602,7 +602,77 @@ interface RawDatabase {
           course_id: CourseId | null;
         };
         Insert: never;
-        Update: never;
+        Update: Partial<{
+          revoked_at: string | null;
+          course_id: CourseId | null;
+        }>;
+      };
+      academic_milestones: {
+        Row: import('./academicGradebook').AcademicMilestone;
+        Insert: Partial<import('./academicGradebook').AcademicMilestone> & {
+          id: string;
+          title: string;
+        };
+        Update: Partial<import('./academicGradebook').AcademicMilestone>;
+      };
+      academic_rubric_configs: {
+        Row: {
+          id: string;
+          title: string;
+          min_passing_grade: number;
+          rubrics: import('./academicGradebook').RubricItemConfig[];
+          updated_at: string;
+        };
+        Insert: {
+          id: string;
+          title: string;
+          min_passing_grade: number;
+          rubrics: import('./academicGradebook').RubricItemConfig[];
+          updated_at?: string;
+        };
+        Update: Partial<{
+          title: string;
+          min_passing_grade: number;
+          rubrics: import('./academicGradebook').RubricItemConfig[];
+          updated_at: string;
+        }>;
+      };
+      class_attendances: {
+        Row: import('./academicGradebook').ClassAttendanceRecord;
+        Insert: Partial<import('./academicGradebook').ClassAttendanceRecord> & {
+          student_id: string;
+          session_title: string;
+          session_date: string;
+        };
+        Update: Partial<import('./academicGradebook').ClassAttendanceRecord>;
+      };
+      exam_questions: {
+        Row: import('./exam').ExamQuestion;
+        Insert: Partial<import('./exam').ExamQuestion> & {
+          topic_name: string;
+          stem: string;
+        };
+        Update: Partial<import('./exam').ExamQuestion>;
+      };
+      exam_attempts: {
+        Row: import('./exam').ExamAttemptRecord;
+        Insert: Partial<import('./exam').ExamAttemptRecord> & {
+          user_id: string;
+          mode: string;
+        };
+        Update: Partial<import('./exam').ExamAttemptRecord>;
+      };
+      exam_answers: {
+        Row: import('./exam').ExamAnswerRecord & {
+          id?: string;
+          session_id: string;
+          created_at?: string;
+        };
+        Insert: Partial<import('./exam').ExamAnswerRecord> & {
+          session_id: string;
+          question_id: string;
+        };
+        Update: Partial<import('./exam').ExamAnswerRecord>;
       };
       courses: {
         Row: Course;
@@ -687,10 +757,10 @@ interface RawDatabase {
           assignment_id: string | null;
           title: string;
           file_url: string | null;
-          interpretation: Record<string, unknown>;
+          interpretation: Record<string, unknown> | string | null;
           feedback: string | null;
           status: string;
-          rubric?: Record<string, unknown>;
+          rubric?: Record<string, unknown> | null;
           rubric_score?: number | null;
           created_at: string;
         };
@@ -698,7 +768,7 @@ interface RawDatabase {
           student_id: string;
           title: string;
           file_url?: string | null;
-          interpretation?: Record<string, unknown>;
+          interpretation?: Record<string, unknown> | string | null;
           assignment_id?: string | null;
           status?: string;
         };
@@ -1027,6 +1097,77 @@ interface RawDatabase {
       withdraw_topic_commitment: {
         Args: { p_commitment_id: string };
         Returns: TopicTeachingCommitment;
+      };
+      auto_confirm_all_pending_commitments: {
+        Args: Record<string, never>;
+        Returns: TopicTeachingCommitment[];
+      };
+      admin_delete_live_workshop: {
+        Args: { p_workshop_id: string };
+        Returns: { success?: boolean } | boolean;
+      };
+      admin_delete_course: {
+        Args: { p_course_id: string };
+        Returns: boolean;
+      };
+      reorder_course_modules: {
+        Args: { p_course_id: string; p_module_ids: string[] };
+        Returns: void;
+      };
+      set_syllabus_topic_overrides: {
+        Args: {
+          p_module_id: string;
+          p_overrides: { topic_id: string; sort_order: number; is_visible: boolean }[];
+        };
+        Returns: void;
+      };
+      admin_delete_user: {
+        Args: { target_user_id: string };
+        Returns: void;
+      };
+      admin_toggle_editorial_committee: {
+        Args: { target_user_id: string; show?: boolean; p_visible?: boolean };
+        Returns: void;
+      };
+      admin_toggle_specialist_visibility: {
+        Args: { target_user_id: string; show?: boolean; p_visible?: boolean };
+        Returns: void;
+      };
+      admin_delete_quiz_attempt: {
+        Args: { p_attempt_id: string };
+        Returns: void;
+      };
+      admin_delete_student_assignment: {
+        Args: { p_assignment_id: string };
+        Returns: void;
+      };
+      set_my_topic_progress: {
+        Args: {
+          p_items: { topic_id: string; module_id: string | null }[];
+          p_completed: boolean;
+        };
+        Returns: void;
+      };
+      get_course_teachers: {
+        Args: Record<string, never>;
+        Returns: Profile[];
+      };
+      admin_assign_topic_teacher: {
+        Args: {
+          p_topic_ids: string[];
+          p_module_id: string;
+          p_teacher_id: string;
+          p_milestone_id?: string | null;
+          p_cohort_id?: string;
+        };
+        Returns: TopicTeachingCommitment[];
+      };
+      admin_delete_syllabus_topic: {
+        Args: {
+          p_module_id: string;
+          p_topic_id: string;
+        };
+        Returns: void;
       };
     };
     Views: {

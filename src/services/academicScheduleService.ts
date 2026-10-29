@@ -272,7 +272,7 @@ function writeLocalMilestones(list: AcademicMilestone[]): void {
 async function persistMilestonesRemote(list: AcademicMilestone[]): Promise<void> {
   if (!list.length || isTableMissingInSupabase('academic_milestones')) return;
   try {
-    const { error, status } = await (supabase.from as any)('academic_milestones').upsert(
+    const { error, status } = await supabase.from('academic_milestones').upsert(
       list.map(toAcademicMilestoneRow),
       { onConflict: 'id' }
     );
@@ -316,7 +316,8 @@ export async function getAcademicMilestones(): Promise<AcademicMilestone[]> {
 
   if (!isTableMissingInSupabase('academic_milestones')) {
     try {
-      const { data, error, status } = await (supabase.from as any)('academic_milestones')
+      const { data, error, status } = await supabase
+        .from('academic_milestones')
         .select('*')
         .order('order_index', { ascending: true });
 
@@ -360,7 +361,8 @@ export async function saveMilestone(milestone: AcademicMilestone): Promise<Acade
 
   if (!isTableMissingInSupabase('academic_milestones')) {
     try {
-      const { data, error, status } = await (supabase.from as any)('academic_milestones')
+      const { data, error, status } = await supabase
+        .from('academic_milestones')
         .upsert(toAcademicMilestoneRow(updatedItem), { onConflict: 'id' })
         .select()
         .single();
@@ -389,7 +391,7 @@ export async function deleteMilestone(milestoneId: string): Promise<void> {
 
   if (!isTableMissingInSupabase('academic_milestones')) {
     try {
-      const { error, status } = await (supabase.from as any)('academic_milestones').delete().eq('id', milestoneId);
+      const { error, status } = await supabase.from('academic_milestones').delete().eq('id', milestoneId);
       if (isMissingRelationError(error, status)) {
         markTableAsMissingInSupabase('academic_milestones');
       }

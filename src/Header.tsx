@@ -155,126 +155,131 @@ export function Header() {
   return (
     <>
       <header className="fixed top-0 left-0 right-0 z-50 bg-white/85 dark:bg-slate-900/85 backdrop-blur-xl border-b border-slate-200/70 dark:border-slate-800/70 transition-colors">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 h-14 sm:h-16 flex items-center justify-between">
+        <div className="max-w-[1680px] 2xl:max-w-[1800px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10 h-14 sm:h-16 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <Link to={homeHref} className="flex items-center group transition-transform hover:scale-[1.02]">
+            <Link to={homeHref} className="flex items-center group transition-transform hover:scale-[1.01]">
               <BrandLogo variant="full" size="md" />
             </Link>
+
+            {isAdmin && !studentMode && (
+              <>
+                <span className="hidden lg:block h-5 w-px bg-slate-200 dark:bg-slate-800 ml-1" />
+                <nav className="hidden lg:flex items-center" aria-label="Temas">
+                  <button
+                    type="button"
+                    onClick={openCourseSidebar}
+                    className={navClass(courseActive)}
+                    aria-label="Abrir navegación de temas"
+                    title="Navegación de temas y edición rápida del temario"
+                  >
+                    <PanelLeft className="w-4 h-4 text-indigo-500 dark:text-cyan-400" />
+                    <span>Índice de temas</span>
+                  </button>
+                </nav>
+              </>
+            )}
           </div>
 
           {(!isAdmin || studentMode) && (
-          <nav className="hidden lg:flex items-center gap-1 xl:gap-2" aria-label="Principal">
-            {showPublicNav && (
-              <>
-                <Link to="/temario" className={navClass(location.pathname === '/temario' || location.pathname === '/programa')}>
-                  <BookOpen className="w-4 h-4 text-blue-600 dark:text-cyan-400" />
-                  <span>Temario</span>
-                </Link>
-                <Link to="/cursos" className={navClass(location.pathname === '/cursos')}>
+            <nav className="hidden lg:flex items-center gap-1 xl:gap-2" aria-label="Principal">
+              {showPublicNav && (
+                <>
+                  <Link to="/temario" className={navClass(location.pathname === '/temario' || location.pathname === '/programa')}>
+                    <BookOpen className="w-4 h-4 text-blue-600 dark:text-cyan-400" />
+                    <span>Temario</span>
+                  </Link>
+                  <Link to="/cursos" className={navClass(location.pathname === '/cursos')}>
+                    <GraduationCap className="w-4 h-4" />
+                    <span>Cursos</span>
+                  </Link>
+                </>
+              )}
+
+              {showStudentNav && (
+                <Link to="/portal" className={navClass(portalActive)}>
                   <GraduationCap className="w-4 h-4" />
-                  <span>Cursos</span>
+                  <span>Portal</span>
+                  {pendingCount > 0 && (
+                    <span className="px-1.5 py-0.5 rounded-full bg-red-500 text-white text-[10px] font-bold leading-none">
+                      {pendingCount > 9 ? '9+' : pendingCount}
+                    </span>
+                  )}
                 </Link>
-              </>
-            )}
+              )}
 
-            {showStudentNav && (
-              <Link to="/portal" className={navClass(portalActive)}>
-                <GraduationCap className="w-4 h-4" />
-                <span>Portal</span>
-                {pendingCount > 0 && (
-                  <span className="px-1.5 py-0.5 rounded-full bg-red-500 text-white text-[10px] font-bold leading-none">
-                    {pendingCount > 9 ? '9+' : pendingCount}
-                  </span>
-                )}
-              </Link>
-            )}
+              {showStudentNav && (
+                <button
+                  type="button"
+                  onClick={openCourseSidebar}
+                  className={navClass(courseActive)}
+                  aria-label="Abrir contenido del curso"
+                >
+                  <PanelLeft className="w-4 h-4" />
+                  <span>Curso</span>
+                </button>
+              )}
 
-            {showStudentNav && (
-              <button
-                type="button"
-                onClick={openCourseSidebar}
-                className={navClass(courseActive)}
-                aria-label="Abrir contenido del curso"
-              >
-                <PanelLeft className="w-4 h-4" />
-                <span>Curso</span>
-              </button>
-            )}
-
-            {(showPublicNav || showStudentNav) && (
-              <Link to={showPublicNav ? '/simuladores/publico' : '/simuladores'} className={navClass(simulatorsActive)}>
-                <Wrench className="w-4 h-4" />
-                <span>Simuladores</span>
-                {showPublicNav && (
-                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30">
-                    PRO
-                  </span>
-                )}
-              </Link>
-            )}
-
-            {showStudentNav && (
-              <Link to="/examenes" className={navClass(examsActive)}>
-                <ClipboardList className="w-4 h-4" />
-                <span>Evaluaciones</span>
-              </Link>
-            )}
-
-            {showStudentNav && (
-              <Link to="/talleres" className={navClass(location.pathname.startsWith('/talleres') || location.pathname.startsWith('/taller'))}>
-                <Video className="w-4 h-4" />
-                <span>Clases en Vivo</span>
-              </Link>
-            )}
-
-            {showStudentNav && (
-              <Link to="/biblioteca" className={navClass(location.pathname.startsWith('/biblioteca') || location.pathname.startsWith('/especialistas/contenido'))}>
-                <Sparkles className="w-4 h-4" />
-                <span>Biblioteca</span>
-              </Link>
-            )}
-
-            {showPublicNav && isSupabaseConfigured && (
-              <>
-                <Link to="/especialistas" className={navClass(location.pathname.startsWith('/especialistas'))}>
-                  <Users className="w-4 h-4" />
-                  <span>Especialistas</span>
+              {(showPublicNav || showStudentNav) && (
+                <Link to={showPublicNav ? '/simuladores/publico' : '/simuladores'} className={navClass(simulatorsActive)}>
+                  <Wrench className="w-4 h-4" />
+                  <span>Simuladores</span>
+                  {showPublicNav && (
+                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30">
+                      PRO
+                    </span>
+                  )}
                 </Link>
-                <Link to="/comite-editorial" className={navClass(location.pathname === '/comite-editorial')}>
-                  <Scale className="w-4 h-4" />
-                  <span>Comité</span>
-                </Link>
-              </>
-            )}
-          </nav>
-          )}
+              )}
 
-          {isAdmin && !studentMode && (
-            <nav className="hidden lg:flex items-center" aria-label="Temas">
-              <button
-                type="button"
-                onClick={openCourseSidebar}
-                className={navClass(courseActive)}
-                aria-label="Abrir navegación de temas"
-                title="Navegación de temas y edición rápida del temario"
-              >
-                <PanelLeft className="w-4 h-4" />
-                <span>Temas</span>
-              </button>
+              {showStudentNav && (
+                <Link to="/examenes" className={navClass(examsActive)}>
+                  <ClipboardList className="w-4 h-4" />
+                  <span>Evaluaciones</span>
+                </Link>
+              )}
+
+              {showStudentNav && (
+                <Link to="/talleres" className={navClass(location.pathname.startsWith('/talleres') || location.pathname.startsWith('/taller'))}>
+                  <Video className="w-4 h-4" />
+                  <span>Clases en Vivo</span>
+                </Link>
+              )}
+
+              {showStudentNav && (
+                <Link to="/biblioteca" className={navClass(location.pathname.startsWith('/biblioteca') || location.pathname.startsWith('/especialistas/contenido'))}>
+                  <Sparkles className="w-4 h-4" />
+                  <span>Biblioteca</span>
+                </Link>
+              )}
+
+              {showPublicNav && isSupabaseConfigured && (
+                <>
+                  <Link to="/especialistas" className={navClass(location.pathname.startsWith('/especialistas'))}>
+                    <Users className="w-4 h-4" />
+                    <span>Especialistas</span>
+                  </Link>
+                  <Link to="/comite-editorial" className={navClass(location.pathname === '/comite-editorial')}>
+                    <Scale className="w-4 h-4" />
+                    <span>Comité</span>
+                  </Link>
+                </>
+              )}
             </nav>
           )}
 
-          <div className="hidden lg:flex items-center gap-2">
+          <div className="hidden lg:flex items-center gap-2.5">
             {/* Buscador Rápido Global (Cmd+K / Ctrl+K) */}
             <button
               type="button"
               onClick={openCommandPalette}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/60 hover:bg-white dark:hover:bg-slate-800 hover:border-slate-300 dark:hover:border-slate-700 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 text-xs transition-all shadow-xs cursor-pointer group"
+              className="flex items-center justify-between gap-3 px-3 py-1.5 min-w-[200px] xl:min-w-[260px] rounded-xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/60 hover:bg-white dark:hover:bg-slate-800 hover:border-slate-300 dark:hover:border-slate-700 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 text-xs transition-all shadow-xs cursor-pointer group"
               title="Búsqueda global (Ctrl + K)"
             >
-              <Search className="w-3.5 h-3.5 text-slate-400 group-hover:text-blue-600 dark:group-hover:text-cyan-400 transition-colors" />
-              <span className="hidden xl:inline text-slate-500 dark:text-slate-400">Buscar...</span>
-              <kbd className="hidden sm:inline-flex items-center px-1.5 py-0.2 rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-[10px] font-mono text-slate-400 dark:text-slate-500">
+              <span className="flex items-center gap-2 truncate">
+                <Search className="w-3.5 h-3.5 text-slate-400 group-hover:text-blue-600 dark:group-hover:text-cyan-400 transition-colors shrink-0" />
+                <span className="text-slate-500 dark:text-slate-400 truncate">Buscar tema, módulo o acción...</span>
+              </span>
+              <kbd className="inline-flex items-center px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-[10px] font-mono text-slate-400 dark:text-slate-500 shrink-0">
                 ⌘K
               </kbd>
             </button>
@@ -284,14 +289,14 @@ export function Header() {
 
             {isSupabaseConfigured && user && (isAdmin || isEditor) && <TeacherCommentBell />}
 
-            {isSupabaseConfigured && user && isAdmin && !studentMode && (
+            {isSupabaseConfigured && user && isAdmin && !studentMode && !location.pathname.startsWith('/admin') && (
               <Link
                 to="/admin"
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-gradient-to-r from-indigo-500/10 via-purple-500/10 to-blue-500/10 dark:from-indigo-950/60 dark:to-purple-950/60 text-indigo-600 dark:text-indigo-300 border border-indigo-200/80 dark:border-indigo-800/80 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-all shadow-xs"
                 title="Panel de Administración"
               >
                 <Shield className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400 shrink-0" />
-                <span>Admin</span>
+                <span>Panel Admin</span>
                 {totalPending > 0 && (
                   <span className="px-1.5 py-0.5 rounded-full bg-red-500 text-white text-[10px] font-bold leading-none">
                     {totalPending > 9 ? '9+' : totalPending}
@@ -320,8 +325,6 @@ export function Header() {
                 </Link>
               </div>
             ) : null}
-
-
 
             <button
               onClick={toggleDarkMode}
@@ -525,53 +528,51 @@ export function Header() {
               ) : null}
 
               {showPublicNav && (
-              <div>
-                <span className="text-[11px] font-mono uppercase tracking-wider font-bold text-slate-400 block mb-3">
-                  Programa
-                </span>
-                <div className="space-y-1">
-                  <MobileNavRow
-                    to="/temario"
-                    onClick={closeMobileMenu}
-                    icon={<BookOpen className="w-4 h-4 text-blue-600 dark:text-cyan-400" />}
-                    label="Temario"
-                  />
-                  <MobileNavRow
-                    to="/cursos"
-                    onClick={closeMobileMenu}
-                    icon={<GraduationCap className="w-4 h-4" />}
-                    label="Cursos"
-                  />
-                  <MobileNavRow
-                    to="/simuladores/publico"
-                    onClick={closeMobileMenu}
-                    icon={<Wrench className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />}
-                    label="Simuladores"
-                  />
-                  {isSupabaseConfigured && (
-                    <>
-                      <MobileNavRow
-                        to="/especialistas"
-                        onClick={closeMobileMenu}
-                        icon={<Users className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />}
-                        label="Especialistas"
-                      />
-                      <MobileNavRow
-                        to="/comite-editorial"
-                        onClick={closeMobileMenu}
-                        icon={<Scale className="w-4 h-4 text-purple-600 dark:text-purple-400" />}
-                        label={BRAND.enableAccreditation ? 'Comité editorial y aval' : 'Comité editorial'}
-                      />
-                    </>
-                  )}
+                <div>
+                  <span className="text-[11px] font-mono uppercase tracking-wider font-bold text-slate-400 block mb-3">
+                    Programa
+                  </span>
+                  <div className="space-y-1">
+                    <MobileNavRow
+                      to="/temario"
+                      onClick={closeMobileMenu}
+                      icon={<BookOpen className="w-4 h-4 text-blue-600 dark:text-cyan-400" />}
+                      label="Temario"
+                    />
+                    <MobileNavRow
+                      to="/cursos"
+                      onClick={closeMobileMenu}
+                      icon={<GraduationCap className="w-4 h-4" />}
+                      label="Cursos"
+                    />
+                    <MobileNavRow
+                      to="/simuladores/publico"
+                      onClick={closeMobileMenu}
+                      icon={<Wrench className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />}
+                      label="Simuladores"
+                    />
+                    {isSupabaseConfigured && (
+                      <>
+                        <MobileNavRow
+                          to="/especialistas"
+                          onClick={closeMobileMenu}
+                          icon={<Users className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />}
+                          label="Especialistas"
+                        />
+                        <MobileNavRow
+                          to="/comite-editorial"
+                          onClick={closeMobileMenu}
+                          icon={<Scale className="w-4 h-4 text-purple-600 dark:text-purple-400" />}
+                          label={BRAND.enableAccreditation ? 'Comité editorial y aval' : 'Comité editorial'}
+                        />
+                      </>
+                    )}
+                  </div>
                 </div>
-              </div>
               )}
             </div>
 
             <div className="pt-6 border-t border-slate-200 dark:border-slate-800 space-y-4">
-
-
               <div className="flex items-center justify-between">
                 <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">Tema</span>
                 <button

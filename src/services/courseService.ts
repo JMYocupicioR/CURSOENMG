@@ -203,11 +203,11 @@ export async function setWorkshopAttendanceClosed(
 
 export async function deleteWorkshop(id: string): Promise<void> {
   // 1. Intentar primero con la función RPC que limpia en cascada y garantiza permisos
-  const { data: rpcData, error: rpcError } = await (supabase.rpc as any)('admin_delete_live_workshop', {
+  const { data: rpcData, error: rpcError } = await supabase.rpc('admin_delete_live_workshop', {
     p_workshop_id: id,
   });
 
-  if (!rpcError && (rpcData as any)?.success) {
+  if (!rpcError && ((typeof rpcData === 'object' && rpcData !== null && 'success' in rpcData && rpcData.success) || rpcData === true)) {
     return;
   }
 
@@ -228,7 +228,7 @@ export async function deleteWorkshop(id: string): Promise<void> {
 export async function registerForWorkshop(workshopId: string, userId: string) {
   const { error } = await supabase
     .from('workshop_registrations')
-    .insert({ workshop_id: workshopId, user_id: userId } as any);
+    .insert({ workshop_id: workshopId, user_id: userId });
   if (error) throw error;
 }
 
@@ -335,7 +335,7 @@ export async function createCourse(input: {
     sort_order: input.sort_order ?? 0,
   };
 
-  const { data, error } = await sb.from('courses').insert(row as any).select('*').single();
+  const { data, error } = await sb.from('courses').insert(row).select('*').single();
   if (error) {
     if (error.code === '23505') throw new Error('Ya existe un curso con ese identificador.');
     throw new Error(error.message || 'No se pudo crear el curso.');
@@ -347,7 +347,7 @@ export async function updateCourseMetadata(
   courseId: CourseId,
   updates: Partial<Omit<Course, 'id' | 'updated_at' | 'updated_by'>>
 ): Promise<void> {
-  const { error } = await sb.from('courses').update(updates as any).eq('id', courseId);
+  const { error } = await sb.from('courses').update(updates).eq('id', courseId);
   if (error) throw error;
 }
 
@@ -358,7 +358,7 @@ export async function updateCourseMetadata(
 export async function deleteCourse(courseId: CourseId): Promise<void> {
   // 1. Intentar llamar a la función RPC admin_delete_course si está desplegada
   try {
-    const { error: rpcError } = await (sb.rpc as any)('admin_delete_course', {
+    const { error: rpcError } = await sb.rpc('admin_delete_course', {
       p_course_id: courseId,
     });
     if (!rpcError) return;
@@ -369,7 +369,7 @@ export async function deleteCourse(courseId: CourseId): Promise<void> {
 
   // 2. Fallback resiliente mediante operaciones directas en Supabase
   try {
-    await (sb.from('academic_certificates') as any).update({ course_id: null }).eq('course_id', courseId);
+    await sb.from('academic_certificates').update({ course_id: null }).eq('course_id', courseId);
   } catch {
     // Si no existen certificados asociados o no está la columna, continuar
   }
@@ -466,7 +466,7 @@ export async function requestCourseEnrollment(
   courseId: CourseId,
   options?: { notes?: string; paymentReference?: string }
 ): Promise<CourseEnrollment> {
-  const { data, error } = await (sb.rpc as any)('request_course_enrollment', {
+  const { data, error } = await sb.rpc('request_course_enrollment', {
     p_course_id: courseId,
     p_notes: options?.notes?.trim() || null,
     p_payment_reference: options?.paymentReference?.trim() || null,
@@ -476,7 +476,7 @@ export async function requestCourseEnrollment(
 }
 
 export async function cancelCourseEnrollmentRequest(courseId: CourseId): Promise<void> {
-  const { error } = await (sb.rpc as any)('cancel_course_enrollment_request', {
+  const { error } = await sb.rpc('cancel_course_enrollment_request', {
     p_course_id: courseId,
   });
   if (error) throw error;
@@ -496,7 +496,7 @@ async function upsertActiveCourseEnrollment(
   const { data: sessionData } = await supabase.auth.getUser();
   const adminId = sessionData.user?.id ?? null;
   const now = new Date().toISOString();
-  const payload: Record<string, unknown> = {
+  const payload: Partial<CourseEnrollment> & { user_id: string; course_id: CourseId } = {
     user_id: userId,
     course_id: courseId,
     status: 'active',
@@ -574,7 +574,7 @@ export async function adminAdmitStudentToCourse(
   courseId: CourseId,
   options?: { notes?: string; method?: string; reference?: string; expiresAt?: string | null }
 ): Promise<CourseEnrollment> {
-  const { data, error } = await (sb.rpc as any)('admin_admit_student_to_course', {
+  const { data, error } = await sb.rpc('admin_admit_student_to_course', {
     p_user_id: userId,
     p_course_id: courseId,
     p_notes: options?.notes?.trim() || null,
@@ -599,7 +599,7 @@ export async function adminRejectCourseRequest(
   courseId: CourseId,
   reason?: string
 ): Promise<void> {
-  const { error } = await (sb.rpc as any)('admin_reject_course_request', {
+  const { error } = await sb.rpc('admin_reject_course_request', {
     p_user_id: userId,
     p_course_id: courseId,
     p_reason: reason?.trim() || null,
@@ -611,7 +611,7 @@ export async function getAdminCourseWaitlist(
   courseId?: CourseId | null,
   status?: CourseEnrollmentStatus | 'all'
 ): Promise<CourseWaitlistRow[]> {
-  const { data, error } = await (sb.rpc as any)('admin_get_course_waitlist', {
+  const { data, error } = await sb.rpc('admin_get_course_waitlist', {
     p_course_id: courseId ?? null,
     p_status: status ?? 'pending',
   });
@@ -620,7 +620,7 @@ export async function getAdminCourseWaitlist(
 }
 
 export async function adminUpdateCoursePrice(courseId: CourseId, priceDisplay: string): Promise<void> {
-  const { error } = await (sb.rpc as any)('admin_update_course_price', {
+  const { error } = await sb.rpc('admin_update_course_price', {
     p_course_id: courseId,
     p_price_display: priceDisplay.trim(),
   });

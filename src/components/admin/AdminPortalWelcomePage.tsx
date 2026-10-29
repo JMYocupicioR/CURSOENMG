@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ChevronDown, ChevronUp, Eye, ImageIcon, Link2, Plus, Sparkles, Trash2, Video, X } from 'lucide-react';
 import { AdminLayout } from './AdminLayout';
 import { StudentPortalGuide } from '../student/StudentPortalGuide';
+import { PortalGuideMediaView } from '../student/PortalGuideMediaView';
 import type { PortalGuideCourseState, PortalGuideStep } from '../student/portalGuideSteps';
 import { useAuth } from '../../contexts/AuthProvider';
 import { uploadTeachingFile } from '../../services/teachingStorage';
@@ -12,6 +13,8 @@ import {
   filterSlidesForCourse,
   publishPortalWelcome,
   reorderPortalWelcomeSlides,
+  MAX_SLIDE_MEDIA,
+  moveMediaWithinKind,
   savePortalWelcomeSlide,
   setPortalWelcomeSlideEnabled,
   slideMediaItems,
@@ -70,6 +73,54 @@ function draftFromSlide(slide: PortalWelcomeSlide): PortalWelcomeDraft {
     enabled: slide.enabled,
     media_items: slideMediaItems(slide),
   };
+}
+
+const MEDIA_TAB_COPY: Record<
+  PortalWelcomeMediaItemKind,
+  { label: string; add: string; empty: string; url: string; text: string }
+> = {
+  image: {
+    label: 'Foto',
+    add: 'Agregar otra foto',
+    empty: 'Todavía no hay fotos. Si agregas varias, el alumno las ve en carrusel.',
+    url: 'Enlace de la imagen',
+    text: 'Texto alternativo',
+  },
+  video: {
+    label: 'Video',
+    add: 'Agregar otro video',
+    empty: 'Todavía no hay videos. Cada video guarda su propio enlace.',
+    url: 'Enlace del video',
+    text: 'Título del video',
+  },
+  link: {
+    label: 'Link',
+    add: 'Agregar otro enlace',
+    empty: 'Todavía no hay enlaces.',
+    url: 'Enlace https',
+    text: 'Texto del enlace',
+  },
+};
+
+function openingMediaTab(items: PortalWelcomeMediaItem[]): PortalWelcomeMediaItemKind {
+  if (items.some((item) => item.kind === 'image')) return 'image';
+  if (items.some((item) => item.kind === 'video')) return 'video';
+  if (items.some((item) => item.kind === 'link')) return 'link';
+  return 'image';
+}
+
+function MediaThumb({ url, alt }: { url: string; alt: string }) {
+  const [failed, setFailed] = useState(false);
+  useEffect(() => setFailed(false), [url]);
+  if (!url.startsWith('https://') || failed) return null;
+  return (
+    <img
+      src={url}
+      alt={alt || 'Vista previa de la foto'}
+      className="h-24 w-full rounded-xl border border-slate-200 object-cover dark:border-slate-700"
+      onError={() => setFailed(true)}
+    />
+  );
 }
 
 function sameDraft(a: PortalWelcomeDraft, b: PortalWelcomeDraft): boolean {
@@ -140,40 +191,7 @@ function SlidePreview({
         {step.kicker || 'Guía'}
       </p>
       <h3 className="mt-1 text-lg font-bold text-slate-900 dark:text-white">{step.title || 'Sin título'}</h3>
-      {(step.media ?? []).map((item, mediaIndex) =>
-        item.kind === 'image' ? (
-          <img
-            key={`${item.src}-${mediaIndex}`}
-            src={item.src}
-            alt={item.alt}
-            className="mt-3 w-full max-h-40 object-cover rounded-xl border border-slate-200 dark:border-slate-800"
-          />
-        ) : item.kind === 'video' ? (
-          <div
-            key={`${item.src}-${mediaIndex}`}
-            className="relative mt-3 w-full overflow-hidden rounded-xl bg-slate-950 border border-slate-800"
-            style={{ paddingBottom: '56.25%' }}
-          >
-            <iframe
-              src={item.src}
-              title={item.alt || step.title}
-              className="absolute inset-0 h-full w-full"
-              allow="encrypted-media; fullscreen; picture-in-picture"
-              allowFullScreen
-            />
-          </div>
-        ) : (
-          <a
-            key={`${item.href}-${mediaIndex}`}
-            href={item.href}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="mt-3 block text-sm font-semibold text-blue-700 underline dark:text-blue-300"
-          >
-            {item.label}
-          </a>
-        )
-      )}
+      <PortalGuideMediaView media={step.media ?? []} title={step.title || 'Video'} compact />
       <p className="mt-3 text-sm leading-relaxed text-slate-600 dark:text-slate-300">
         {step.body || 'Sin texto todavía.'}
       </p>
@@ -211,6 +229,7 @@ export default function AdminPortalWelcomePage() {
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewStep, setPreviewStep] = useState(0);
   const [lens, setLens] = useState<PortalGuideCourseState>('active');
+  const [mediaTab, setMediaTab] = useState<PortalWelcomeMediaItemKind>('image');
 
   const load = useCallback(async (initial = false) => {
     if (initial) setLoading(true);
@@ -233,6 +252,7 @@ export default function AdminPortalWelcomePage() {
         setSavedDraft(next);
         setDetailText((first.detail ?? []).join('\n'));
         setSavedDetail((first.detail ?? []).join('\n'));
+        setMediaTab(openingMediaTab(next.media_items));
       }
     });
   }, [load]);
@@ -285,6 +305,7 @@ export default function AdminPortalWelcomePage() {
       setSavedDraft(EMPTY_DRAFT);
       setDetailText('');
       setSavedDetail('');
+      setMediaTab('image');
       return;
     }
     const next = draftFromSlide(slide);
@@ -294,6 +315,7 @@ export default function AdminPortalWelcomePage() {
     const lines = (slide.detail ?? []).join('\n');
     setDetailText(lines);
     setSavedDetail(lines);
+    setMediaTab(openingMediaTab(next.media_items));
     setError(null);
   };
 
@@ -371,21 +393,20 @@ export default function AdminPortalWelcomePage() {
   };
 
   const addMedia = (kind: PortalWelcomeMediaItemKind) => {
-    setDraft((current) => ({
-      ...current,
-      media_items: [...current.media_items, { id: crypto.randomUUID(), kind, url: '', label: '' }],
-    }));
+    setDraft((current) => {
+      if (current.media_items.length >= MAX_SLIDE_MEDIA) return current;
+      return {
+        ...current,
+        media_items: [...current.media_items, { id: crypto.randomUUID(), kind, url: '', label: '' }],
+      };
+    });
   };
 
-  const moveMedia = (index: number, direction: -1 | 1) => {
-    setDraft((current) => {
-      const next = current.media_items.slice();
-      const target = index + direction;
-      if (target < 0 || target >= next.length) return current;
-      const [moved] = next.splice(index, 1);
-      next.splice(target, 0, moved);
-      return { ...current, media_items: next };
-    });
+  const moveMedia = (id: string, direction: -1 | 1) => {
+    setDraft((current) => ({
+      ...current,
+      media_items: moveMediaWithinKind(current.media_items, id, direction),
+    }));
   };
 
   const removeMedia = (id: string) => {
@@ -769,92 +790,97 @@ export default function AdminPortalWelcomePage() {
                     </label>
                     <fieldset className="space-y-3">
                       <legend className="text-sm font-semibold">Fotos, videos y enlaces</legend>
-                      {draft.media_items.length === 0 && (
-                        <p className="text-xs text-slate-500">Esta pantalla aún no tiene medios. Puedes agregar los que quieras.</p>
+                      <div className="grid grid-cols-3 gap-1 rounded-xl bg-slate-200/80 p-1 dark:bg-slate-800" role="tablist" aria-label="Tipo de medio">
+                        {(Object.keys(MEDIA_TAB_COPY) as PortalWelcomeMediaItemKind[]).map((kind) => {
+                          const count = draft.media_items.filter((item) => item.kind === kind).length;
+                          const selected = mediaTab === kind;
+                          return (
+                            <button
+                              key={kind}
+                              type="button"
+                              role="tab"
+                              aria-selected={selected}
+                              onClick={() => setMediaTab(kind)}
+                              className={`min-h-[36px] rounded-lg text-xs font-semibold ${
+                                selected
+                                  ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-950 dark:text-white'
+                                  : 'text-slate-600 dark:text-slate-300'
+                              }`}
+                            >
+                              {MEDIA_TAB_COPY[kind].label}
+                              {count > 0 ? ` ${count}` : ''}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      {draft.media_items.filter((item) => item.kind === mediaTab).length === 0 && (
+                        <p className="text-xs text-slate-500">{MEDIA_TAB_COPY[mediaTab].empty}</p>
                       )}
-                      {draft.media_items.map((item, index) => (
-                        <div key={item.id} className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-950">
-                          <div className="flex items-center justify-between gap-2">
-                            <div className="grid flex-1 grid-cols-3 gap-1 rounded-xl bg-slate-200/80 p-1 dark:bg-slate-800" role="group" aria-label="Tipo de medio">
-                              {(
-                                [
-                                  ['image', 'Foto'],
-                                  ['video', 'Video'],
-                                  ['link', 'Link'],
-                                ] as const
-                              ).map(([kind, label]) => (
-                                <button
-                                  key={kind}
-                                  type="button"
-                                  aria-pressed={item.kind === kind}
-                                  onClick={() => updateMedia(item.id, { kind: kind as PortalWelcomeMediaItemKind })}
-                                  className={`min-h-[36px] rounded-lg text-xs font-semibold ${
-                                    item.kind === kind
-                                      ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-950 dark:text-white'
-                                      : 'text-slate-600 dark:text-slate-300'
-                                  }`}
-                                >
-                                  {label}
-                                </button>
-                              ))}
+                      {draft.media_items
+                        .filter((item) => item.kind === mediaTab)
+                        .map((item, offset, list) => (
+                          <div key={item.id} className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-950">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                {list.length > 1 ? `${MEDIA_TAB_COPY[mediaTab].label} ${offset + 1}` : MEDIA_TAB_COPY[mediaTab].label}
+                              </span>
+                              <button type="button" aria-label={`Quitar ${MEDIA_TAB_COPY[mediaTab].label.toLowerCase()} ${offset + 1}`} onClick={() => removeMedia(item.id)} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-rose-700">
+                                <Trash2 className="h-4 w-4" />
+                              </button>
                             </div>
-                            <button type="button" aria-label="Quitar medio" onClick={() => removeMedia(item.id)} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-rose-700">
-                              <Trash2 className="h-4 w-4" />
-                            </button>
-                          </div>
-                          <div className="flex gap-2">
-                            <button type="button" disabled={index === 0} onClick={() => moveMedia(index, -1)} className="inline-flex min-h-[36px] flex-1 items-center justify-center gap-1 rounded-lg border border-slate-200 text-xs font-semibold disabled:opacity-30 dark:border-slate-700">
-                              <ChevronUp className="h-3.5 w-3.5" /> Subir
-                            </button>
-                            <button type="button" disabled={index === draft.media_items.length - 1} onClick={() => moveMedia(index, 1)} className="inline-flex min-h-[36px] flex-1 items-center justify-center gap-1 rounded-lg border border-slate-200 text-xs font-semibold disabled:opacity-30 dark:border-slate-700">
-                              <ChevronDown className="h-3.5 w-3.5" /> Bajar
-                            </button>
-                          </div>
-                          {item.kind === 'image' && (
-                            <label className="flex min-h-[44px] cursor-pointer items-center justify-center rounded-xl border border-slate-200 bg-white text-sm font-semibold normal-case tracking-normal text-slate-800 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
-                              {saving ? 'Subiendo…' : 'Subir JPG, PNG o WebP'}
+                            {list.length > 1 && (
+                              <div className="flex gap-2">
+                                <button type="button" disabled={offset === 0} onClick={() => moveMedia(item.id, -1)} className="inline-flex min-h-[36px] flex-1 items-center justify-center gap-1 rounded-lg border border-slate-200 text-xs font-semibold disabled:opacity-30 dark:border-slate-700">
+                                  <ChevronUp className="h-3.5 w-3.5" /> Subir
+                                </button>
+                                <button type="button" disabled={offset === list.length - 1} onClick={() => moveMedia(item.id, 1)} className="inline-flex min-h-[36px] flex-1 items-center justify-center gap-1 rounded-lg border border-slate-200 text-xs font-semibold disabled:opacity-30 dark:border-slate-700">
+                                  <ChevronDown className="h-3.5 w-3.5" /> Bajar
+                                </button>
+                              </div>
+                            )}
+                            {mediaTab === 'image' && (
+                              <>
+                                <MediaThumb url={item.url} alt={item.label} />
+                                <label className="flex min-h-[44px] cursor-pointer items-center justify-center rounded-xl border border-slate-200 bg-white text-sm font-semibold normal-case tracking-normal text-slate-800 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
+                                  {saving ? 'Subiendo…' : 'Subir JPG, PNG o WebP'}
+                                  <input
+                                    type="file"
+                                    accept="image/jpeg,image/png,image/webp"
+                                    className="sr-only"
+                                    onChange={(event) => void onImage(item.id, event.target.files?.[0])}
+                                  />
+                                </label>
+                              </>
+                            )}
+                            <label className="block text-sm">
+                              {mediaTab === 'video' ? 'Enlace de YouTube, Vimeo, Drive o Loom' : MEDIA_TAB_COPY[mediaTab].url}
                               <input
-                                type="file"
-                                accept="image/jpeg,image/png,image/webp"
-                                className="sr-only"
-                                onChange={(event) => void onImage(item.id, event.target.files?.[0])}
+                                value={item.url}
+                                onChange={(event) => updateMedia(item.id, { url: event.target.value })}
+                                className={fieldClass}
+                                placeholder="https://"
                               />
                             </label>
-                          )}
-                          <label className="block text-sm">
-                            {item.kind === 'video' ? 'Enlace de YouTube, Vimeo, Drive o Loom' : item.kind === 'link' ? 'Enlace https' : 'O pega un enlace https'}
-                            <input
-                              value={item.url}
-                              onChange={(event) => updateMedia(item.id, { url: event.target.value })}
-                              className={fieldClass}
-                              placeholder="https://"
-                            />
-                          </label>
-                          <label className="block text-sm">
-                            {item.kind === 'image' ? 'Texto alternativo' : item.kind === 'link' ? 'Texto del enlace' : 'Título del video'}
-                            <input
-                              value={item.label}
-                              onChange={(event) => updateMedia(item.id, { label: event.target.value })}
-                              className={fieldClass}
-                              maxLength={180}
-                            />
-                          </label>
-                        </div>
-                      ))}
-                      <div className="grid grid-cols-3 gap-2">
-                        <button type="button" onClick={() => addMedia('image')} className="flex min-h-[72px] flex-col items-center justify-center gap-1 rounded-2xl border border-dashed border-slate-300 bg-slate-50 text-sm font-semibold text-slate-700 dark:border-slate-600 dark:bg-slate-950 dark:text-slate-200">
-                          <ImageIcon className="h-5 w-5" />
-                          Imagen
-                        </button>
-                        <button type="button" onClick={() => addMedia('video')} className="flex min-h-[72px] flex-col items-center justify-center gap-1 rounded-2xl border border-dashed border-slate-300 bg-slate-50 text-sm font-semibold text-slate-700 dark:border-slate-600 dark:bg-slate-950 dark:text-slate-200">
-                          <Video className="h-5 w-5" />
-                          Video
-                        </button>
-                        <button type="button" onClick={() => addMedia('link')} className="flex min-h-[72px] flex-col items-center justify-center gap-1 rounded-2xl border border-dashed border-slate-300 bg-slate-50 text-sm font-semibold text-slate-700 dark:border-slate-600 dark:bg-slate-950 dark:text-slate-200">
-                          <Link2 className="h-5 w-5" />
-                          Enlace
-                        </button>
-                      </div>
+                            <label className="block text-sm">
+                              {MEDIA_TAB_COPY[mediaTab].text}
+                              <input
+                                value={item.label}
+                                onChange={(event) => updateMedia(item.id, { label: event.target.value })}
+                                className={fieldClass}
+                                maxLength={180}
+                              />
+                            </label>
+                          </div>
+                        ))}
+                      <button
+                        type="button"
+                        disabled={draft.media_items.length >= MAX_SLIDE_MEDIA}
+                        onClick={() => addMedia(mediaTab)}
+                        className="flex min-h-[44px] w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-slate-300 bg-white text-sm font-semibold text-slate-700 disabled:opacity-40 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200"
+                      >
+                        <Plus className="h-4 w-4" />
+                        {MEDIA_TAB_COPY[mediaTab].add}
+                      </button>
                     </fieldset>
                     {isDesktop && (
                       <div className="flex gap-2 pt-1">

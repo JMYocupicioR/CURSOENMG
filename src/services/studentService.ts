@@ -326,6 +326,57 @@ export async function fetchStudentCompletedTopics(userId: string): Promise<Set<s
 }
 
 /**
+ * Carga en lote (1 sola petición SQL) los temas completados de una cohorte de alumnos,
+ * combinándolos con la caché local y propagando el cierre de temas padre.
+ */
+export async function fetchCohortCompletedTopics(
+  userIds: string[]
+): Promise<Map<string, Set<string>>> {
+  const result = new Map<string, Set<string>>();
+  const validIds = Array.from(new Set(userIds.filter((id) => id && id !== 'anonymous_student')));
+
+  for (const uid of userIds) {
+    result.set(uid, getCompletedTopics(uid));
+  }
+
+  if (validIds.length === 0) return result;
+
+  try {
+    const { data, error } = await sb
+      .from('student_completed_topics')
+      .select('user_id, topic_id')
+      .in('user_id', validIds);
+
+    if (!error && Array.isArray(data)) {
+      for (const row of data as Array<{ user_id: string; topic_id: string }>) {
+        if (!row.user_id || !row.topic_id) continue;
+        let set = result.get(row.user_id);
+        if (!set) {
+          set = new Set<string>();
+          result.set(row.user_id, set);
+        }
+        set.add(row.topic_id);
+      }
+    }
+  } catch {
+    // Fallback al estado local ya inicializado en `result`
+  }
+
+  for (const uid of validIds) {
+    const set = result.get(uid) ?? new Set<string>();
+    const outbox = readProgressOutbox(uid);
+    const withOutbox = applyOutboxToCompletedSet(set, outbox);
+    propagateStoredCompletion(withOutbox);
+    for (const item of outbox) {
+      if (!item.completed) withOutbox.delete(item.topicId);
+    }
+    result.set(uid, withOutbox);
+  }
+
+  return result;
+}
+
+/**
  * Background helper to persist topic completions/deletions to Supabase.
  * Writes to a local outbox first so offline / failed upserts are not lost.
  */
@@ -599,17 +650,16 @@ export function setLastVisitedTopic(userId: string, data: LastVisitedTopic): voi
 
   // Sincronizar en la nube en background (student_activity_logs) para persistencia cross-device
   if (userId && userId !== 'anonymous_student') {
-    sb.from('student_activity_logs')
-      .insert({
+    Promise.resolve(
+      sb.from('student_activity_logs').insert({
         user_id: userId,
         action: 'last_visited_topic',
         details: data,
         created_at: data.updatedAt || new Date().toISOString(),
       })
-      .then(() => {})
-      .catch((err: any) => {
-        console.warn('[StudentService] Error syncing last visited topic to Supabase:', err);
-      });
+    ).catch((err: unknown) => {
+      console.warn('[StudentService] Error syncing last visited topic to Supabase:', err);
+    });
   }
 }
 
@@ -801,8 +851,22 @@ export function getStudentNotifications(
         type: 'quiz',
         severity: isUrgent ? 'warning' : 'info',
         createdAt: asg.created_at,
-        linkUrl: `/dashboard?tab=assignments`,
+        linkUrl: `/portal?tab=assignments`,
         isRead: !!readMap[`notif_asg_${asg.id}`],
+      });
+    }
+
+    // Teacher requested revision
+    if (asg.status === 'needs_revision') {
+      notifs.push({
+        id: `notif_asg_revision_${asg.id}`,
+        title: `Corrección solicitada: ${asg.title}`,
+        message: `${asg.feedback ? `Observación del profesor: "${asg.feedback}"` : 'Tu profesor solicitó ajustes en tu entrega antes de asentar la calificación.'}`,
+        type: 'academic',
+        severity: 'warning',
+        createdAt: asg.reviewed_at || asg.updated_at || asg.created_at,
+        linkUrl: `/portal?tab=assignments`,
+        isRead: !!readMap[`notif_asg_revision_${asg.id}`],
       });
     }
 
@@ -815,7 +879,7 @@ export function getStudentNotifications(
         type: 'academic',
         severity: (asg.grade ?? 0) >= (asg.min_score ?? 70) ? 'success' : 'warning',
         createdAt: asg.reviewed_at || asg.updated_at,
-        linkUrl: `/dashboard?tab=assignments`,
+        linkUrl: `/portal?tab=assignments`,
         isRead: !!readMap[`notif_asg_reviewed_${asg.id}`],
       });
     }
@@ -909,6 +973,18 @@ export function getStudentNotifications(
   });
 
   return notifs.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+}
+
+export function isNotificationReadLocally(userId: string, notifId: string): boolean {
+  if (!userId || !notifId) return false;
+  try {
+    const raw = localStorage.getItem(`${KEY_NOTIFICATIONS_READ}${userId}`);
+    if (!raw) return false;
+    const map = JSON.parse(raw);
+    return Boolean(map?.[notifId]);
+  } catch {
+    return false;
+  }
 }
 
 export function markNotificationAsRead(userId: string, notifId: string): void {

@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { Sparkles, Clock, X, ImageOff } from 'lucide-react';
+import { Sparkles, Clock, X } from 'lucide-react';
 import { AccessibleModal } from '../a11y/AccessibleModal';
+import { PortalGuideMediaView } from './PortalGuideMediaView';
 import { getPortalGuideSteps, type PortalGuideCourseState, type PortalGuideStep } from './portalGuideSteps';
 
 export type { PortalGuideCourseState };
@@ -39,7 +40,6 @@ export function StudentPortalGuide({
   const steps = stepsProp && stepsProp.length > 0 ? stepsProp : getPortalGuideSteps(courseState);
   const currentStep = steps[stepIndex] ?? steps[0];
   const [clickedAction, setClickedAction] = useState<'skip' | 'finish' | null>(null);
-  const [failedImages, setFailedImages] = useState<Record<string, boolean>>({});
 
   // Mover foco al título (h2) del diálogo al cambiar de paso
   useEffect(() => {
@@ -209,62 +209,7 @@ export function StudentPortalGuide({
           </div>
         )}
 
-        {(currentStep.media ?? []).map((item, mediaIndex) => {
-          const mediaKey = `${item.kind}-${mediaIndex}`;
-          if (item.kind === 'image') {
-            if (failedImages[mediaKey]) {
-              return (
-                <div
-                  key={mediaKey}
-                  className="w-full h-32 rounded-xl mb-4 bg-slate-100 dark:bg-slate-800 flex items-center justify-center gap-2 text-xs text-slate-400 border border-slate-200 dark:border-slate-800"
-                >
-                  <ImageOff className="w-4 h-4" />
-                  <span>Imagen no disponible</span>
-                </div>
-              );
-            }
-            return (
-              <img
-                key={mediaKey}
-                src={item.src}
-                alt={item.alt}
-                loading="lazy"
-                decoding="async"
-                onError={() => setFailedImages((prev) => ({ ...prev, [mediaKey]: true }))}
-                className="w-full max-h-56 object-cover rounded-xl mb-4 border border-slate-200 dark:border-slate-800"
-              />
-            );
-          }
-          if (item.kind === 'video') {
-            return (
-              <div
-                key={mediaKey}
-                className="relative w-full mb-4 rounded-xl overflow-hidden bg-slate-950 border border-slate-800"
-                style={{ paddingBottom: '56.25%' }}
-              >
-                <iframe
-                  src={item.src}
-                  title={item.alt || currentStep.title}
-                  loading="lazy"
-                  className="absolute inset-0 w-full h-full"
-                  allow="encrypted-media; fullscreen; picture-in-picture"
-                  allowFullScreen
-                />
-              </div>
-            );
-          }
-          return (
-            <a
-              key={mediaKey}
-              href={item.href}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mb-3 flex min-h-[44px] items-center rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-blue-700 underline-offset-2 hover:underline dark:border-slate-700 dark:text-blue-300"
-            >
-              {item.label}
-            </a>
-          );
-        })}
+        <PortalGuideMediaView media={currentStep.media ?? []} title={currentStep.title} />
 
         {/* Cuerpo del paso */}
         <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed mb-4">

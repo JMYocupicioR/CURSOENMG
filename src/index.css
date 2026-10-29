@@ -58,23 +58,19 @@
   }
 
   h1 {
-    @apply text-3xl font-bold mb-6 tracking-tight;
+    @apply text-3xl font-bold tracking-tight;
   }
 
   h2 {
-    @apply text-2xl font-semibold mb-4 tracking-tight;
+    @apply text-2xl font-semibold tracking-tight;
   }
 
   h3 {
-    @apply text-xl font-semibold mb-3 tracking-tight;
+    @apply text-xl font-semibold tracking-tight;
   }
 
   h4 {
-    @apply text-lg font-medium mb-2;
-  }
-
-  p {
-    @apply mb-4;
+    @apply text-lg font-medium;
   }
 
   /* Focus styles */
@@ -217,6 +213,31 @@
   }
 }
 
+/* Native <select> popup follows the OS scheme. In dark mode the list stayed
+   white while the control text was light, so the options disappeared. */
+select.live-session-select {
+  color-scheme: light;
+}
+
+select.live-session-select option {
+  background-color: #fff;
+  color: #0f172a;
+}
+
+.dark select.live-session-select {
+  color-scheme: dark;
+}
+
+.dark select.live-session-select option {
+  background-color: #0f172a;
+  color: #e2e8f0;
+}
+
+.dark select.live-session-select option:checked {
+  background-color: #1d4ed8;
+  color: #fff;
+}
+
 /* ── Standalone PWA overscroll prevention ── */
 @media all and (display-mode: standalone) {
   html {
@@ -235,4 +256,3 @@
     -webkit-overflow-scrolling: touch;
   }
 }
-

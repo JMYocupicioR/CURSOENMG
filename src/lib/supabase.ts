@@ -44,5 +44,5 @@ export const supabase: SupabaseClient<Database> = isSupabaseConfigured
   ? createBrowserClient()
   : createUnconfiguredClient();
 
-/** Cliente con tipos relajados para tablas/RPCs nuevas aún no cubiertas por generate_typescript_types. */
-export const sb = supabase as any;
+/** Alias tipado de `supabase` para compatibilidad con servicios existentes. */
+export const sb: SupabaseClient<Database> = supabase;

@@ -1,5 +1,9 @@
 import { supabase } from '../lib/supabase';
-import { isTableMissingInSupabase, markTableAsMissingInSupabase } from './tableAvailability';
+import {
+  isMissingRelationError,
+  isTableMissingInSupabase,
+  markTableAsMissingInSupabase,
+} from './tableAvailability';
 import type { ClassAttendanceRecord, SessionModality } from '../types/academicGradebook';
 import type { WorkshopAttendanceSummary } from '../types/academicAnalytics';
 import type { LiveWorkshop } from '../types/database';
@@ -33,18 +37,19 @@ export async function getStudentAttendance(studentId: string): Promise<ClassAtte
 
   if (!isTableMissingInSupabase('class_attendances')) {
     try {
-      const { data, error, status } = await (supabase.from as any)('class_attendances')
+      const { data, error, status } = await supabase
+        .from('class_attendances')
         .select('*')
         .eq('student_id', studentId)
         .order('session_date', { ascending: false });
 
-      if (status === 404 || error) {
+      if (isMissingRelationError(error, status)) {
         markTableAsMissingInSupabase('class_attendances');
-      } else if (data) {
+      } else if (!error && data) {
         return (data as ClassAttendanceRecord[]).map(normalizeAttendanceRecord);
       }
     } catch {
-      markTableAsMissingInSupabase('class_attendances');
+      // Transient network error: fall back to local cache without disabling table
     }
   }
 
@@ -65,17 +70,18 @@ export async function getWorkshopAttendance(workshopId: string): Promise<ClassAt
 
   if (!isTableMissingInSupabase('class_attendances')) {
     try {
-      const { data, error, status } = await (supabase.from as any)('class_attendances')
+      const { data, error, status } = await supabase
+        .from('class_attendances')
         .select('*')
         .eq('workshop_id', workshopId);
 
-      if (status === 404 || error) {
+      if (isMissingRelationError(error, status)) {
         markTableAsMissingInSupabase('class_attendances');
-      } else if (data) {
+      } else if (!error && data) {
         return (data as ClassAttendanceRecord[]).map(normalizeAttendanceRecord);
       }
     } catch {
-      markTableAsMissingInSupabase('class_attendances');
+      // Transient network error: fall back to local cache
     }
   }
 
@@ -144,54 +150,57 @@ export async function saveStudentAttendanceRecord(record: ClassAttendanceRecord)
     try {
       // Intentar primero con conflicto en student_id,workshop_id si workshop_id existe
       let conflictField = normalized.workshop_id ? 'student_id,workshop_id' : 'student_id,session_title,session_date';
-      let res = await (supabase.from as any)('class_attendances').upsert(payload, { onConflict: conflictField });
+      let res = await supabase.from('class_attendances').upsert(payload, { onConflict: conflictField });
 
       if (res.error && normalized.workshop_id) {
         // Fallback a unicidad original (student_id,session_title,session_date)
         conflictField = 'student_id,session_title,session_date';
-        res = await (supabase.from as any)('class_attendances').upsert(payload, { onConflict: conflictField });
+        res = await supabase.from('class_attendances').upsert(payload, { onConflict: conflictField });
       }
 
       // Si falla por columnas nuevas (excuse_reason o recorded_by no presentes aún)
       if (res.error && /(excuse_reason|recorded_by)/i.test(res.error.message || '')) {
         const { excuse_reason: _e, recorded_by: _r, ...compatPayload } = payload;
-        res = await (supabase.from as any)('class_attendances').upsert(compatPayload, { onConflict: conflictField });
+        res = await supabase.from('class_attendances').upsert(compatPayload, { onConflict: conflictField });
       }
 
       // Si falla por session_modality
       if (res.error && /session_modality/i.test(res.error.message || '')) {
         const { session_modality: _m, excuse_reason: _e, recorded_by: _r, ...legacyPayload } = payload;
-        res = await (supabase.from as any)('class_attendances').upsert(legacyPayload, { onConflict: conflictField });
+        res = await supabase.from('class_attendances').upsert(legacyPayload, { onConflict: conflictField });
       }
 
-      if (res.status === 404) {
+      if (isMissingRelationError(res.error, res.status)) {
         markTableAsMissingInSupabase('class_attendances');
       }
     } catch {
-      markTableAsMissingInSupabase('class_attendances');
+      // No deshabilitar la tabla ante cortes de red momentáneos
     }
   }
 }
 
 export async function getCohortAttendance(studentIds: string[] = []): Promise<ClassAttendanceRecord[]> {
   const byKey = new Map<string, ClassAttendanceRecord>();
+  const validIds = Array.from(new Set(studentIds.filter(Boolean)));
 
   if (!isTableMissingInSupabase('class_attendances')) {
     try {
-      const { data, error, status } = await (supabase.from as any)('class_attendances')
-        .select('*')
-        .order('session_date', { ascending: false });
+      let query = supabase.from('class_attendances').select('*');
+      if (validIds.length > 0) {
+        query = query.in('student_id', validIds);
+      }
+      const { data, error, status } = await query.order('session_date', { ascending: false });
 
-      if (status === 404 || error) {
+      if (isMissingRelationError(error, status)) {
         markTableAsMissingInSupabase('class_attendances');
-      } else if (data) {
+      } else if (!error && data) {
         for (const row of data as ClassAttendanceRecord[]) {
           const normalized = normalizeAttendanceRecord(row);
           byKey.set(attendanceKey(normalized), normalized);
         }
       }
     } catch {
-      markTableAsMissingInSupabase('class_attendances');
+      // Fallback al caché local
     }
   }
 
@@ -235,9 +244,9 @@ export interface StudentAttendanceMetricsResult {
 
 export async function calculateStudentAttendanceMetrics(
   studentId: string,
-  options?: { eligibleSessionsCount?: number }
+  options?: { eligibleSessionsCount?: number; preloadedRecords?: ClassAttendanceRecord[] }
 ): Promise<StudentAttendanceMetricsResult> {
-  const records = await getStudentAttendance(studentId);
+  const records = options?.preloadedRecords ?? (await getStudentAttendance(studentId));
   const eligibleSessions = options?.eligibleSessionsCount ?? 0;
 
   if (records.length === 0) {

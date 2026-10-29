@@ -13,6 +13,7 @@ import { getProfileById } from '../../services/editorialService';
 import { BackButton } from '../common/BackButton';
 import type { Profile } from '../../types/database';
 import { BRAND } from '../../config/brand';
+import { LockedProfilePhoto } from './LockedProfilePhoto';
 
 export default function PublicProfilePage() {
   const { userId } = useParams();
@@ -79,14 +80,12 @@ export default function PublicProfilePage() {
 
         <div className="px-6 sm:px-8 pb-8 pt-0 relative">
           {/* Avatar and Key Identity */}
-          <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 -mt-14 mb-5">
-            <div className="w-24 h-24 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-600 text-white border-4 border-white dark:border-slate-900 shadow-md flex items-center justify-center font-bold text-2xl overflow-hidden shrink-0">
-              {profile.avatar_url ? (
-                <img src={profile.avatar_url} alt="" className="w-full h-full object-cover" />
-              ) : (
-                <span>{profile.display_name?.charAt(0)?.toUpperCase() || 'Dr'}</span>
-              )}
-            </div>
+          <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 -mt-8 mb-5">
+            <LockedProfilePhoto
+              src={profile.avatar_url}
+              fallback={<span>{profile.display_name?.charAt(0)?.toUpperCase() || 'Dr'}</span>}
+              className="flex h-16 w-16 items-center justify-center rounded-2xl border-4 border-white bg-gradient-to-br from-blue-600 to-indigo-600 text-xl font-bold text-white shadow-md dark:border-slate-900"
+            />
 
             {profile.cedula_verified && (
               <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 text-xs font-bold w-fit">

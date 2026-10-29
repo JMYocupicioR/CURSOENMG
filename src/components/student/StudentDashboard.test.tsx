@@ -2,10 +2,14 @@ import { describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import { StudentPortalGuide } from './StudentPortalGuide';
+import { StudentPortalTabBar } from './StudentPortalTabBar';
+import { StudentQuickControlHub } from './StudentQuickControlHub';
 import EditorialCommitteeModal from '../editorial/EditorialCommitteeModal';
 import { getLiveSessionUrgency } from '../../services/courseService';
 import { shouldShowPortalGuide } from '../../services/portalGuideService';
 import type { LiveWorkshop, Profile } from '../../types/database';
+import type { StudentNotification } from '../../services/studentService';
+import type { StudentAssignment } from '../../types/studentPlan';
 
 describe('StudentDashboard UX & Fast-Track Architecture', () => {
   const sampleWorkshop: LiveWorkshop = {
@@ -138,5 +142,170 @@ describe('StudentDashboard UX & Fast-Track Architecture', () => {
     expect(modalHtml).toContain('Comité Editorial y Dirección Académica');
     expect(modalHtml).toContain('comite-editorial');
     expect(modalHtml).toContain('Aval Oficial');
+  });
+
+  it('Caso F: StudentPortalTabBar resalta Avisos en rojo cuando hay notificaciones por atender y vuelve a color normal al atenderse', () => {
+    const unreadHtml = renderToStaticMarkup(
+      <StudentPortalTabBar
+        activeTab="summary"
+        onSelect={() => undefined}
+        counts={{ assignments: 1, notifications: 3, study: 0 }}
+      />
+    );
+    expect(unreadHtml).toContain('bg-rose-50');
+    expect(unreadHtml).toContain('bg-rose-600');
+    expect(unreadHtml).toContain('Avisos');
+
+    const attendedHtml = renderToStaticMarkup(
+      <StudentPortalTabBar
+        activeTab="summary"
+        onSelect={() => undefined}
+        counts={{ assignments: 0, notifications: 0, study: 0 }}
+      />
+    );
+    expect(attendedHtml).not.toContain('bg-rose-50');
+    expect(attendedHtml).toContain('text-slate-600');
+  });
+
+  it('Caso G: StudentQuickControlHub muestra avisos en rojo/normal, clases pendientes, tareas enviadas y radar de acreditación en la primera página', () => {
+    const mockNotifications: StudentNotification[] = [
+      {
+        id: 'notif-unread-1',
+        title: 'Nueva tarea: Análisis de Miopatías',
+        message: 'Revisa los trazos de aguja antes del viernes.',
+        type: 'academic',
+        createdAt: new Date().toISOString(),
+        isRead: false,
+        linkUrl: '/portal?tab=assignments',
+      },
+      {
+        id: 'notif-read-2',
+        title: 'Calificación publicada: Radiculopatías',
+        message: 'Tu entrega obtuvo 95/100.',
+        type: 'academic',
+        createdAt: new Date().toISOString(),
+        isRead: true,
+        linkUrl: '/portal?tab=assignments',
+      },
+    ];
+
+    const mockAssignments: StudentAssignment[] = [
+      {
+        id: 'asg-pending-1',
+        student_id: 'student-1',
+        assigned_by: 'teacher-1',
+        title: 'Reporte de Conducción Nerviosa Motora',
+        type: 'emg_report',
+        description: 'Subir PDF de caso clínico',
+        due_date: new Date(Date.now() + 48 * 3600 * 1000).toISOString(),
+        status: 'pending',
+        priority: 'normal',
+        grade: null,
+        feedback: null,
+        student_notes: null,
+        submitted_at: null,
+        reviewed_at: null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+      {
+        id: 'asg-submitted-2',
+        student_id: 'student-1',
+        assigned_by: 'teacher-1',
+        title: 'Tarea de Ejemplo Enviada',
+        type: 'practical_task',
+        description: 'Análisis topográfico',
+        due_date: new Date().toISOString(),
+        status: 'approved',
+        priority: 'normal',
+        grade: 100,
+        feedback: 'Excelente desarrollo neurofisiológico.',
+        student_notes: 'Adjunto reporte completo.',
+        submitted_at: new Date().toISOString(),
+        reviewed_at: new Date().toISOString(),
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+    ];
+
+    const hubHtml = renderToStaticMarkup(
+      <MemoryRouter>
+        <StudentQuickControlHub
+          notifications={mockNotifications}
+          unreadCount={1}
+          onMarkNotifRead={() => undefined}
+          onMarkAllNotifsRead={() => undefined}
+          onAttendNotification={() => undefined}
+          resumeLesson={{
+            moduleId: 'm1',
+            moduleTitle: 'Módulo 1: Bases Físicas',
+            moduleNumber: 1,
+            topicId: 't1',
+            topicTitle: 'Potenciales de Acción Muscular Compuestos',
+            url: '/modulo/m1/t1',
+            pendingLessonCount: 3,
+          }}
+          hasStartedCurriculum={true}
+          overallProgressPct={35}
+          upcomingPendingLessons={[
+            {
+              moduleId: 'm1',
+              moduleTitle: 'Módulo 1: Bases Físicas',
+              moduleNumber: 1,
+              topicId: 't2',
+              topicTitle: 'Conducción Nerviosa Sensitiva',
+              url: '/modulo/m1/t2',
+              pendingLessonCount: 2,
+            },
+          ]}
+          workshops={[sampleWorkshop]}
+          assignments={mockAssignments}
+          quizzesList={[
+            {
+              moduleId: 'm1',
+              moduleTitle: 'Módulo 1',
+              topicId: 't1',
+              topicTitle: 'Quiz de Bases Físicas',
+              score: null,
+              passed: false,
+              topicUrl: '/modulo/m1/t1',
+            },
+          ]}
+          kardex={null}
+          profile={{ cedula_status: 'none' } as unknown as Profile}
+          learningPlans={[]}
+          onSelectTab={() => undefined}
+          onSelectExam={() => undefined}
+          onOpenAssignedCase={() => undefined}
+          onOpenSubmitModal={() => undefined}
+          onOpenKardexModal={() => undefined}
+          onRecordResumeClick={() => undefined}
+        />
+      </MemoryRouter>
+    );
+
+    // 1. Avisos en rojo cuando no se han atendido y en estado normal cuando ya están atendidos
+    expect(hubHtml).toContain('border-l-rose-600');
+    expect(hubHtml).toContain('Por atender');
+    expect(hubHtml).toContain('Nueva tarea: Análisis de Miopatías');
+    expect(hubHtml).toContain('Calificación publicada: Radiculopatías');
+    expect(hubHtml).toContain('Atendido');
+
+    // 2. Clases pendientes en primera página
+    expect(hubHtml).toContain('Clases Pendientes y Sesiones');
+    expect(hubHtml).toContain('Potenciales de Acción Muscular Compuestos');
+    expect(hubHtml).toContain('Conducción Nerviosa Sensitiva');
+
+    // 3. Tareas pendientes y tareas enviadas/calificadas
+    expect(hubHtml).toContain('Tareas: Pendientes y Enviadas');
+    expect(hubHtml).toContain('Reporte de Conducción Nerviosa Motora');
+    expect(hubHtml).toContain('Tareas enviadas y calificadas');
+    expect(hubHtml).toContain('Tarea de Ejemplo Enviada');
+    expect(hubHtml).toContain('100/100');
+
+    // 4. Radar de acreditación y pendientes clave
+    expect(hubHtml).toContain('Radar de Acreditación y Pendientes Clave');
+    expect(hubHtml).toContain('Cédula Profesional SEP');
+    expect(hubHtml).toContain('Asistencia a Sesiones (20% del Kardex)');
   });
 });

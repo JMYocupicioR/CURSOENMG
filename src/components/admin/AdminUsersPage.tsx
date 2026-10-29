@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useCallback } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import {
   Shield,
@@ -75,7 +75,6 @@ export default function AdminUsersPage() {
 
   // Get initial tab from URL if present - Default to directory of admitted physicians
   const [tab, setTab] = useState<Tab>(readInitialTab);
-  const [users, setUsers] = useState<AdminProfileRow[]>([]);
   const [allUsersCache, setAllUsersCache] = useState<AdminProfileRow[]>([]);
   const [courseEnrollments, setCourseEnrollments] = useState<CourseEnrollment[]>([]);
   const [loading, setLoading] = useState(true);
@@ -90,16 +89,12 @@ export default function AdminUsersPage() {
   const [filterComiteVisible, setFilterComiteVisible] = useState(false);
   const [filterSpecialistVisible, setFilterSpecialistVisible] = useState(false);
 
-  const loadAll = async () => {
+  const loadAll = useCallback(async () => {
     setLoading(true);
     try {
-      const [currentTabData, allData] = await Promise.all([
-        getAdminProfiles(false, tab),
-        getAdminProfiles(false, 'all'),
-      ]);
-      setUsers(currentTabData);
+      const allData = await getAdminProfiles(false, 'all');
       setAllUsersCache(allData);
-      const ids = Array.from(new Set([...currentTabData, ...allData].map((u) => u.id)));
+      const ids = allData.map((u) => u.id);
       try {
         setCourseEnrollments(await getCourseEnrollmentsForUsers(ids));
       } catch {
@@ -110,11 +105,30 @@ export default function AdminUsersPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
-    loadAll();
-  }, [tab]);
+    void loadAll();
+  }, [loadAll]);
+
+  const users = useMemo(() => {
+    switch (tab) {
+      case 'enrolled':
+        return allUsersCache.filter((u) => u.enrollment_status === 'approved');
+      case 'comite':
+        return allUsersCache.filter(
+          (u) =>
+            u.show_in_editorial_committee ||
+            u.is_public ||
+            u.roles.some((r) => r === 'editor' || r === 'admin' || r === 'contributor')
+        );
+      case 'premium':
+        return allUsersCache.filter((u) => u.has_premium);
+      case 'all':
+      default:
+        return allUsersCache;
+    }
+  }, [allUsersCache, tab]);
 
   const run = async (userId: string, fn: () => Promise<void>) => {
     setLoadingId(userId);

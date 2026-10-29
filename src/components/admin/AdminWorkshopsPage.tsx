@@ -304,7 +304,7 @@ export default function AdminWorkshopsPage() {
                 required
                 value={moduleId}
                 onChange={(e) => setModuleId(e.target.value)}
-                className="w-full rounded-xl border border-slate-200 dark:border-slate-700 p-2.5 text-xs font-semibold bg-transparent dark:text-white"
+                className="live-session-select w-full rounded-xl border border-slate-200 dark:border-slate-600 p-2.5 text-xs font-semibold bg-white text-slate-900 dark:bg-slate-950 dark:text-slate-100"
               >
                 <option value="">Selecciona un módulo...</option>
                 {modules.map((m) => (
@@ -335,7 +335,7 @@ export default function AdminWorkshopsPage() {
               <select
                 value={sessionModality}
                 onChange={(e) => setSessionModality(e.target.value as SessionModality)}
-                className="w-full rounded-xl border border-slate-200 dark:border-slate-700 p-2.5 text-xs font-semibold bg-transparent dark:text-white"
+                className="live-session-select w-full rounded-xl border border-slate-200 dark:border-slate-600 p-2.5 text-xs font-semibold bg-white text-slate-900 dark:bg-slate-950 dark:text-slate-100"
               >
                 <option value="online">En línea (Zoom / Streaming)</option>
                 <option value="in_person">Presencial (Aula / Laboratorio EMG)</option>

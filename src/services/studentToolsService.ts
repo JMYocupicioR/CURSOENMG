@@ -75,8 +75,8 @@ export interface EmgReportSubmission {
   assignment_id: string | null;
   title: string;
   file_url: string | null;
-  interpretation: string | null;
-  rubric: Record<string, unknown> | null;
+  interpretation: Record<string, unknown> | string | null;
+  rubric?: Record<string, unknown> | null;
   rubric_score?: number | null;
   feedback: string | null;
   status: string;
@@ -462,7 +462,7 @@ export function subscribeToMyCommentNotifications(
   const channel = supabase
     .channel(`topic-comments-${userId}-${Math.random().toString(36).slice(2, 7)}`)
     .on(
-      'postgres_changes',
+      'postgres_changes' as never,
       {
         event: '*',
         schema: 'public',
@@ -593,7 +593,7 @@ export async function savePushSubscription(sub: PushSubscription): Promise<void>
   const { error } = await supabase.from('push_subscriptions').upsert(
     {
       user_id: userId,
-      endpoint: json.endpoint,
+      endpoint: json.endpoint ?? '',
       p256dh: json.keys?.p256dh,
       auth: json.keys?.auth,
     },

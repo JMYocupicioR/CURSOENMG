@@ -15,6 +15,7 @@ import {
 import { getPublicProfiles } from '../../services/editorialService';
 import type { Profile } from '../../types/database';
 import { BRAND } from '../../config/brand';
+import { LockedProfilePhoto } from './LockedProfilePhoto';
 
 export default function SpecialistsPage() {
   const [profiles, setProfiles] = useState<Profile[]>([]);
@@ -140,16 +141,13 @@ export default function SpecialistsPage() {
               <Link
                 key={p.id}
                 to={`/especialistas/${p.id}`}
-                className="group p-5 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-gradient-to-br from-blue-50/20 via-white to-white dark:from-slate-800/40 dark:via-slate-900/60 dark:to-slate-900/60 shadow-sm hover:shadow-md hover:border-blue-300 dark:hover:border-cyan-500/40 transition-all flex items-start gap-4"
+                className="group min-w-0 overflow-hidden p-5 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-gradient-to-br from-blue-50/20 via-white to-white dark:from-slate-800/40 dark:via-slate-900/60 dark:to-slate-900/60 shadow-sm hover:shadow-md hover:border-blue-300 dark:hover:border-cyan-500/40 transition-all flex items-start gap-4"
               >
-                {/* Avatar */}
-                <div className="w-13 h-13 rounded-2xl bg-gradient-to-br from-blue-600 via-indigo-600 to-indigo-700 text-white flex items-center justify-center font-bold text-base shadow-sm shrink-0 overflow-hidden group-hover:scale-105 transition-transform">
-                  {p.avatar_url ? (
-                    <img src={p.avatar_url} alt="" className="w-full h-full object-cover" />
-                  ) : (
-                    <span>{p.display_name?.charAt(0)?.toUpperCase() || 'Dr'}</span>
-                  )}
-                </div>
+                <LockedProfilePhoto
+                  src={p.avatar_url}
+                  fallback={<span>{p.display_name?.charAt(0)?.toUpperCase() || 'Dr'}</span>}
+                  className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-600 via-indigo-600 to-indigo-700 text-base font-bold text-white shadow-sm"
+                />
 
                 {/* Info */}
                 <div className="min-w-0 space-y-1.5 flex-1">

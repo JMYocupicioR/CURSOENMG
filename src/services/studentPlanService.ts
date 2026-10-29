@@ -73,7 +73,10 @@ export async function recordUserActivity(
 
 export const logStudentActivity = recordUserActivity;
 
-export async function getStudentActivityAndStreak(userId: string): Promise<StudentStreakInfo> {
+export async function getStudentActivityAndStreak(
+  userId: string,
+  preloadedAttempts?: QuizAttempt[]
+): Promise<StudentStreakInfo> {
   const datesSet = new Set<string>();
   let totalSessions = 0;
   let lastActiveDate: string | null = null;
@@ -89,7 +92,7 @@ export async function getStudentActivityAndStreak(userId: string): Promise<Stude
         if (!lastActiveDate || log.created_at > lastActiveDate) {
           lastActiveDate = log.created_at;
         }
-        if (log.action === 'user_login') {
+        if (log.action === 'user_login' || log.action === 'user_session_active') {
           totalSessions++;
         }
       }
@@ -100,7 +103,7 @@ export async function getStudentActivityAndStreak(userId: string): Promise<Stude
   try {
     const { data } = await supabase
       .from('student_activity_logs')
-      .select('*')
+      .select('created_at, action')
       .eq('user_id', userId)
       .order('created_at', { ascending: false })
       .limit(200);
@@ -112,7 +115,7 @@ export async function getStudentActivityAndStreak(userId: string): Promise<Stude
         if (!lastActiveDate || log.created_at > lastActiveDate) {
           lastActiveDate = log.created_at;
         }
-        if (log.action === 'user_login') {
+        if (log.action === 'user_login' || log.action === 'user_session_active') {
           totalSessions++;
         }
       }
@@ -121,7 +124,7 @@ export async function getStudentActivityAndStreak(userId: string): Promise<Stude
 
   // 3. Complementar con fechas de quiz_attempts
   try {
-    const attempts = await getMyAttempts(userId, 50);
+    const attempts = preloadedAttempts ?? (await getMyAttempts(userId, 50));
     for (const att of attempts) {
       if (att.completed_at) {
         const d = att.completed_at.slice(0, 10);
@@ -133,12 +136,15 @@ export async function getStudentActivityAndStreak(userId: string): Promise<Stude
     }
   } catch {}
 
-  // Si no hay datos, incluir al menos la fecha de hoy si hay actividad reciente
   if (datesSet.size === 0) {
-    const today = new Date().toISOString().slice(0, 10);
-    datesSet.add(today);
-    lastActiveDate = new Date().toISOString();
-    totalSessions = Math.max(1, totalSessions);
+    return {
+      currentStreak: 0,
+      longestStreak: 0,
+      totalActiveDays: 0,
+      lastActiveDate: null,
+      activeDatesLast30Days: [],
+      totalSessions: 0,
+    };
   }
 
   // Ordenar fechas cronológicamente
@@ -185,12 +191,12 @@ export async function getStudentActivityAndStreak(userId: string): Promise<Stude
   const activeDatesLast30Days = sortedDates.filter((d) => d >= thirtyDaysAgo);
 
   return {
-    currentStreak: Math.max(currentStreak, 1),
-    longestStreak: Math.max(longestStreak, currentStreak, 1),
+    currentStreak,
+    longestStreak: Math.max(longestStreak, currentStreak),
     totalActiveDays: sortedDates.length,
     lastActiveDate,
     activeDatesLast30Days,
-    totalSessions: Math.max(totalSessions, 1),
+    totalSessions,
   };
 }
 
@@ -216,16 +222,7 @@ export async function getStudentActivityLogs(userId: string, limit = 50): Promis
     }
   } catch {}
 
-  // Fallback simulado básico si no hay
-  return [
-    {
-      id: 'act-init',
-      user_id: userId,
-      action: 'user_login',
-      details: { platform: 'web', source: 'COMEFYR Portal' },
-      created_at: new Date().toISOString(),
-    },
-  ];
+  return [];
 }
 
 // ─── Learning Plans (Planes de Estudio Personalizados) ──────────────────────
@@ -472,8 +469,58 @@ export async function createBatchAssignments(
   studentIds: string[],
   assignmentData: Omit<StudentAssignment, 'id' | 'created_at' | 'updated_at' | 'student_id'>
 ): Promise<StudentAssignment[]> {
+  const uniqueStudentIds = Array.from(new Set(studentIds.filter(Boolean)));
+  if (uniqueStudentIds.length === 0) return [];
+
+  const status = assignmentData.status || 'pending';
+  const priority = assignmentData.priority || 'normal';
+  const hasMaterials = Boolean(assignmentData.materials && assignmentData.materials.length > 0);
+
+  const payloads = uniqueStudentIds.map((sId) => ({
+    student_id: sId,
+    plan_id: assignmentData.plan_id ?? null,
+    title: assignmentData.title,
+    type: assignmentData.type,
+    description: assignmentData.description,
+    target_module_id: assignmentData.target_module_id ?? null,
+    target_topic_id: assignmentData.target_topic_id ?? null,
+    target_exam_config: assignmentData.target_exam_config ?? {},
+    due_date: assignmentData.due_date,
+    status,
+    priority,
+    min_score: assignmentData.min_score ?? null,
+    assigned_by: assignmentData.assigned_by ?? null,
+    ...(hasMaterials ? { materials: assignmentData.materials } : {}),
+  }));
+
+  try {
+    const { data, error } = await sb.from('student_assignments').insert(payloads).select();
+    if (!error && Array.isArray(data) && data.length > 0) {
+      const savedRows = data as StudentAssignment[];
+      for (const saved of savedRows) {
+        try {
+          const raw = localStorage.getItem(`${KEY_LOCAL_ASSIGNMENTS}${saved.student_id}`);
+          const list: StudentAssignment[] = raw ? JSON.parse(raw) : [];
+          const next = [saved, ...list.filter((item) => item.id !== saved.id)];
+          localStorage.setItem(`${KEY_LOCAL_ASSIGNMENTS}${saved.student_id}`, JSON.stringify(next));
+        } catch {}
+
+        void sendAcademicPush({
+          userId: saved.student_id,
+          title: `Nueva tarea: ${saved.title}`,
+          body: saved.description || 'Tu profesor publicó una actividad en el portal.',
+          url: '/portal?tab=assignments',
+        }).catch(() => undefined);
+      }
+      return savedRows;
+    }
+  } catch (e) {
+    console.warn('[createBatchAssignments] Batch insert failed, falling back to individual inserts:', e);
+  }
+
+  // Fallback individual si la inserción en lote falla
   const results: StudentAssignment[] = [];
-  for (const sId of studentIds) {
+  for (const sId of uniqueStudentIds) {
     try {
       const created = await createAssignment({
         ...assignmentData,
@@ -1042,7 +1089,7 @@ export async function deleteAssignment(assignmentId: string, studentId: string):
     const { error } = await supabase.from('student_assignments').delete().eq('id', assignmentId);
     if (error) {
       console.warn('[studentPlanService] deleteAssignment direct delete failed, trying RPC fallback:', error.message);
-      await (supabase.rpc as any)('admin_delete_student_assignment', {
+      await supabase.rpc('admin_delete_student_assignment', {
         p_assignment_id: assignmentId,
       });
     }
@@ -1177,27 +1224,58 @@ export async function getStudentFullDossier(studentId: string): Promise<StudentF
     updated_at: new Date().toISOString(),
   };
 
-  // 2. Roles
-  let roles: string[] = ['student'];
-  try {
-    const { data: rolesData } = await supabase
-      .from('user_roles')
-      .select('role')
-      .eq('user_id', studentId);
-    if (rolesData && rolesData.length > 0) {
-      roles = rolesData.map((r: any) => r.role);
-    }
-  } catch {}
+  // 2–7. Cargar roles, progreso curricular, intentos, sesiones, actividad y planes en paralelo
+  const [
+    rolesRes,
+    moduleProgress,
+    quizAttempts,
+    completedTopicsSet,
+    sessionsRes,
+    activityLogs,
+    learningPlans,
+    assignments,
+  ] = await Promise.all([
+    Promise.resolve(
+      supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', studentId)
+    ).catch(() => ({ data: null })),
+    getMyProgressByModule(studentId).catch(() => []),
+    getMyAttempts(studentId, 100).catch(() => []),
+    fetchStudentCompletedTopics(studentId).catch(() => new Set<string>()),
+    Promise.resolve(
+      supabase
+        .from('exam_sessions')
+        .select('*')
+        .eq('user_id', studentId)
+        .order('started_at', { ascending: false })
+    ).catch(() => ({ data: null })),
+    getStudentActivityLogs(studentId, 30),
+    getStudentLearningPlans(studentId),
+    getStudentAssignments(studentId),
+  ]);
 
-  // 3. Progreso curricular y Quizzes
-  let moduleProgress = await getMyProgressByModule(studentId).catch(() => []);
-  let quizAttempts = await getMyAttempts(studentId, 100).catch(() => []);
-  const completedTopicsSet = await fetchStudentCompletedTopics(studentId).catch(() => new Set<string>());
+  const roles: string[] =
+    rolesRes.data && rolesRes.data.length > 0
+      ? rolesRes.data.map((r: any) => r.role)
+      : ['student'];
 
-  // 4. Métricas globales
+  const examSessions: ExamSession[] = (sessionsRes.data as ExamSession[] | null) ?? [];
+
+  // 4. Métricas globales y racha (reutilizando datos en memoria)
   const studentMetrics = calculateStudentMetrics(studentId, moduleProgress, completedTopicsSet);
   const { calculateStudentKardex } = await import('./gradebookService');
-  const kardex = await calculateStudentKardex(studentId, profile).catch(() => null);
+  const [kardex, streakInfo] = await Promise.all([
+    calculateStudentKardex(studentId, profile, undefined, undefined, {
+      attempts: quizAttempts,
+      moduleProgress,
+      assignments,
+      completedTopicsSet,
+    }).catch(() => null),
+    getStudentActivityAndStreak(studentId, quizAttempts),
+  ]);
+
   const certRequirements = checkCertificationEligibility(
     profile,
     studentMetrics.overallProgressPct,
@@ -1210,25 +1288,6 @@ export async function getStudentFullDossier(studentId: string): Promise<StudentF
   const scores = quizAttempts.map((a) => a.score);
   const averageScore = scores.length > 0 ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : 0;
   const quizzesPassedCount = quizAttempts.filter((a) => a.passed).length;
-
-  // 5. Sesiones de examen simulador
-  let examSessions: ExamSession[] = [];
-  try {
-    const { data: sessionsData } = await supabase
-      .from('exam_sessions')
-      .select('*')
-      .eq('user_id', studentId)
-      .order('started_at', { ascending: false });
-    if (sessionsData) examSessions = sessionsData as ExamSession[];
-  } catch {}
-
-  // 6. Actividad y Racha
-  const streakInfo = await getStudentActivityAndStreak(studentId);
-  const activityLogs = await getStudentActivityLogs(studentId, 30);
-
-  // 7. Planes y Asignaciones
-  const learningPlans = await getStudentLearningPlans(studentId);
-  const assignments = await getStudentAssignments(studentId);
 
   // 8. Evaluación de Dominios (Áreas Bien Dominadas vs Áreas de Oportunidad)
   const topicStats = new Map<
@@ -1275,24 +1334,6 @@ export async function getStudentFullDossier(studentId: string): Promise<StudentF
       });
     }
   });
-
-  // Si aún no tiene muchos intentos de quiz, pre-poblar recomendaciones basadas en el catálogo curricular
-  if (masteredTopics.length === 0 && opportunityTopics.length === 0) {
-    masteredTopics.push({
-      topicName: 'Fundamentos de Conducción Sensitiva',
-      moduleId: 'nerve-conduction',
-      accuracyPct: 90,
-      totalAttempts: 2,
-    });
-    opportunityTopics.push({
-      topicName: 'Plexo Braquial: Criterios Topográficos',
-      moduleId: 'topographic-anatomy',
-      accuracyPct: 60,
-      totalAttempts: 1,
-      criticalFailures: 1,
-      recommendedActions: 'Completar el simulador de 5 pasos de Plexo Braquial y revisar caso clínico.',
-    });
-  }
 
   // Integrar notas locales del admin si no están en el perfil
   profile.admin_notes = getAdminStudentNotes(studentId, profile.admin_notes);

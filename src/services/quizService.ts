@@ -142,6 +142,32 @@ export async function getMyAttempts(userId: string, limit = 100): Promise<QuizAt
   }));
 }
 
+export async function getCohortAttempts(userIds: string[]): Promise<Map<string, QuizAttempt[]>> {
+  const byUser = new Map<string, QuizAttempt[]>();
+  const validIds = Array.from(new Set(userIds.filter(Boolean)));
+  if (validIds.length === 0) return byUser;
+
+  const { data, error } = await supabase
+    .from('quiz_attempts')
+    .select('id, quiz_id, user_id, topic_id, module_id, score, passed, duration_seconds, completed_at, answers')
+    .in('user_id', validIds)
+    .order('completed_at', { ascending: false });
+
+  if (error) throw error;
+
+  for (const raw of (data ?? []) as QuizAttempt[]) {
+    const mapped: QuizAttempt = {
+      ...raw,
+      answers: mapAttemptAnswers(raw.answers),
+    };
+    const list = byUser.get(raw.user_id) ?? [];
+    list.push(mapped);
+    byUser.set(raw.user_id, list);
+  }
+
+  return byUser;
+}
+
 export async function getAttemptCountForQuiz(quizOrTopicId: string, userId: string): Promise<number> {
   const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(quizOrTopicId);
   const query = supabase
@@ -238,7 +264,7 @@ export async function deleteQuizAttempt(attemptId: string, userId?: string): Pro
   const { error } = await supabase.from('quiz_attempts').delete().eq('id', attemptId);
   if (error) {
     console.warn('[quizService] deleteQuizAttempt direct delete failed, trying RPC fallback:', error.message);
-    const { error: rpcError } = await (supabase.rpc as any)('admin_delete_quiz_attempt', {
+    const { error: rpcError } = await supabase.rpc('admin_delete_quiz_attempt', {
       p_attempt_id: attemptId,
     });
     if (rpcError) throw rpcError;

@@ -214,8 +214,8 @@ export async function createExamAttempt(
   }
 }
 
-function toAttemptUpdate(state: Partial<ExamAttemptState>): Record<string, unknown> {
-  const updateData: Record<string, unknown> = {};
+function toAttemptUpdate(state: Partial<ExamAttemptState>): Partial<ExamAttemptRecord> {
+  const updateData: Partial<ExamAttemptRecord> = {};
   if (state.currentQuestionIndex !== undefined) updateData.current_question_index = state.currentQuestionIndex;
   if (state.answers !== undefined) updateData.answers = state.answers;
   if (state.flagged !== undefined) updateData.flagged = state.flagged;

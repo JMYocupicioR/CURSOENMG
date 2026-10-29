@@ -12,6 +12,7 @@ import {
   AlertCircle,
   Sparkles,
   Loader2,
+  Copy,
 } from 'lucide-react';
 import { slugify } from '../../utils/slugify';
 import { assertCreateableCourseId } from '../../content/courseCatalog';
@@ -47,27 +48,35 @@ interface CourseEditorModalProps {
   isOpen: boolean;
   onClose: () => void;
   course?: Course | null; // null si es creación
+  templateCourse?: Course | null; // curso base al clonar para nueva cohorte
+  initialTab?: CourseEditorTab;
   allCourses: Course[];
   allModules: Module[];
   assignedModuleIds: string[];
   workshops?: LiveWorkshop[];
+  teachers?: { name: string; title: string }[];
   onSave: (payload: CourseEditorSavePayload) => Promise<void>;
   onDelete?: () => void;
+  onDuplicate?: () => void;
 }
 
 export function CourseEditorModal({
   isOpen,
   onClose,
   course,
+  templateCourse,
+  initialTab = 'general',
   allCourses,
   allModules,
   assignedModuleIds,
   workshops = [],
+  teachers = [],
   onSave,
   onDelete,
+  onDuplicate,
 }: CourseEditorModalProps) {
   const isCreate = !course;
-  const [activeTab, setActiveTab] = useState<CourseEditorTab>('general');
+  const [activeTab, setActiveTab] = useState<CourseEditorTab>(initialTab);
 
   // Form State
   const [title, setTitle] = useState('');
@@ -102,21 +111,25 @@ export function CourseEditorModal({
   useEffect(() => {
     if (!isOpen) return;
 
-    if (course) {
-      setTitle(course.title || '');
-      setSlug(course.id || '');
-      setCustomSlug(true);
-      setDescription(course.description || '');
-      setPrice(course.price_display || 'Consultar');
-      setIsActive(course.is_active ?? true);
-      setIsSellable(course.is_sellable ?? true);
-      setMinPassingGrade(course.min_passing_grade ?? 80);
-      setInstructorName(course.instructor_name || 'Dr. Juan Marcos Yocupicio Robles');
-      setInstructorTitle(course.instructor_title || 'Especialista en Neurofisiología Clínica');
-      setLiveMeetingUrl(course.live_meeting_url || '');
-      setLiveScheduleNotes(course.live_schedule_notes || '');
-      setActiveWorkshopId(course.active_workshop_id || '');
-      setSyllabusBrochureUrl(course.syllabus_brochure_url || '');
+    const source = course || templateCourse;
+    if (source) {
+      const nextYear = new Date().getFullYear() + 1;
+      const clonedTitle = !course && templateCourse ? `${source.title} (Cohorte ${nextYear})` : source.title || '';
+      const clonedSlug = !course && templateCourse ? `${source.id}-${nextYear}` : source.id || '';
+      setTitle(clonedTitle);
+      setSlug(clonedSlug);
+      setCustomSlug(Boolean(course));
+      setDescription(source.description || '');
+      setPrice(source.price_display || 'Consultar');
+      setIsActive(source.is_active ?? true);
+      setIsSellable(source.is_sellable ?? true);
+      setMinPassingGrade(source.min_passing_grade ?? 80);
+      setInstructorName(source.instructor_name || 'Dr. Juan Marcos Yocupicio Robles');
+      setInstructorTitle(source.instructor_title || 'Especialista en Neurofisiología Clínica');
+      setLiveMeetingUrl(source.live_meeting_url || '');
+      setLiveScheduleNotes(source.live_schedule_notes || '');
+      setActiveWorkshopId(course ? source.active_workshop_id || '' : '');
+      setSyllabusBrochureUrl(source.syllabus_brochure_url || '');
       setSelectedModuleIds(assignedModuleIds);
     } else {
       setTitle('');
@@ -136,10 +149,10 @@ export function CourseEditorModal({
       setSelectedModuleIds([]);
     }
 
-    setActiveTab('general');
+    setActiveTab(initialTab);
     setError(null);
     setSaving(false);
-  }, [isOpen, course, assignedModuleIds]);
+  }, [isOpen, course, templateCourse, assignedModuleIds, initialTab]);
 
   useEffect(() => {
     if (isCreate && !customSlug && title) {
@@ -326,24 +339,31 @@ export function CourseEditorModal({
 
                 {/* Docente Titular */}
                 <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 space-y-3">
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
                     <span className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider text-[10px]">
                       👨‍⚕️ Docente Titular del Curso
                     </span>
-                    <div className="flex gap-1.5">
-                      {INSTRUCTOR_PRESETS.map((p) => (
-                        <button
-                          key={p.name}
-                          type="button"
-                          onClick={() => {
-                            setInstructorName(p.name);
-                            setInstructorTitle(p.title);
-                          }}
-                          className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:border-blue-400 cursor-pointer"
-                        >
-                          {p.name.split(' ')[1] || p.name}
-                        </button>
-                      ))}
+                    <div className="flex flex-wrap gap-1.5">
+                      {[
+                        ...INSTRUCTOR_PRESETS,
+                        ...teachers.filter(
+                          (t) => !INSTRUCTOR_PRESETS.some((p) => p.name === t.name)
+                        ),
+                      ]
+                        .slice(0, 6)
+                        .map((p) => (
+                          <button
+                            key={p.name}
+                            type="button"
+                            onClick={() => {
+                              setInstructorName(p.name);
+                              setInstructorTitle(p.title);
+                            }}
+                            className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:border-blue-400 cursor-pointer"
+                          >
+                            {p.name.replace(/^(Dr\.|Dra\.|Mtro\.|Mtra\.)\s+/i, '').split(' ')[0] || p.name}
+                          </button>
+                        ))}
                     </div>
                   </div>
 
@@ -589,20 +609,32 @@ export function CourseEditorModal({
           </div>
 
           {/* Footer Botones */}
-          <div className="flex items-center justify-between p-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40">
-            {onDelete && !isCreate ? (
-              <button
-                type="button"
-                onClick={onDelete}
-                disabled={saving}
-                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 transition cursor-pointer"
-              >
-                <Trash2 className="w-4 h-4" />
-                <span>Eliminar curso</span>
-              </button>
-            ) : (
-              <div />
-            )}
+          <div className="flex flex-wrap items-center justify-between gap-2 p-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40">
+            <div className="flex items-center gap-2">
+              {onDelete && !isCreate && (
+                <button
+                  type="button"
+                  onClick={onDelete}
+                  disabled={saving}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 transition cursor-pointer"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  <span>Eliminar curso</span>
+                </button>
+              )}
+              {onDuplicate && !isCreate && (
+                <button
+                  type="button"
+                  onClick={onDuplicate}
+                  disabled={saving}
+                  title="Crear una copia de este curso con todos sus módulos y configuración para una nueva generación"
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold text-indigo-700 dark:text-indigo-300 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/50 dark:hover:bg-indigo-900/60 border border-indigo-200/70 dark:border-indigo-800/60 transition cursor-pointer"
+                >
+                  <Copy className="w-3.5 h-3.5" />
+                  <span>Clonar para nueva cohorte</span>
+                </button>
+              )}
+            </div>
 
             <div className="flex items-center gap-2">
               <button

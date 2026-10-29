@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import {
   Shield,
@@ -17,6 +18,8 @@ import {
   Sparkles,
   BookMarked,
   ArrowLeft,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthProvider';
 import { useStaffViewStore } from '../../stores/staffViewStore';
@@ -24,8 +27,17 @@ import { useAdminPendingCounts } from '../../hooks/useAdminPendingCounts';
 import { BRAND } from '../../config/brand';
 import { TeacherQuickDock } from './TeacherQuickDock';
 
-function NavBadge({ count }: { count: number }) {
+const SIDEBAR_STORAGE_KEY = 'electrodx_admin_sidebar_collapsed_v1';
+
+function NavBadge({ count, compact = false }: { count: number; compact?: boolean }) {
   if (count <= 0) return null;
+  if (compact) {
+    return (
+      <span className="absolute -top-1 -right-1 min-w-[1rem] h-4 px-1 rounded-full bg-rose-500 text-white text-[9px] font-black leading-none flex items-center justify-center shadow-xs">
+        {count > 99 ? '99+' : count}
+      </span>
+    );
+  }
   return (
     <span className="ml-auto min-w-[1.25rem] px-1.5 py-0.5 rounded-full bg-rose-500 text-white text-[0.65rem] font-bold leading-none flex items-center justify-center shadow-xs">
       {count > 99 ? '99+' : count}
@@ -46,18 +58,20 @@ export type AdminNavTab = {
 export type NavGroup = {
   id: string;
   title: string;
-  subtitle: string;
+  subtitle?: string;
   items: AdminNavTab[];
 };
 
 export function AdminLayout({
   title,
   subtitle,
+  headerActions,
   children,
   fullBleed = false,
 }: {
   title?: string;
   subtitle?: string;
+  headerActions?: React.ReactNode;
   children: React.ReactNode;
   fullBleed?: boolean;
 }) {
@@ -65,13 +79,38 @@ export function AdminLayout({
   const { isAdmin, isEditor, user } = useAuth();
   const isStaff = isAdmin || isEditor;
   const enterStudentMode = useStaffViewStore((s) => s.enterStudentMode);
-  const { pendingEnrollments, pendingCourseEnrollments, pendingRevisions, pendingTeacherReviews, pendingQuizzes } = useAdminPendingCounts();
+  const {
+    pendingEnrollments,
+    pendingCourseEnrollments,
+    pendingRevisions,
+    pendingTeacherReviews,
+    pendingQuizzes,
+  } = useAdminPendingCounts();
+
+  const [collapsed, setCollapsed] = useState<boolean>(() => {
+    try {
+      return window.localStorage.getItem(SIDEBAR_STORAGE_KEY) === '1';
+    } catch {
+      return false;
+    }
+  });
+
+  const toggleCollapsed = () => {
+    setCollapsed((prev) => {
+      const next = !prev;
+      try {
+        window.localStorage.setItem(SIDEBAR_STORAGE_KEY, next ? '1' : '0');
+      } catch {
+        // Ignore storage errors
+      }
+      return next;
+    });
+  };
 
   const groups: NavGroup[] = [
     {
       id: 'hoy',
-      title: 'Hoy',
-      subtitle: 'cada clase',
+      title: 'Operación diaria',
       items: [
         {
           to: '/admin',
@@ -110,8 +149,7 @@ export function AdminLayout({
     },
     {
       id: 'curso',
-      title: 'Contenido',
-      subtitle: 'Aqui editas el contenido del curso',
+      title: 'Contenido y cursos',
       items: [
         {
           to: '/admin/temario',
@@ -161,7 +199,6 @@ export function AdminLayout({
     {
       id: 'direccion',
       title: 'Dirección',
-      subtitle: 'de vez en cuando',
       items: [
         {
           to: '/admin/admisiones',
@@ -223,39 +260,14 @@ export function AdminLayout({
   const currentTab = allTabs.find((t) => isActive(t.to, t.exact)) ?? allTabs[0];
 
   return (
-    <div className={`pt-20 sm:pt-24 pb-24 lg:pb-10 px-4 sm:px-6 mx-auto ${fullBleed ? 'max-w-screen-2xl' : 'max-w-7xl'}`}>
+    <div
+      className={`pt-16 sm:pt-20 pb-24 lg:pb-10 px-4 sm:px-6 lg:px-8 xl:px-10 mx-auto ${
+        fullBleed ? 'max-w-[1880px]' : 'max-w-[1680px] 2xl:max-w-[1800px]'
+      }`}
+    >
       <TeacherQuickDock />
-      {/* Top Breadcrumb & Status Bar — desktop. On mobile this row sat under the fixed header. */}
-      <div className="mb-4 lg:mb-6 hidden sm:flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-slate-200/80 dark:border-slate-800/80">
-        <div className="flex items-center gap-2 text-xs sm:text-sm text-slate-500">
-          <Link to="/" className="hover:text-blue-600 transition">{BRAND.shortName}</Link>
-          <span>/</span>
-          <Link to="/admin" className="hover:text-indigo-600 font-medium">Administración</Link>
-          {location.pathname !== '/admin' && (
-            <>
-              <span>/</span>
-              <span className="text-slate-900 dark:text-white font-semibold">{currentTab.label}</span>
-            </>
-          )}
-        </div>
 
-        <div className="flex items-center gap-3">
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300 border border-emerald-200/80 dark:border-emerald-800/60 shadow-2xs">
-            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
-            <span>{isAdmin ? 'Administrador' : 'Profesor'}</span>
-          </span>
-          <Link
-            to="/portal"
-            onClick={() => { if (isStaff) enterStudentMode(); }}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-cyan-400 bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 transition shadow-2xs"
-            title="Abrir la experiencia del alumno en el portal"
-          >
-            <Eye className="w-3.5 h-3.5 text-indigo-500 dark:text-cyan-400" />
-            <span>Ver como alumno</span>
-          </Link>
-        </div>
-      </div>
-
+      {/* Mobile Sticky Horizontal Navigation */}
       <div className="lg:hidden sticky top-14 sm:top-16 z-30 -mx-4 sm:-mx-6 mb-3 border-b border-slate-200/80 dark:border-slate-800 bg-slate-50/95 dark:bg-slate-950/95 backdrop-blur-xl">
         <div className="flex items-center gap-2 px-3 py-2">
           {location.pathname !== '/admin' && (
@@ -290,7 +302,9 @@ export function AdminLayout({
           </div>
           <Link
             to="/portal"
-            onClick={() => { if (isStaff) enterStudentMode(); }}
+            onClick={() => {
+              if (isStaff) enterStudentMode();
+            }}
             className="sm:hidden shrink-0 inline-flex items-center justify-center w-8 h-8 rounded-xl text-indigo-600 dark:text-cyan-400 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700"
             title="Ver como alumno"
             aria-label="Ver como alumno"
@@ -300,35 +314,67 @@ export function AdminLayout({
         </div>
       </div>
 
-      <div className="flex flex-col lg:flex-row gap-4 lg:gap-8">
-        <aside className="hidden lg:block lg:w-64 flex-shrink-0">
-          <div className="p-3 sm:p-4 rounded-2xl sm:rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-sm lg:sticky lg:top-24">
-            <div className="flex items-center gap-2.5 mb-3 pb-3 border-b border-slate-100 dark:border-slate-800">
-              <div className="w-9 h-9 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 text-white flex items-center justify-center shadow-md shadow-indigo-500/20 shrink-0">
-                <Shield className="w-4 h-4" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="font-black text-slate-900 dark:text-white text-sm truncate">Panel Docente</p>
-                <p className="text-[11px] text-slate-400 truncate">Dirección {BRAND.shortName}</p>
-              </div>
+      <div className="flex flex-col lg:flex-row gap-4 lg:gap-6 items-start">
+        {/* Desktop Collapsible Navigation Rail */}
+        <aside
+          className={`hidden lg:block flex-shrink-0 transition-all duration-200 ${
+            collapsed ? 'lg:w-[68px]' : 'lg:w-56 xl:w-60'
+          }`}
+        >
+          <div className="p-2.5 xl:p-3 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs lg:sticky lg:top-20">
+            <div
+              className={`flex items-center ${
+                collapsed ? 'justify-center' : 'justify-between gap-2'
+              } mb-2.5 pb-2.5 border-b border-slate-100 dark:border-slate-800`}
+            >
+              {!collapsed && (
+                <div className="flex items-center gap-2.5 min-w-0 flex-1 pl-1">
+                  <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 text-white flex items-center justify-center shadow-sm shadow-indigo-500/20 shrink-0">
+                    <Shield className="w-4 h-4" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-black text-slate-900 dark:text-white text-xs xl:text-sm truncate leading-tight">
+                      Panel Docente
+                    </p>
+                    <p className="text-[10px] text-slate-400 truncate leading-tight mt-0.5">
+                      Dirección {BRAND.shortName}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              <button
+                type="button"
+                onClick={toggleCollapsed}
+                className="p-1.5 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer shrink-0"
+                title={collapsed ? 'Expandir menú lateral' : 'Compactar menú lateral'}
+                aria-label={collapsed ? 'Expandir menú lateral' : 'Compactar menú lateral'}
+              >
+                {collapsed ? (
+                  <PanelLeftOpen className="w-4 h-4" />
+                ) : (
+                  <PanelLeftClose className="w-4 h-4" />
+                )}
+              </button>
             </div>
 
             {/* Desktop 3-Group Navigation */}
-            <nav className="hidden lg:flex lg:flex-col space-y-5">
+            <nav className="hidden lg:flex lg:flex-col space-y-4">
               {groups.map((group) => {
                 const visibleItems = group.items.filter((t) => !t.adminOnly || isAdmin);
                 if (visibleItems.length === 0) return null;
 
                 return (
-                  <div key={group.id} className="space-y-1">
-                    <div className="px-3 pb-1 flex items-baseline justify-between">
-                      <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 dark:text-slate-500">
-                        {group.title}
-                      </span>
-                      <span className="text-[10px] text-slate-400 dark:text-slate-500 italic">
-                        {group.subtitle}
-                      </span>
-                    </div>
+                  <div key={group.id} className="space-y-0.5">
+                    {!collapsed ? (
+                      <div className="px-2.5 pb-1">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 dark:text-slate-500 block truncate">
+                          {group.title}
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="h-px bg-slate-100 dark:bg-slate-800/80 my-1 mx-2" />
+                    )}
 
                     <div className="space-y-0.5">
                       {visibleItems.map(({ to, label, shortLabel, icon: Icon, exact, badge }) => {
@@ -338,15 +384,23 @@ export function AdminLayout({
                             key={to}
                             to={to}
                             title={label}
-                            className={`flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs sm:text-sm font-medium transition-all ${
+                            className={`relative flex items-center ${
+                              collapsed ? 'justify-center px-2 py-2.5' : 'gap-2.5 px-2.5 py-2'
+                            } rounded-xl text-xs xl:text-[13px] font-medium transition-all ${
                               active
-                                ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-md shadow-indigo-500/25 font-semibold'
+                                ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-sm shadow-indigo-500/25 font-semibold'
                                 : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/80 hover:text-slate-900 dark:hover:text-white'
                             }`}
                           >
-                            <Icon className={`w-4 h-4 flex-shrink-0 ${active ? 'text-white' : 'text-slate-400'}`} />
-                            <span className="flex-1 min-w-0 truncate">{shortLabel ?? label}</span>
-                            <NavBadge count={badge} />
+                            <Icon
+                              className={`w-4 h-4 flex-shrink-0 ${
+                                active ? 'text-white' : 'text-slate-400'
+                              }`}
+                            />
+                            {!collapsed && (
+                              <span className="flex-1 min-w-0 truncate">{shortLabel ?? label}</span>
+                            )}
+                            <NavBadge count={badge} compact={collapsed} />
                           </Link>
                         );
                       })}
@@ -356,30 +410,93 @@ export function AdminLayout({
               })}
             </nav>
 
-            <div className="mt-6 pt-4 border-t border-slate-100 dark:border-slate-800 hidden lg:block text-xs">
-              <p className="font-bold text-slate-700 dark:text-slate-200">Sesión Directiva</p>
-              <p className="truncate text-slate-500 dark:text-slate-400 mt-0.5 text-[11px]">{user?.email}</p>
-              <div className="mt-2 text-[10px] text-slate-400 dark:text-slate-500">
-                Diplomado en Electrodiagnostico v1.0
+            {!collapsed && (
+              <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 hidden lg:block px-1.5">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300 truncate">
+                    Sesión Directiva
+                  </span>
+                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300 border border-emerald-200/70 dark:border-emerald-800/60">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                    {isAdmin ? 'Admin' : 'Docente'}
+                  </span>
+                </div>
+                <p className="truncate text-slate-400 dark:text-slate-500 mt-0.5 text-[10px]">
+                  {user?.email}
+                </p>
               </div>
-            </div>
+            )}
           </div>
         </aside>
 
         {/* Main Content Area */}
-        <main className="flex-1 min-w-0">
-          {title && (
-            <div className={subtitle ? 'mb-4 lg:mb-6' : 'mb-3 lg:mb-4'}>
-              <h1 className="text-xl sm:text-3xl font-black text-slate-900 dark:text-white tracking-tight">
-                {title}
-              </h1>
-              {subtitle && (
-                <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-                  {subtitle}
-                </p>
+        <main id="contenido-principal" className="flex-1 min-w-0 w-full">
+          {/* Unified Compact Executive Header Bar */}
+          <div className="mb-4 lg:mb-5 pb-3.5 border-b border-slate-200/80 dark:border-slate-800/80 flex flex-col xl:flex-row xl:items-center justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              {/* Compact Breadcrumb */}
+              <div className="hidden sm:flex items-center gap-1.5 text-xs text-slate-400 dark:text-slate-500 mb-1">
+                <Link to="/" className="hover:text-blue-600 dark:hover:text-cyan-400 transition">
+                  {BRAND.shortName}
+                </Link>
+                <span>/</span>
+                <Link
+                  to="/admin"
+                  className="hover:text-indigo-600 dark:hover:text-indigo-400 font-medium transition"
+                >
+                  Administración
+                </Link>
+                {location.pathname !== '/admin' && currentTab && (
+                  <>
+                    <span>/</span>
+                    <span className="text-slate-700 dark:text-slate-300 font-semibold">
+                      {currentTab.shortLabel ?? currentTab.label}
+                    </span>
+                  </>
+                )}
+              </div>
+
+              {title && (
+                <div className="flex flex-col sm:flex-row sm:items-baseline gap-1 sm:gap-3 min-w-0">
+                  <h1 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight leading-tight">
+                    {title}
+                  </h1>
+                  {subtitle && (
+                    <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 truncate">
+                      {subtitle}
+                    </p>
+                  )}
+                </div>
               )}
             </div>
-          )}
+
+            {/* Unified Right Toolbar: Page Header Actions + Student View Switch */}
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
+              {headerActions}
+
+              <div className="hidden sm:flex items-center gap-2">
+                {headerActions && (
+                  <span className="h-5 w-px bg-slate-200 dark:bg-slate-800 mx-0.5" />
+                )}
+                <span className="hidden 2xl:inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300 border border-emerald-200/80 dark:border-emerald-800/60">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+                  <span>{isAdmin ? 'Administrador' : 'Profesor'}</span>
+                </span>
+                <Link
+                  to="/portal"
+                  onClick={() => {
+                    if (isStaff) enterStudentMode();
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-200 hover:text-indigo-600 dark:hover:text-cyan-400 bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 transition shadow-2xs"
+                  title="Abrir la experiencia del alumno en el portal"
+                >
+                  <Eye className="w-3.5 h-3.5 text-indigo-500 dark:text-cyan-400" />
+                  <span>Ver como alumno</span>
+                </Link>
+              </div>
+            </div>
+          </div>
+
           {children}
         </main>
       </div>

@@ -37,7 +37,10 @@ export function invalidateAdminPendingCounts() {
 async function fetchCounts(): Promise<AdminPendingCountsData> {
   const [statsRes, asgRes, quizzesRes] = await Promise.allSettled([
     getAdminStats(),
-    supabase.from('student_assignments').select('id, status, target_exam_config'),
+    supabase
+      .from('student_assignments')
+      .select('id, status, target_exam_config')
+      .or('status.eq.submitted,target_exam_config->>retakeStatus.eq.requested'),
     supabase.from('published_quizzes').select('id', { count: 'exact', head: true }).eq('clinical_validation_status', 'pending_review'),
   ]);
 

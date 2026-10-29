@@ -192,30 +192,44 @@ export function groupModulesByCourse(
   return { grouped, unassigned };
 }
 
+export const DELETED_TOPIC_SORT_ORDER = -999;
+
+export function isTopicDeletedOverride(ov?: SyllabusTopicOverride | null): boolean {
+  return Boolean(ov && ov.sort_order <= DELETED_TOPIC_SORT_ORDER && ov.is_visible === false);
+}
+
 export interface SyllabusOverrideOptions {
   /** Si es true, reordena pero no elimina temas ocultos (vista staff). */
   includeHidden?: boolean;
+  /** Si es true, incluye también los temas marcados como eliminados (-999). */
+  includeDeleted?: boolean;
 }
 
 function applyTopicListOverrides(
   topics: Topic[],
   byId: Map<string, SyllabusTopicOverride>,
-  includeHidden: boolean
+  includeHidden: boolean,
+  includeDeleted = false
 ): Topic[] {
   return topics
     .map((topic, index) => {
       const ov = byId.get(topic.id);
+      const deleted = isTopicDeletedOverride(ov);
       const children = topic.children?.length
-        ? applyTopicListOverrides(topic.children, byId, includeHidden)
+        ? applyTopicListOverrides(topic.children, byId, includeHidden, includeDeleted)
         : topic.children;
       return {
         topic: children === topic.children ? topic : { ...topic, children },
         index,
         order: ov?.sort_order ?? index,
         visible: ov?.is_visible ?? true,
+        deleted,
       };
     })
-    .filter((entry) => includeHidden || entry.visible)
+    .filter((entry) => {
+      if (entry.deleted) return includeDeleted;
+      return includeHidden || entry.visible;
+    })
     .sort((a, b) => a.order - b.order || a.index - b.index)
     .map((entry) => entry.topic);
 }
@@ -231,7 +245,12 @@ export function applySyllabusTopicOverrides(
   const byId = new Map(forMod.map((o) => [o.topic_id, o]));
   return {
     ...mod,
-    topics: applyTopicListOverrides(mod.topics, byId, options?.includeHidden ?? false),
+    topics: applyTopicListOverrides(
+      mod.topics,
+      byId,
+      options?.includeHidden ?? false,
+      options?.includeDeleted ?? false
+    ),
   };
 }
 

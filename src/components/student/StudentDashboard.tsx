@@ -1,7 +1,6 @@
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
-  BookOpen,
   Award,
   Clock,
   CheckCircle2,
@@ -11,7 +10,7 @@ import {
   BellRing,
   FileCheck,
   ChevronRight,
-  Sparkles,
+  Check,
   BarChart3,
   Search,
   Stethoscope,
@@ -22,7 +21,6 @@ import {
   ShieldAlert,
   Building2,
   Video,
-  Brain,
   Flame,
   Send,
   Lock,
@@ -63,12 +61,18 @@ import {
   type NotificationPermissionStatus,
 } from '../../services/deviceNotificationService';
 import {
+  isPwaPromptDismissed,
+  dismissPwaPrompt,
+  PWA_BANNER_DISMISSED_EVENT,
+} from '../pwa/DeviceNotificationPromptBanner';
+import {
   calculateStudentMetrics,
   checkCertificationEligibility,
   getLastVisitedTopic,
   fetchLastVisitedTopic,
   setLastVisitedTopic,
   getStudentNotifications,
+  isNotificationReadLocally,
   markAllNotificationsAsRead,
   markNotificationAsRead,
   isTopicCompleted,
@@ -105,6 +109,7 @@ import { StudentStudyHub } from './StudentStudyHub';
 import { StudentCertificatePanel } from './StudentCertificatePanel';
 import { StudentPerformancePanel } from './StudentPerformancePanel';
 import { StudentPortalTabBar, type StudentPortalTab } from './StudentPortalTabBar';
+import { StudentQuickControlHub, getNotificationTypeLabel } from './StudentQuickControlHub';
 import { calculateStudentKardex } from '../../services/gradebookService';
 import type { StudentKardexData } from '../../types/academicGradebook';
 import { savePushSubscription } from '../../services/studentToolsService';
@@ -168,16 +173,12 @@ export default function StudentDashboard() {
   const {
     user,
     profile,
-    hasPremiumAccess,
-    isAdmin,
-    isEditor,
     isEnrolledInCourse,
     isCoursePending,
     courseIds,
     pendingCourseIds,
     refreshProfile,
   } = useAuth();
-  const isPremiumUser = hasPremiumAccess || isAdmin || isEditor;
   const { quizGate } = useQuizTopicFlags();
   const { grouped, assignments: courseAssignments, courses } = useSyllabusCatalog();
   const sellable = useMemo(() => sellableCourses(courses), [courses]);
@@ -206,6 +207,9 @@ export default function StudentDashboard() {
   const [courseForModal, setCourseForModal] = useState<Course | null>(null);
   const [dismissedTopBanner, setDismissedTopBanner] = useState(false);
   const [dismissedLiveBanner, setDismissedLiveBanner] = useState(false);
+  const [dismissedPwaBanner, setDismissedPwaBanner] = useState(() =>
+    isPwaPromptDismissed(user?.id)
+  );
   const [deviceNotifStatus, setDeviceNotifStatus] = useState<NotificationPermissionStatus>('default');
   const [testingDeviceNotif, setTestingDeviceNotif] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -241,6 +245,10 @@ export default function StudentDashboard() {
   useEffect(() => {
     if (!user?.id) return;
     setDeviceNotifStatus(getNotificationPermission());
+    setDismissedPwaBanner(isPwaPromptDismissed(user.id));
+
+    const onPwaDismiss = () => setDismissedPwaBanner(true);
+    window.addEventListener(PWA_BANNER_DISMISSED_EVENT, onPwaDismiss);
 
     try {
       const unsubscribe = subscribeToRealtimeAssignments(user.id, (updatedAsg) => {
@@ -257,10 +265,14 @@ export default function StudentDashboard() {
       });
 
       return () => {
+        window.removeEventListener(PWA_BANNER_DISMISSED_EVENT, onPwaDismiss);
         if (unsubscribe) unsubscribe();
       };
     } catch (err) {
       console.warn('[StudentDashboard] Error setting up realtime assignment listener:', err);
+      return () => {
+        window.removeEventListener(PWA_BANNER_DISMISSED_EVENT, onPwaDismiss);
+      };
     }
   }, [user?.id]);
 
@@ -279,6 +291,7 @@ export default function StudentDashboard() {
   const [moduleCourseFilter, setModuleCourseFilter] = useState<string>('todos');
   const [expandedModuleId, setExpandedModuleId] = useState<string | null>(null);
   const [quizFilter, setQuizFilter] = useState<'all' | 'pending' | 'passed'>('all');
+  const [notifFilter, setNotifFilter] = useState<'all' | 'unread' | 'read'>('all');
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [completedTopicsSet, setCompletedTopicsSet] = useState<Set<string>>(() =>
     user ? getCompletedTopics(user.id) : new Set()
@@ -386,7 +399,10 @@ export default function StudentDashboard() {
         const localNotifs = getStudentNotifications(user.id, profile, ws, asgs);
         const serverNotifs = await fetchServerNotifications(user.id);
         if (cancelled) return;
-        setNotifications(mergeServerNotifications(localNotifs, serverNotifs));
+        const mergedNotifs = mergeServerNotifications(localNotifs, serverNotifs).map((n) =>
+          isNotificationReadLocally(user.id, n.id) ? { ...n, isRead: true } : n
+        );
+        setNotifications(mergedNotifs);
 
         // Notify device in background if permission is active
         const pendingList = asgs.filter((a) => a.status === 'pending');
@@ -863,6 +879,26 @@ export default function StudentDashboard() {
     setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
   };
 
+  const handleAttendNotification = (notif: StudentNotification) => {
+    handleMarkNotifRead(notif.id);
+    if (!notif.linkUrl) return;
+    if (notif.linkUrl.startsWith('/portal?') || notif.linkUrl.startsWith('/dashboard?')) {
+      const queryString = notif.linkUrl.split('?')[1] || '';
+      const params = new URLSearchParams(queryString);
+      const targetTab = params.get('tab');
+      if (
+        targetTab &&
+        ['summary', 'performance', 'modules', 'quizzes', 'assignments', 'notifications', 'certificate', 'study'].includes(
+          targetTab
+        )
+      ) {
+        selectTab(targetTab as StudentPortalTab);
+        return;
+      }
+    }
+    navigate(notif.linkUrl);
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen pt-28 pb-16 px-4 flex items-center justify-center">
@@ -877,11 +913,12 @@ export default function StudentDashboard() {
   }
 
   const rawDisplayName = profile?.display_name || user?.email?.split('@')[0] || 'Médico Residente';
-  const cleanDisplayName = rawDisplayName.replace(/^((dr\(a\)|dr|dra)\.?\s*)+/i, '');
+  const cleanDisplayName = rawDisplayName.replace(/^((dr\(a\)|dr|dra)\.?\s*)+/i, '').trim();
+  const shortDoctorName = cleanDisplayName.split(/\s+/).slice(0, 2).join(' ') || cleanDisplayName;
   const displayName = rawDisplayName;
 
   return (
-    <div id="contenido-principal" className="min-h-screen pt-20 pb-20 px-4 sm:px-6 max-w-7xl mx-auto">
+    <div id="contenido-principal" className="min-h-screen pt-16 sm:pt-20 pb-20 px-3 sm:px-6 lg:px-8 xl:px-10 max-w-[1680px] 2xl:max-w-[1800px] mx-auto">
       {actionError && (
         <div className="mb-4 p-3 rounded-xl bg-amber-50 text-amber-900 text-sm" role="alert">
           {actionError}
@@ -960,61 +997,141 @@ export default function StudentDashboard() {
         </aside>
       )}
 
-      {/* ─── Hero Header ─── */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-900 via-indigo-950 to-blue-950 text-white p-6 sm:p-8 md:p-10 shadow-2xl border border-indigo-500/20 mb-8">
-        <div className="absolute top-0 right-0 -mt-8 -mr-8 w-72 h-72 rounded-full bg-blue-500/10 blur-3xl pointer-events-none" />
-        <div className="absolute bottom-0 left-1/3 -mb-12 w-96 h-96 rounded-full bg-indigo-500/10 blur-3xl pointer-events-none" />
+      {/* ─── Hero Header (Compacto en móvil con CTA principal en primera pantalla) ─── */}
+      <div className="relative overflow-hidden rounded-2xl sm:rounded-3xl bg-gradient-to-br from-slate-900 via-indigo-950 to-blue-950 text-white p-4 sm:p-6 md:p-8 shadow-xl border border-indigo-500/20 mb-4 sm:mb-6">
+        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4 sm:gap-6">
+          {/* Columna izquierda: Saludo compacto, Cursos en carrusel y Equipo docente condensado */}
+          <div className="space-y-2.5 min-w-0 flex-1">
+            {/* Fila 1: Saludo de 1 línea + Racha a la derecha */}
+            <div className="flex items-center justify-between gap-2">
+              <h1 className="text-lg sm:text-2xl lg:text-3xl font-extrabold tracking-tight text-white truncate">
+                <span className="sm:hidden">Hola, Dr(a). {shortDoctorName}</span>
+                <span className="hidden sm:inline">Hola, Dr(a). {cleanDisplayName}</span>
+              </h1>
 
-        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <div className="space-y-3 max-w-2xl">
-            {streak && streak.currentStreak > 0 && (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-orange-500/25 text-orange-300 border border-orange-400/40 shadow-xs">
-                <Flame className="w-3.5 h-3.5 text-orange-400 fill-orange-400" />
-                Racha: {streak.currentStreak} {streak.currentStreak === 1 ? 'día' : 'días'}
-              </span>
-            )}
-
-            <h1 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight text-white">
-              Hola, Dr(a). {cleanDisplayName}
-            </h1>
-
-            <div className="flex flex-wrap items-center gap-y-1 gap-x-4 text-xs sm:text-sm text-slate-300">
-              {profile?.specialty && (
-                <span className="flex items-center gap-1.5">
-                  <Stethoscope className="w-4 h-4 text-blue-400" />
-                  {profile.specialty}
-                </span>
-              )}
-              {profile?.institution && (
-                <span className="flex items-center gap-1.5">
-                  <Building2 className="w-4 h-4 text-indigo-400" />
-                  {profile.institution}
+              {streak && streak.currentStreak > 0 && (
+                <span className="shrink-0 inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-orange-500/25 text-orange-300 border border-orange-400/40 font-mono tabular-nums">
+                  <Flame className="w-3.5 h-3.5 text-orange-400 fill-orange-400" />
+                  <span className="sm:hidden">{streak.currentStreak}d</span>
+                  <span className="hidden sm:inline">
+                    Racha: {streak.currentStreak} {streak.currentStreak === 1 ? 'día' : 'días'}
+                  </span>
                 </span>
               )}
             </div>
 
-            {/* Cursos Activos / Cursando Actualmente */}
-            <div className="flex flex-wrap items-center gap-2 pt-1">
-              <span className="text-xs font-semibold text-slate-300">Cursos activos:</span>
-              {sellable.filter((course) => isEnrolledInCourse(course.id)).length > 0 ? (
-                sellable.filter((course) => isEnrolledInCourse(course.id)).map((course) => {
-                  const cId = course.id;
-                  const title = course.title;
-                  return (
-                    <Link
-                      key={cId}
-                      to={`/portal/curso/${cId}`}
-                      className="group inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-500/25 hover:bg-emerald-500/40 text-emerald-300 hover:text-white border border-emerald-400/50 hover:border-emerald-300/80 shadow-xs hover:shadow-emerald-500/20 hover:shadow-md transition-all duration-200 cursor-pointer active:scale-95"
-                      title={`Ir al portal y temario de ${title}`}
-                    >
-                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 group-hover:scale-110 transition-transform shrink-0" />
-                      <span>{title} (Cursando)</span>
-                      <ArrowRight className="w-3 h-3 text-emerald-400/70 group-hover:text-white group-hover:translate-x-0.5 transition-all shrink-0" />
-                    </Link>
-                  );
-                })
+            {/* Fila 2: Datos institucionales condensados (12-13px) */}
+            {(profile?.specialty || profile?.institution) && (
+              <div className="flex items-center gap-2 text-xs text-slate-300 truncate">
+                {profile?.specialty && (
+                  <span className="inline-flex items-center gap-1 truncate">
+                    <Stethoscope className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                    <span className="truncate">{profile.specialty}</span>
+                  </span>
+                )}
+                {profile?.specialty && profile?.institution && (
+                  <span className="text-slate-500 shrink-0">·</span>
+                )}
+                {profile?.institution && (
+                  <span className="inline-flex items-center gap-1 truncate">
+                    <Building2 className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                    <span className="truncate">{profile.institution}</span>
+                  </span>
+                )}
+              </div>
+            )}
+
+            {/* Foco de Acción Principal en Móvil ("Continuar donde te quedaste" arriba del doblez) */}
+            <div className="md:hidden bg-white/10 dark:bg-slate-900/70 rounded-xl p-3.5 border border-white/15">
+              <div className="flex items-center justify-between gap-2 mb-1">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-blue-300 flex items-center gap-1.5">
+                  <Play className="w-3 h-3 text-blue-400 fill-blue-400" />
+                  {resumeLesson
+                    ? hasStartedCurriculum
+                      ? 'Continuar donde te quedaste'
+                      : 'Empieza tu formación'
+                    : 'Curso al día'}
+                </p>
+                {resumeLesson && (
+                  <span className="text-[11px] font-mono tabular-nums text-slate-300">
+                    {resumeLesson.pendingLessonCount} pend.
+                  </span>
+                )}
+              </div>
+
+              {resumeLesson ? (
+                <div>
+                  <p className="text-sm font-bold text-white line-clamp-1">
+                    {resumeLesson.topicTitle}
+                  </p>
+                  <p className="text-xs text-slate-300 line-clamp-1 mb-2.5">
+                    Módulo {resumeLesson.moduleNumber}: {resumeLesson.moduleTitle}
+                    {resumeLesson.firstIncompleteChildTitle
+                      ? ` · ${resumeLesson.firstIncompleteChildTitle}`
+                      : ''}
+                  </p>
+                  <Link
+                    to={resumeLesson.url}
+                    onClick={() => {
+                      if (user && resumeLesson) {
+                        setLastVisitedTopic(user.id, {
+                          moduleId: resumeLesson.moduleId,
+                          moduleTitle: resumeLesson.moduleTitle,
+                          topicId: resumeLesson.firstIncompleteChildId || resumeLesson.topicId,
+                          topicTitle:
+                            resumeLesson.firstIncompleteChildTitle || resumeLesson.topicTitle,
+                          url: resumeLesson.url,
+                          updatedAt: new Date().toISOString(),
+                        });
+                      }
+                    }}
+                    className="w-full min-h-[40px] inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-sm transition-all"
+                  >
+                    <span>{hasStartedCurriculum ? 'Continuar lección' : 'Empezar curso'}</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </Link>
+                </div>
               ) : (
-                <span className="text-xs text-slate-400 italic">
+                <div className="flex items-center justify-between gap-2 pt-1">
+                  <p className="text-xs font-medium text-slate-200">
+                    Has completado todas las lecciones
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => selectTab('modules')}
+                    className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-blue-600 text-white"
+                  >
+                    <span>Repasar</span>
+                    <ArrowRight className="w-3 h-3" />
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Cursos Activos en Carrusel Horizontal (Pills compactas con snap en móvil) */}
+            <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar snap-x pt-0.5">
+              <span className="text-[11px] font-semibold text-slate-300 shrink-0">Cursos:</span>
+              {sellable.filter((course) => isEnrolledInCourse(course.id)).length > 0 ? (
+                sellable
+                  .filter((course) => isEnrolledInCourse(course.id))
+                  .map((course) => {
+                    const cId = course.id;
+                    const title = course.title;
+                    return (
+                      <Link
+                        key={cId}
+                        to={`/portal/curso/${cId}`}
+                        className="snap-start shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-500/20 hover:bg-emerald-500/35 text-emerald-200 hover:text-white border border-emerald-400/40 transition cursor-pointer"
+                        title={`Ir al portal y temario de ${title}`}
+                      >
+                        <CheckCircle2 className="w-3 h-3 text-emerald-400 shrink-0" />
+                        <span className="max-w-[180px] sm:max-w-none truncate">{title}</span>
+                        <ArrowRight className="w-3 h-3 text-emerald-400/80 shrink-0" />
+                      </Link>
+                    );
+                  })
+              ) : (
+                <span className="text-xs text-slate-400 italic shrink-0">
                   Sin cursos activos aún
                 </span>
               )}
@@ -1027,11 +1144,11 @@ export default function StudentDashboard() {
                     key={cId}
                     type="button"
                     onClick={() => courseObj && setCourseForModal(courseObj)}
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-500/20 text-amber-300 border border-amber-400/40 hover:bg-amber-500/30 transition cursor-pointer"
+                    className="snap-start shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-500/20 text-amber-300 border border-amber-400/40 hover:bg-amber-500/30 transition cursor-pointer"
                     title="Solicitud registrada. Haz clic para ver detalles."
                   >
-                    <Clock className="w-3 h-3 text-amber-400 animate-pulse" />
-                    <span>En espera: {title}</span>
+                    <Clock className="w-3 h-3 text-amber-400 animate-pulse shrink-0" />
+                    <span className="max-w-[150px] truncate">En espera: {title}</span>
                   </button>
                 );
               })}
@@ -1045,84 +1162,72 @@ export default function StudentDashboard() {
                   setGuideOpen(true);
                 }}
                 disabled={Boolean(activeExamLock && (remainingActiveSeconds ?? 1) > 0)}
-                title={
-                  activeExamLock && (remainingActiveSeconds ?? 1) > 0
-                    ? 'Termina el examen en curso para ver la guía'
-                    : 'Ver las novedades y la guía del portal'
-                }
-                className="relative inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-white/10 hover:bg-white/20 text-slate-200 hover:text-white border border-white/20 transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                className="snap-start shrink-0 relative inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-white/10 hover:bg-white/20 text-slate-200 hover:text-white border border-white/20 transition cursor-pointer disabled:opacity-50"
               >
-                <Sparkles className="w-3.5 h-3.5 text-blue-300" />
-                <span>Novedades del curso</span>
+                <BellRing className="w-3 h-3 text-blue-300 shrink-0" />
+                <span>Novedades</span>
                 {shouldShowPortalGuide(profile, guidePublishedVersion ?? PORTAL_GUIDE_VERSION) && (
-                  <span className="w-2 h-2 rounded-full bg-blue-400 ring-2 ring-blue-600 animate-pulse" />
+                  <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
                 )}
               </button>
 
-              {/* Botoncito Comité Editorial */}
               <button
                 type="button"
                 onClick={() => setCommitteeModalOpen(true)}
-                title="Ver la lista del comité editorial y dirección académica"
-                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-indigo-500/20 hover:bg-indigo-500/35 text-indigo-200 hover:text-white border border-indigo-400/40 hover:border-indigo-300/80 transition-all cursor-pointer shadow-xs active:scale-95"
+                className="snap-start shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-indigo-500/20 hover:bg-indigo-500/35 text-indigo-200 hover:text-white border border-indigo-400/40 transition cursor-pointer"
               >
-                <Scale className="w-3.5 h-3.5 text-indigo-300" />
+                <Scale className="w-3 h-3 text-indigo-300 shrink-0" />
                 <span>Comité editorial</span>
               </button>
             </div>
 
-            {/* ─── Docentes del Curso (Colaboradores Docentes) ─── */}
-            <div className="pt-3 mt-1 border-t border-white/10 flex flex-col gap-2">
-              <div className="flex items-center justify-between gap-2 flex-wrap">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="inline-flex items-center gap-1.5 text-xs font-bold text-blue-200">
-                    <GraduationCap className="w-4 h-4 text-blue-400 shrink-0" />
-                    Docentes del curso:
-                  </span>
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-500/20 text-blue-300 border border-blue-400/30">
-                    Colaborador Docente
-                  </span>
-                </div>
-                <Link
-                  to="/especialistas"
-                  className="text-[11px] font-semibold text-blue-300 hover:text-white hover:underline flex items-center gap-1 transition"
-                >
-                  <span>Ver directorio docente</span>
-                  <ArrowRight className="w-3 h-3" />
-                </Link>
+            {/* ─── Equipo Docente Condensado (Micro-avatares + Enlace discreto en 1 línea) ─── */}
+            <div className="pt-2 border-t border-white/10 flex items-center justify-between gap-2 text-xs">
+              <div className="flex items-center gap-2 min-w-0">
+                {teachers.length > 0 && (
+                  <div className="flex -space-x-1.5 shrink-0">
+                    {teachers.slice(0, 5).map((t) => {
+                      const initials = t.display_name
+                        .replace(/^((dr\(a\)|dr|dra)\.?\s*)+/i, '')
+                        .split(/\s+/)
+                        .slice(0, 2)
+                        .map((w) => w[0] || '')
+                        .join('')
+                        .toUpperCase();
+                      return (
+                        <Link
+                          key={t.id}
+                          to={`/especialistas/${t.id}`}
+                          title={t.display_name}
+                          className="w-6 h-6 rounded-full bg-indigo-800 border border-indigo-400/50 text-[9px] font-bold text-blue-100 flex items-center justify-center hover:z-10 hover:scale-110 transition-transform"
+                        >
+                          {initials || 'DR'}
+                        </Link>
+                      );
+                    })}
+                  </div>
+                )}
+                <span className="text-slate-300 truncate">
+                  {loadingTeachers
+                    ? 'Cargando equipo docente…'
+                    : teachers.length > 0
+                      ? `${teachers.length} docentes titulares y colaboradores`
+                      : 'Equipo docente del diplomado'}
+                </span>
               </div>
 
-              <div className="flex flex-wrap items-center gap-1.5">
-                {loadingTeachers ? (
-                  <span className="text-xs text-slate-400 italic">Cargando docentes…</span>
-                ) : teachers.length === 0 ? (
-                  <span className="text-xs text-slate-400 italic">Docentes en asignación</span>
-                ) : (
-                  teachers.map((t) => (
-                    <Link
-                      key={t.id}
-                      to={`/especialistas/${t.id}`}
-                      className="group inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-semibold bg-white/10 hover:bg-blue-500/30 text-slate-200 hover:text-white border border-white/15 hover:border-blue-400/50 shadow-xs hover:shadow-md transition-all duration-200 cursor-pointer active:scale-95"
-                      title={`${t.display_name}${t.specialty ? ` · ${t.specialty}` : ''}${t.institution ? ` · ${t.institution}` : ''}`}
-                    >
-                      <div className="w-4 h-4 rounded-full bg-blue-500/30 text-blue-300 flex items-center justify-center shrink-0">
-                        <GraduationCap className="w-3 h-3 text-blue-300 group-hover:scale-110 transition-transform" />
-                      </div>
-                      <span className="truncate max-w-[200px]">{t.display_name}</span>
-                      {t.cedula_verified && (
-                        <span title="Cédula verificada SEP" className="inline-flex">
-                          <CheckCircle2 className="w-3 h-3 text-emerald-400 shrink-0" />
-                        </span>
-                      )}
-                    </Link>
-                  ))
-                )}
-              </div>
+              <Link
+                to="/especialistas"
+                className="shrink-0 font-semibold text-blue-300 hover:text-white hover:underline inline-flex items-center gap-1 transition"
+              >
+                <span>Ver equipo docente ({teachers.length})</span>
+                <ArrowRight className="w-3 h-3" />
+              </Link>
             </div>
           </div>
 
-          {/* Quick Resume Card */}
-          <div className="shrink-0 bg-white/10 dark:bg-slate-900/60 backdrop-blur-md rounded-2xl p-4 sm:p-5 border border-white/15 max-w-sm w-full">
+          {/* Quick Resume Card (Desktop / Tablet >= md) */}
+          <div className="hidden md:block shrink-0 bg-white/10 dark:bg-slate-900/60 backdrop-blur-md rounded-2xl p-4 sm:p-5 border border-white/15 max-w-sm w-full">
             <p className="text-xs font-semibold uppercase tracking-wider text-blue-300 mb-1 flex items-center gap-1.5">
               <Play className="w-3 h-3 text-blue-400 fill-blue-400" />
               {resumeLesson
@@ -1160,7 +1265,7 @@ export default function StudentDashboard() {
                       });
                     }
                   }}
-                  className="w-full inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white shadow-md shadow-blue-500/20 transition-all"
+                  className="w-full inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-sm transition-all"
                 >
                   {hasStartedCurriculum ? 'Continuar lección' : 'Empezar curso'}
                   <ArrowRight className="w-3.5 h-3.5" />
@@ -1173,7 +1278,7 @@ export default function StudentDashboard() {
                 <button
                   type="button"
                   onClick={() => selectTab('modules')}
-                  className="w-full inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white shadow-md shadow-blue-500/20 transition-all"
+                  className="w-full inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-sm transition-all"
                 >
                   Repasar módulos
                   <ArrowRight className="w-3.5 h-3.5" />
@@ -1283,127 +1388,145 @@ export default function StudentDashboard() {
         </div>
       )}
 
-      {/* ─── 4 Academic KPI Cards ─── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5 mb-8">
+      {/* ─── KPI Cards (En móvil: 1 fila compacta de 3 columnas + tira de Kardex; en desktop: 4 columnas) ─── */}
+      <div className="grid grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-4 mb-4 sm:mb-6">
         {/* 1. Progreso Global */}
-        <div className="p-5 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm shadow-sm hover:shadow-md transition">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-              Progreso Global
+        <div className="p-2.5 sm:p-4 rounded-xl sm:rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs">
+          <div className="flex items-center justify-between gap-1 mb-1">
+            <span className="text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 truncate">
+              Progreso
             </span>
-            <div className="p-2 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400">
-              <BarChart3 className="w-5 h-5" />
-            </div>
+            <BarChart3 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-blue-600 dark:text-blue-400 shrink-0" />
           </div>
-          <div className="flex items-baseline gap-2 mb-2">
-            <span className="text-3xl font-extrabold text-slate-900 dark:text-white">
+          <div className="flex items-baseline gap-1 mb-1.5">
+            <span className="text-lg sm:text-2xl font-extrabold font-mono tabular-nums text-slate-900 dark:text-white leading-none">
               {metrics?.overallProgressPct || 0}%
             </span>
-            <span className="text-xs text-slate-500 dark:text-slate-400">del currículo</span>
+            <span className="hidden sm:inline text-[11px] text-slate-500 dark:text-slate-400">
+              del currículo
+            </span>
           </div>
-          <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-2 overflow-hidden mb-2">
+          <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-1.5 overflow-hidden mb-1">
             <div
-              className="bg-gradient-to-r from-blue-600 to-cyan-500 h-full rounded-full transition-all duration-500"
+              className="bg-blue-600 h-full rounded-full transition-all duration-500"
               style={{ width: `${metrics?.overallProgressPct || 0}%` }}
             />
           </div>
-          <p className="text-xs text-slate-500 dark:text-slate-400">
-            {metrics?.totalCompletedCurriculumTopics || 0} de {metrics?.totalCurriculumTopics || 0} lecciones completadas
+          <p className="text-[10px] sm:text-xs font-mono tabular-nums text-slate-500 dark:text-slate-400 truncate">
+            {metrics?.totalCompletedCurriculumTopics || 0}/{metrics?.totalCurriculumTopics || 0}{' '}
+            <span className="hidden sm:inline">lecciones</span>
+            <span className="sm:hidden">lecc.</span>
           </p>
         </div>
 
         {/* 2. Créditos CME / Horas Académicas */}
-        <div className="p-5 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm shadow-sm hover:shadow-md transition">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-              Créditos CME / Horas
+        <div className="p-2.5 sm:p-4 rounded-xl sm:rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs">
+          <div className="flex items-center justify-between gap-1 mb-1">
+            <span className="text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 truncate">
+              Horas CME
             </span>
-            <div className="p-2 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400">
-              <Award className="w-5 h-5" />
-            </div>
+            <Award className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
           </div>
-          <div className="flex items-baseline gap-2 mb-2">
-            <span className="text-3xl font-extrabold text-indigo-600 dark:text-indigo-400">
+          <div className="flex items-baseline gap-1 mb-1.5">
+            <span className="text-lg sm:text-2xl font-extrabold font-mono tabular-nums text-indigo-600 dark:text-indigo-400 leading-none">
               {metrics?.cmeCreditsEarned || 0}
             </span>
-            <span className="text-xs text-slate-500 dark:text-slate-400">
-              / {metrics?.maxCmeCredits || 40} pts CME
+            <span className="text-[10px] sm:text-xs font-mono tabular-nums text-slate-500 dark:text-slate-400">
+              /{metrics?.maxCmeCredits || 40}
             </span>
           </div>
-          <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-2 overflow-hidden mb-2">
+          <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-1.5 overflow-hidden mb-1">
             <div
-              className="bg-gradient-to-r from-indigo-600 to-purple-600 h-full rounded-full transition-all duration-500"
+              className="bg-indigo-600 h-full rounded-full transition-all duration-500"
               style={{
                 width: `${Math.min(100, Math.round(((metrics?.cmeCreditsEarned || 0) / (metrics?.maxCmeCredits || 40)) * 100))}%`,
               }}
             />
           </div>
-          <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1">
-            <Clock className="w-3.5 h-3.5 text-indigo-500" />
-            {metrics?.academicHoursEarned || 0} de {metrics?.maxAcademicHours || 80} horas lectivas
+          <p className="text-[10px] sm:text-xs font-mono tabular-nums text-slate-500 dark:text-slate-400 truncate">
+            {metrics?.academicHoursEarned || 0}/{metrics?.maxAcademicHours || 80}h{' '}
+            <span className="hidden sm:inline">lectivas</span>
           </p>
         </div>
 
         {/* 3. Evaluaciones Aprobadas */}
-        <div className="p-5 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm shadow-sm hover:shadow-md transition">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-              Evaluaciones
+        <div className="p-2.5 sm:p-4 rounded-xl sm:rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs">
+          <div className="flex items-center justify-between gap-1 mb-1">
+            <span className="text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 truncate">
+              Quizzes
             </span>
-            <div className="p-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400">
-              <CheckCircle2 className="w-5 h-5" />
-            </div>
+            <CheckCircle2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
           </div>
-          <div className="flex items-baseline gap-2 mb-2">
-            <span className="text-3xl font-extrabold text-emerald-600 dark:text-emerald-400">
+          <div className="flex items-baseline gap-1 mb-1.5">
+            <span className="text-lg sm:text-2xl font-extrabold font-mono tabular-nums text-emerald-600 dark:text-emerald-400 leading-none">
               {certRequirements?.quizzesPassedCount || 0}
             </span>
-            <span className="text-xs text-slate-500 dark:text-slate-400">
-              aprobadas ({certRequirements?.averageScore || 0}% prom.)
+            <span className="text-[10px] sm:text-xs font-mono tabular-nums text-slate-500 dark:text-slate-400 truncate">
+              ({certRequirements?.averageScore || 0}%)
             </span>
           </div>
-          <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-2 overflow-hidden mb-2">
+          <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-1.5 overflow-hidden mb-1">
             <div
-              className="bg-gradient-to-r from-emerald-500 to-teal-500 h-full rounded-full transition-all duration-500"
+              className="bg-emerald-500 h-full rounded-full transition-all duration-500"
               style={{
                 width: `${Math.min(100, Math.round(((certRequirements?.quizzesPassedCount || 0) / Math.max(1, certRequirements?.totalQuizzesAvailable || 13)) * 100))}%`,
               }}
             />
           </div>
-          <p className="text-xs text-slate-500 dark:text-slate-400">
-            {attempts.length} intentos totales registrados
+          <p className="text-[10px] sm:text-xs font-mono tabular-nums text-slate-500 dark:text-slate-400 truncate">
+            {attempts.length} <span className="hidden sm:inline">intentos registrados</span>
+            <span className="sm:hidden">intentos</span>
           </p>
         </div>
 
-        {/* 4. Desempeño Capa A */}
+        {/* 4. Desempeño Capa A (Tira horizontal en móvil, 4.ª columna en desktop) */}
         <button
           type="button"
           onClick={() => selectTab('performance')}
-          className="p-5 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm shadow-sm hover:shadow-md transition text-left"
+          className="col-span-3 lg:col-span-1 px-3 py-2 sm:p-4 rounded-xl sm:rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs hover:border-indigo-400 transition text-left flex lg:flex-col items-center lg:items-stretch justify-between gap-2 cursor-pointer"
         >
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+          <div className="flex items-center lg:justify-between gap-2">
+            <div
+              className={`p-1.5 sm:p-2 rounded-lg shrink-0 ${
+                kardex?.isPassing
+                  ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600'
+                  : 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600'
+              }`}
+            >
+              <FileCheck className="w-4 h-4" />
+            </div>
+            <div className="lg:hidden flex items-center gap-2">
+              <span className="text-xs font-semibold text-slate-700 dark:text-slate-200">
+                Kardex Capa A:
+              </span>
+              <span className="text-sm font-extrabold font-mono tabular-nums text-slate-900 dark:text-white">
+                {kardex?.finalGrade ?? '—'}/100
+              </span>
+            </div>
+            <span className="hidden lg:inline text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
               Desempeño Capa A
             </span>
-            <div className={`p-2 rounded-xl ${kardex?.isPassing ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600' : 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600'}`}>
-              <FileCheck className="w-5 h-5" />
+          </div>
+
+          <div className="hidden lg:block">
+            <div className="flex items-baseline gap-1.5 my-1">
+              <span className="text-2xl font-extrabold font-mono tabular-nums text-slate-900 dark:text-white leading-none">
+                {kardex?.finalGrade ?? '—'}
+              </span>
+              <span className="text-xs text-slate-500 font-mono tabular-nums">/ 100</span>
             </div>
+            <p className="text-xs text-slate-500 dark:text-slate-400 truncate mb-1">
+              {kardex?.isOfficial
+                ? kardex.isPassing
+                  ? 'Dictamen: acreditado'
+                  : 'Dictamen: aún no acredita'
+                : 'Promedio 30+30+20+20'}
+            </p>
           </div>
-          <div className="flex items-baseline gap-2 mb-1.5">
-            <span className="text-3xl font-extrabold text-slate-900 dark:text-white">
-              {kardex?.finalGrade ?? '—'}
-            </span>
-            <span className="text-xs text-slate-500">/ 100</span>
-          </div>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mb-2">
-            {kardex?.isOfficial
-              ? kardex.isPassing
-                ? 'Dictamen oficial: acreditado'
-                : 'Dictamen oficial: aún no acredita'
-              : 'Promedio en curso · 30+30+20+20'}
-          </p>
-          <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400 inline-flex items-center gap-1">
-            Cómo me evalúan <ChevronRight className="w-3.5 h-3.5" />
+
+          <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400 inline-flex items-center gap-0.5 shrink-0">
+            <span>Cómo me evalúan</span>
+            <ChevronRight className="w-3.5 h-3.5" />
           </span>
         </button>
       </div>
@@ -1484,6 +1607,7 @@ export default function StudentDashboard() {
         counts={{
           assignments: pendingAssignmentsCount,
           notifications: unreadCount,
+          quizzes: quizzesList.filter((q) => !q.passed).length,
         }}
       />
 
@@ -1491,188 +1615,48 @@ export default function StudentDashboard() {
       {/* ─── TAB 1: Resumen General ─── */}
       {activeTab === 'summary' && (
         <div className="space-y-8">
-          {/* ─── NEXT BEST ACTION (DIRIGIDO AL APRENDIZAJE) & ACCESOS RÁPIDOS CLÍNICOS (FASE 4) ─── */}
-          <section aria-label="Siguiente mejor acción de aprendizaje" className="space-y-4">
-            {/* Tarjeta Principal de Reanudación Directa */}
-            <div className="p-6 sm:p-7 rounded-3xl border border-blue-200/90 dark:border-blue-900/60 bg-gradient-to-br from-blue-50/80 via-white to-indigo-50/50 dark:from-blue-950/30 dark:via-slate-900/90 dark:to-indigo-950/30 shadow-md backdrop-blur-sm">
-              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-                <div className="flex-1">
-                  <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold bg-blue-600/10 dark:bg-blue-400/10 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800/60 mb-3">
-                    <Sparkles className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-                    <span>Tu Siguiente Mejor Acción de Estudio</span>
-                  </div>
-
-                  {resumeLesson ? (
-                    <div>
-                      <h2 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white leading-tight">
-                        {hasStartedCurriculum
-                          ? `Continuar: Módulo ${resumeLesson.moduleNumber}: ${resumeLesson.moduleTitle}`
-                          : `Comienza tu Formación: Módulo ${resumeLesson.moduleNumber}: ${resumeLesson.moduleTitle}`}
-                      </h2>
-                      <p className="text-sm font-semibold text-blue-600 dark:text-blue-400 mt-1 flex items-center gap-2">
-                        <BookOpen className="w-4 h-4 shrink-0" />
-                        <span>Lección actual: {resumeLesson.topicTitle}</span>
-                      </p>
-                      {resumeLesson.firstIncompleteChildTitle && (
-                        <p className="text-xs text-slate-600 dark:text-slate-300 mt-1 flex items-center gap-1.5">
-                          <span className="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0" />
-                          <span>Subtema pendiente: <strong>{resumeLesson.firstIncompleteChildTitle}</strong></span>
-                        </p>
-                      )}
-
-                      <div className="mt-4 flex flex-col sm:flex-row sm:items-center gap-3">
-                        <div className="flex-1 max-w-md">
-                          <div className="flex justify-between text-xs text-slate-500 mb-1">
-                            <span>Avance curricular general</span>
-                            <span className="font-bold text-slate-700 dark:text-slate-200">
-                              {metrics?.overallProgressPct || 0}%
-                            </span>
-                          </div>
-                          <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2.5 overflow-hidden">
-                            <div
-                              className="bg-gradient-to-r from-blue-600 to-indigo-600 h-full rounded-full transition-all duration-500"
-                              style={{ width: `${metrics?.overallProgressPct || 0}%` }}
-                            />
-                          </div>
-                        </div>
-                        <span className="text-xs text-slate-500 shrink-0">
-                          {resumeLesson.pendingLessonCount} {resumeLesson.pendingLessonCount === 1 ? 'tema pendiente' : 'temas pendientes'}
-                        </span>
-                      </div>
-                    </div>
-                  ) : (
-                    <div>
-                      <h2 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white leading-tight">
-                        ¡Temario curricular completado al 100%!
-                      </h2>
-                      <p className="text-sm text-slate-600 dark:text-slate-300 mt-1">
-                        Has finalizado todas las lecciones del programa. Puedes poner a prueba tu destreza con los simuladores electromiográficos y casos clínicos.
-                      </p>
-                    </div>
-                  )}
-                </div>
-
-                <div className="shrink-0 flex flex-col sm:flex-row lg:flex-col gap-3">
-                  {resumeLesson ? (
-                    <Link
-                      to={resumeLesson.url}
-                      onClick={() => {
-                        if (user && resumeLesson) {
-                          setLastVisitedTopic(user.id, {
-                            moduleId: resumeLesson.moduleId,
-                            moduleTitle: resumeLesson.moduleTitle,
-                            topicId: resumeLesson.firstIncompleteChildId || resumeLesson.topicId,
-                            topicTitle: resumeLesson.firstIncompleteChildTitle || resumeLesson.topicTitle,
-                            url: resumeLesson.url,
-                            updatedAt: new Date().toISOString(),
-                          });
-                        }
-                      }}
-                      className="inline-flex items-center justify-center gap-2.5 px-6 py-3.5 rounded-2xl text-sm font-black bg-gradient-to-r from-blue-600 via-indigo-600 to-cyan-600 hover:from-blue-700 hover:via-indigo-700 hover:to-cyan-700 text-white shadow-lg shadow-blue-600/30 hover:shadow-xl transition-all cursor-pointer"
-                    >
-                      <Play className="w-4 h-4 fill-white" />
-                      <span>{hasStartedCurriculum ? 'Continuar Lección' : 'Empezar Curso'}</span>
-                      <ArrowRight className="w-4 h-4" />
-                    </Link>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => selectTab('modules')}
-                      className="inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-2xl text-sm font-black bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-600/30 transition-all cursor-pointer"
-                    >
-                      <span>Repasar Módulos</span>
-                      <ArrowRight className="w-4 h-4" />
-                    </button>
-                  )}
-
-                  <button
-                    type="button"
-                    onClick={() => selectTab('modules')}
-                    className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-750 border border-slate-200 dark:border-slate-700 transition"
-                  >
-                    <BookOpen className="w-3.5 h-3.5" />
-                    <span>Ver Temario Completo</span>
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* Accesos Rápidos a Herramientas Clínicas de 1 Clic */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-              <Link
-                to="/ejercicios"
-                className="group p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 hover:bg-gradient-to-br hover:from-indigo-50/70 hover:to-white dark:hover:from-indigo-950/30 dark:hover:to-slate-900 hover:border-indigo-300 dark:hover:border-indigo-700 shadow-xs hover:shadow-md transition-all flex items-center gap-3.5"
-              >
-                <div className="w-10 h-10 rounded-xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
-                  <Activity className="w-5 h-5" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-bold text-slate-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 truncate">
-                    Simulador de Trazos EMG
-                  </p>
-                  <p className="text-[11px] text-slate-500 truncate">
-                    Potenciales y agujas en vivo
-                  </p>
-                </div>
-                <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-indigo-600 shrink-0 transition" />
-              </Link>
-
-              <Link
-                to="/escalas"
-                className="group p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 hover:bg-gradient-to-br hover:from-purple-50/70 hover:to-white dark:hover:from-purple-950/30 dark:hover:to-slate-900 hover:border-purple-300 dark:hover:border-purple-700 shadow-xs hover:shadow-md transition-all flex items-center gap-3.5"
-              >
-                <div className="w-10 h-10 rounded-xl bg-purple-500/10 text-purple-600 dark:text-purple-400 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
-                  <Brain className="w-5 h-5" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-bold text-slate-900 dark:text-white group-hover:text-purple-600 dark:group-hover:text-purple-400 truncate">
-                    Calculadora de Plexo
-                  </p>
-                  <p className="text-[11px] text-slate-500 truncate">
-                    Diagnóstico topográfico rápido
-                  </p>
-                </div>
-                <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-purple-600 shrink-0 transition" />
-              </Link>
-
-              <button
-                type="button"
-                onClick={() => setShowKardexModal(true)}
-                className="group p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 hover:bg-gradient-to-br hover:from-emerald-50/70 hover:to-white dark:hover:from-emerald-950/30 dark:hover:to-slate-900 hover:border-emerald-300 dark:hover:border-emerald-700 shadow-xs hover:shadow-md transition-all flex items-center gap-3.5 text-left cursor-pointer"
-              >
-                <div className="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
-                  <FileCheck className="w-5 h-5" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-bold text-slate-900 dark:text-white group-hover:text-emerald-600 dark:group-hover:text-emerald-400 truncate">
-                    Mi Kardex Académico
-                  </p>
-                  <p className="text-[11px] text-slate-500 truncate">
-                    Dictamen y horas lectivas
-                  </p>
-                </div>
-                <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-emerald-600 shrink-0 transition" />
-              </button>
-
-              <Link
-                to="/talleres"
-                className="group p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 hover:bg-gradient-to-br hover:from-blue-50/70 hover:to-white dark:hover:from-blue-950/30 dark:hover:to-slate-900 hover:border-blue-300 dark:hover:border-blue-700 shadow-xs hover:shadow-md transition-all flex items-center gap-3.5"
-              >
-                <div className="w-10 h-10 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
-                  <Video className="w-5 h-5" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-bold text-slate-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 truncate">
-                    Clases Grabadas
-                  </p>
-                  <p className="text-[11px] text-slate-500 truncate">
-                    Archivo de sesiones y webinars
-                  </p>
-                </div>
-                <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-blue-600 shrink-0 transition" />
-              </Link>
-            </div>
-          </section>
+          <StudentQuickControlHub
+            notifications={notifications}
+            unreadCount={unreadCount}
+            onMarkNotifRead={handleMarkNotifRead}
+            onMarkAllNotifsRead={handleMarkAllNotifsRead}
+            onAttendNotification={handleAttendNotification}
+            resumeLesson={resumeLesson}
+            hasStartedCurriculum={hasStartedCurriculum}
+            overallProgressPct={metrics?.overallProgressPct || 0}
+            upcomingPendingLessons={upcomingPendingLessons}
+            workshops={workshops}
+            assignments={assignments}
+            quizzesList={quizzesList}
+            kardex={kardex}
+            profile={profile}
+            learningPlans={learningPlans}
+            onSelectTab={selectTab}
+            onSelectExam={(asg) => {
+              setSelectedExamForModal(asg);
+              setAcceptedExamRules(false);
+            }}
+            onOpenAssignedCase={(asg) => {
+              openAssignedCase(asg);
+            }}
+            onOpenSubmitModal={(asg, initialNotes = '') => {
+              setSubmittingAsg(asg);
+              setSubmitNotes(initialNotes);
+            }}
+            onOpenKardexModal={() => setShowKardexModal(true)}
+            onRecordResumeClick={(lesson) => {
+              if (user) {
+                setLastVisitedTopic(user.id, {
+                  moduleId: lesson.moduleId,
+                  moduleTitle: lesson.moduleTitle,
+                  topicId: lesson.firstIncompleteChildId || lesson.topicId,
+                  topicTitle: lesson.firstIncompleteChildTitle || lesson.topicTitle,
+                  url: lesson.url,
+                  updatedAt: new Date().toISOString(),
+                });
+              }
+            }}
+          />
 
           {/* ─── Cursos en los que estás Activo y Cursando Actualmente ─── */}
           <section className="p-6 sm:p-7 rounded-3xl border border-slate-200/90 dark:border-slate-800 bg-white/95 dark:bg-slate-900/90 shadow-sm backdrop-blur-sm">
@@ -1935,302 +1919,18 @@ export default function StudentDashboard() {
             </div>
           </section>
 
-          {/* Two-column layout: Left Tasks & Next classes, Right: Workshops & Tools */}
+          {/* Two-column layout: Left Módulos en curso, Right: Talleres en vivo */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 sm:gap-8">
-            {/* Left 2 Cols: Tareas pendientes & Clases en curso */}
-            <div className="lg:col-span-2 space-y-6">
-              {/* Tareas y Evaluaciones Pendientes Card */}
-              <div className="p-6 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white/90 dark:bg-slate-900/90 shadow-sm">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-2.5">
-                    <div className="p-2 rounded-xl bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400">
-                      <Clock className="w-5 h-5" />
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <h2 className="text-base font-bold text-slate-900 dark:text-white">
-                          Tareas y Evaluaciones Pendientes
-                        </h2>
-                        {pendingAssignmentsCount > 0 && (
-                          <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-indigo-600 text-white animate-pulse">
-                            {pendingAssignmentsCount} del Profesor
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-xs text-slate-500">
-                        Actividades asignadas por tus profesores y cuestionarios curriculares
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2.5">
-                    {pendingAssignmentsCount > 0 && (
-                      <button
-                        onClick={() => setShowPendingTasksModal(true)}
-                        className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1 cursor-pointer"
-                      >
-                        <Eye className="w-3 h-3" /> Resumen rápido
-                      </button>
-                    )}
-                    <button
-                      onClick={() => selectTab(pendingAssignmentsCount > 0 ? 'assignments' : 'quizzes')}
-                      className="text-xs font-semibold text-blue-600 dark:text-cyan-400 hover:underline cursor-pointer"
-                    >
-                      Ver todas
-                    </button>
-                  </div>
-                </div>
-
-                {/* Si no hay ni tareas del profesor pendientes ni quizzes del temario pendientes */}
-                {pendingAssignmentsCount === 0 && quizzesList.filter((q) => !q.passed).length === 0 ? (
-                  <div className="py-8 text-center bg-slate-50 dark:bg-slate-800/40 rounded-xl">
-                    <CheckCircle2 className="w-8 h-8 text-emerald-500 mx-auto mb-2" />
-                    <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">
-                      ¡Excelente! No tienes evaluaciones ni tareas pendientes en este momento
-                    </p>
-                    <p className="text-xs text-slate-500 mt-1">
-                      Has completado todas las actividades asignadas por tus profesores y los módulos cursados hasta ahora.
-                    </p>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    {/* 1. SECCIÓN: TAREAS ASIGNADAS POR EL PROFESOR (Prioridad Máxima) */}
-                    {pendingAssignmentsCount > 0 && (
-                      <div className="space-y-2.5">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400 flex items-center gap-1.5">
-                            <Calendar className="w-3.5 h-3.5" /> Asignadas por tus Profesores ({pendingAssignmentsCount})
-                          </span>
-                          <button
-                            onClick={() => selectTab('assignments')}
-                            className="text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
-                          >
-                            Ir a Tareas Asignadas &rarr;
-                          </button>
-                        </div>
-
-                        <div className="space-y-2.5">
-                          {assignments
-                            .filter((a) => a.status === 'pending')
-                            .slice(0, 3)
-                            .map((asg) => {
-                              const dueTime = new Date(asg.due_date).getTime();
-                              const now = Date.now();
-                              const isOverdue = dueTime < now;
-                              const daysRemaining = Math.ceil((dueTime - now) / 86400000);
-                              const isExam = asg.type === 'exam';
-                              const isCase = asg.type === 'clinical_case';
-
-                              return (
-                                <div
-                                  key={asg.id}
-                                  className="flex flex-col sm:flex-row sm:items-center justify-between p-3.5 rounded-xl border border-indigo-100 dark:border-indigo-900/50 bg-indigo-50/30 dark:bg-indigo-950/20 hover:border-indigo-300 dark:hover:border-indigo-700 transition gap-3"
-                                >
-                                  <div className="space-y-1">
-                                    <div className="flex flex-wrap items-center gap-2">
-                                      <span
-                                        className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md ${
-                                          isExam
-                                            ? 'bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300'
-                                            : isCase
-                                            ? 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300'
-                                            : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
-                                        }`}
-                                      >
-                                        {isExam ? 'Examen Asignado' : isCase ? 'Caso Clínico' : 'Tarea Práctica'}
-                                      </span>
-                                      <span
-                                        className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
-                                          isOverdue
-                                            ? 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300'
-                                            : daysRemaining <= 1
-                                            ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 animate-pulse'
-                                            : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
-                                        }`}
-                                      >
-                                        {isOverdue
-                                          ? 'Vencida'
-                                          : daysRemaining <= 1
-                                          ? '¡Vence hoy!'
-                                          : `Quedan ${daysRemaining} días`}
-                                      </span>
-                                    </div>
-
-                                    <p className="text-sm font-bold text-slate-900 dark:text-white line-clamp-1">
-                                      {isCase ? 'Caso Clínico' : asg.title}
-                                    </p>
-                                    <p className="text-xs text-slate-500">
-                                      Entrega:{' '}
-                                      <strong>
-                                        {new Date(asg.due_date).toLocaleDateString('es-MX', {
-                                          day: 'numeric',
-                                          month: 'short',
-                                          hour: '2-digit',
-                                          minute: '2-digit',
-                                        })}
-                                      </strong>
-                                    </p>
-                                  </div>
-
-                                  <div className="shrink-0 flex items-center gap-2">
-                                    {isExam ? (
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          setSelectedExamForModal(asg);
-                                          setAcceptedExamRules(false);
-                                        }}
-                                        className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white shadow-xs transition cursor-pointer"
-                                      >
-                                        <Play className="w-3 h-3 fill-white" />
-                                        <span>Realizar Examen</span>
-                                      </button>
-                                    ) : isCase ? (
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          openAssignedCase(asg);
-                                        }}
-                                        className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 text-white shadow-xs transition cursor-pointer"
-                                      >
-                                        <Sparkles className="w-3 h-3" />
-                                        <span>
-                                          {asg.target_exam_config?.retakeStatus === 'approved'
-                                            ? 'Reintentar caso'
-                                            : asg.status === 'pending'
-                                              ? 'Resolver Caso'
-                                              : 'Revisar caso'}
-                                        </span>
-                                      </button>
-                                    ) : (
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          selectTab('assignments');
-                                          setSubmittingAsg(asg);
-                                        }}
-                                        className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold bg-slate-800 text-white hover:bg-slate-700 transition cursor-pointer"
-                                      >
-                                        <span>Entregar</span>
-                                      </button>
-                                    )}
-                                  </div>
-                                </div>
-                              );
-                            })}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* 2. SECCIÓN: QUIZZES DEL TEMARIO */}
-                    {quizzesList.filter((q) => !q.passed).length > 0 && (
-                      <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-800">
-                        <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                          Quizzes del Temario ({quizzesList.filter((q) => !q.passed).length})
-                        </span>
-                        <div className="space-y-2">
-                          {quizzesList
-                            .filter((q) => !q.passed)
-                            .slice(0, 3)
-                            .map((quiz) => (
-                              <div
-                                key={quiz.topicId}
-                                className="flex items-center justify-between p-3 rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 hover:border-blue-300 dark:hover:border-blue-700 transition"
-                              >
-                                <div className="space-y-1 pr-3">
-                                  <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-                                    {quiz.moduleTitle}
-                                  </span>
-                                  <p className="text-sm font-semibold text-slate-800 dark:text-slate-200 line-clamp-1">
-                                    {quiz.topicTitle}
-                                  </p>
-                                  {quiz.score != null ? (
-                                    <p className="text-xs text-amber-600 dark:text-amber-400 font-medium">
-                                      Último intento: {quiz.score}% (Mínimo aprobatorio: 70%)
-                                    </p>
-                                  ) : (
-                                    <p className="text-xs text-slate-400">Sin intentos realizados aún</p>
-                                  )}
-                                </div>
-                                <Link
-                                  to={quiz.topicUrl || `/modulo/${quiz.moduleId}`}
-                                  className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-sm transition"
-                                >
-                                  Presentar <ArrowRight className="w-3 h-3" />
-                                </Link>
-                              </div>
-                            ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {/* Temas pendientes del temario */}
-              {upcomingPendingLessons.length > 0 && (
-                <div className="p-6 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white/90 dark:bg-slate-900/90 shadow-sm">
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-2.5">
-                      <div className="p-2 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400">
-                        <BookOpen className="w-5 h-5" />
-                      </div>
-                      <div>
-                        <h2 className="text-base font-bold text-slate-900 dark:text-white">
-                          Temas pendientes
-                        </h2>
-                        <p className="text-xs text-slate-500">
-                          Retoma el curso desde el siguiente contenido que aún no completas
-                        </p>
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => selectTab('modules')}
-                      className="text-xs font-semibold text-blue-600 dark:text-cyan-400 hover:underline"
-                    >
-                      Ver módulos
-                    </button>
-                  </div>
-
-                  <div className="space-y-2">
-                    {upcomingPendingLessons.map((lesson, index) => (
-                      <Link
-                        key={`${lesson.moduleId}-${lesson.topicId}`}
-                        to={lesson.url}
-                        className="flex items-center justify-between gap-3 p-3 rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 hover:border-blue-300 dark:hover:border-blue-700 transition"
-                      >
-                        <div className="min-w-0">
-                          <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-                            Módulo {lesson.moduleNumber}: {lesson.moduleTitle}
-                          </p>
-                          <p className="text-sm font-semibold text-slate-800 dark:text-slate-200 line-clamp-1">
-                            {lesson.topicTitle}
-                          </p>
-                          {lesson.firstIncompleteChildTitle && (
-                            <p className="text-xs text-slate-500 line-clamp-1">
-                              {lesson.firstIncompleteChildTitle}
-                            </p>
-                          )}
-                        </div>
-                        <span className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-sm">
-                          {index === 0 ? 'Continuar' : 'Abrir'}
-                          <ArrowRight className="w-3 h-3" />
-                        </span>
-                      </Link>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Módulos en Curso (Vista rápida) */}
-              <div className="p-6 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white/90 dark:bg-slate-900/90 shadow-sm">
+            {/* Left 2 Cols: Módulos en Curso (Vista rápida) */}
+            <div className="lg:col-span-2">
+              <div className="p-6 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs">
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-2.5">
                     <div className="p-2 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400">
                       <Layers className="w-5 h-5" />
                     </div>
                     <div>
-                      <h2 className="text-base font-bold text-slate-900 dark:text-white">
+                      <h2 className="text-base font-semibold text-slate-900 dark:text-white">
                         Tus módulos
                       </h2>
                       <p className="text-xs text-slate-500">
@@ -2240,7 +1940,7 @@ export default function StudentDashboard() {
                   </div>
                   <button
                     onClick={() => selectTab('modules')}
-                    className="text-xs font-semibold text-blue-600 dark:text-cyan-400 hover:underline"
+                    className="text-xs font-semibold text-blue-600 dark:text-cyan-400 hover:underline cursor-pointer"
                   >
                     Ver los 13 módulos
                   </button>
@@ -2250,19 +1950,19 @@ export default function StudentDashboard() {
                   {highlightedModules.map((mod) => (
                     <div
                       key={mod.moduleId}
-                      className="p-4 rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 hover:shadow-sm transition flex flex-col justify-between"
+                      className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 hover:border-blue-300 dark:hover:border-blue-700 transition flex flex-col justify-between"
                     >
                       <div>
                         <div className="flex items-center justify-between mb-1.5">
                           <span className="text-lg">{mod.emoji}</span>
-                          <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                          <span className="text-xs font-semibold font-mono tabular-nums text-slate-700 dark:text-slate-300">
                             {mod.progressPct}%
                           </span>
                         </div>
-                        <p className="text-sm font-bold text-slate-900 dark:text-white line-clamp-1 mb-1">
+                        <p className="text-sm font-semibold text-slate-900 dark:text-white line-clamp-1 mb-1">
                           {mod.title}
                         </p>
-                        <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mb-3 font-mono tabular-nums">
                           {mod.completedTopics} de {mod.totalTopics} lecciones leídas
                         </p>
                       </div>
@@ -2291,14 +1991,13 @@ export default function StudentDashboard() {
               </div>
             </div>
 
-            {/* Right Column: Talleres en vivo & Herramientas Clínicas */}
+            {/* Right Column: Talleres en vivo COMEFYR */}
             <div className="space-y-6">
-              {/* Talleres en Vivo COMEFYR */}
-              <div className="p-6 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white/90 dark:bg-slate-900/90 shadow-sm">
+              <div className="p-6 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs">
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-2">
                     <Video className="w-5 h-5 text-indigo-500" />
-                    <h2 className="text-base font-bold text-slate-900 dark:text-white">
+                    <h2 className="text-base font-semibold text-slate-900 dark:text-white">
                       Talleres en Vivo
                     </h2>
                   </div>
@@ -2311,7 +2010,7 @@ export default function StudentDashboard() {
                     </Link>
                     <Link
                       to="/biblioteca"
-                      className="text-xs font-semibold text-purple-600 dark:text-purple-400 hover:underline hidden sm:inline"
+                      className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline hidden sm:inline"
                     >
                       Biblioteca ↗
                     </Link>
@@ -2329,7 +2028,7 @@ export default function StudentDashboard() {
                     </p>
                     <Link
                       to="/talleres"
-                      className="inline-flex items-center gap-1 text-xs font-bold text-purple-600 dark:text-purple-400 hover:underline"
+                      className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 dark:text-cyan-400 hover:underline"
                     >
                       Ver catálogo de clases grabadas →
                     </Link>
@@ -2339,22 +2038,22 @@ export default function StudentDashboard() {
                     {workshops.map((w) => (
                       <div
                         key={w.id}
-                        className="p-3.5 rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30"
+                        className="p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30"
                       >
                         <div className="flex items-center justify-between gap-2">
-                          <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300">
+                          <span className="px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider font-mono tabular-nums bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300">
                             {new Date(w.scheduled_at).toLocaleDateString('es-MX', {
                               day: 'numeric',
                               month: 'short',
                             })}
                           </span>
                           {w.recording_url && (
-                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-100 dark:bg-purple-950/80 text-purple-700 dark:text-purple-300">
+                            <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300">
                               Grabación lista
                             </span>
                           )}
                         </div>
-                        <p className="text-sm font-bold text-slate-900 dark:text-white mt-1.5 line-clamp-1">
+                        <p className="text-sm font-semibold text-slate-900 dark:text-white mt-1.5 line-clamp-1">
                           {w.title}
                         </p>
                         <p className="text-xs text-slate-500 line-clamp-2 mt-0.5 mb-2">
@@ -2363,7 +2062,7 @@ export default function StudentDashboard() {
                         <div className="flex items-center gap-3">
                           <Link
                             to={`/taller/${w.id}`}
-                            className="inline-flex items-center gap-1 text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline"
+                            className="inline-flex items-center gap-1 text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline"
                           >
                             Ver detalles <ChevronRight className="w-3 h-3" />
                           </Link>
@@ -2372,7 +2071,7 @@ export default function StudentDashboard() {
                               href={w.recording_url}
                               target="_blank"
                               rel="noreferrer"
-                              className="inline-flex items-center gap-1 text-xs font-bold text-purple-600 dark:text-purple-400 hover:underline"
+                              className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 dark:text-cyan-400 hover:underline"
                             >
                               Ver grabación ↗
                             </a>
@@ -2382,93 +2081,6 @@ export default function StudentDashboard() {
                     ))}
                   </div>
                 )}
-              </div>
-
-              {/* Herramientas de Práctica y Simulación */}
-              <div className="p-6 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-gradient-to-br from-indigo-50/50 to-blue-50/50 dark:from-indigo-950/20 dark:to-blue-950/20 shadow-sm">
-                <h2 className="text-base font-bold text-slate-900 dark:text-white mb-1 flex items-center gap-2">
-                  <Sparkles className="w-4 h-4 text-amber-500" />
-                  Simuladores y Herramientas
-                </h2>
-                <p className="text-xs text-slate-500 mb-4">
-                  Complementa tu aprendizaje con motores de cálculo clínico
-                </p>
-
-                <div className="space-y-2.5">
-                  <Link
-                    to="/herramientas/plexo-braquial"
-                    className="flex items-center justify-between p-3 rounded-xl bg-white dark:bg-slate-900 border border-indigo-100 dark:border-indigo-900/60 hover:shadow-md transition group"
-                  >
-                    <div className="space-y-0.5">
-                      <div className="flex items-center gap-2">
-                        <p className="text-xs font-bold text-slate-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition">
-                          Calculadora de Plexo Braquial
-                        </p>
-                        <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                          isPremiumUser
-                            ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300 border border-amber-300/40'
-                            : 'bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20'
-                        }`}>
-                          {isPremiumUser ? <Sparkles className="w-2.5 h-2.5 text-amber-500" /> : <Lock className="w-2.5 h-2.5 text-amber-500" />}
-                          Premium
-                        </span>
-                      </div>
-                      <p className="text-[11px] text-slate-500">
-                        Algoritmo ponderado de 5 pasos raíces/cordones
-                      </p>
-                    </div>
-                    <ChevronRight className="w-4 h-4 text-slate-400 group-hover:translate-x-0.5 transition" />
-                  </Link>
-
-                  <Link
-                    to="/ejercicios"
-                    className="flex items-center justify-between p-3 rounded-xl bg-white dark:bg-slate-900 border border-blue-100 dark:border-blue-900/60 hover:shadow-md transition group"
-                  >
-                    <div className="space-y-0.5">
-                      <div className="flex items-center gap-2">
-                        <p className="text-xs font-bold text-slate-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-cyan-400 transition">
-                          Simulador de Casos Clínicos EMG
-                        </p>
-                        <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                          isPremiumUser
-                            ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300 border border-amber-300/40'
-                            : 'bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20'
-                        }`}>
-                          {isPremiumUser ? <Sparkles className="w-2.5 h-2.5 text-amber-500" /> : <Lock className="w-2.5 h-2.5 text-amber-500" />}
-                          Premium
-                        </span>
-                      </div>
-                      <p className="text-[11px] text-slate-500">
-                        Ejercicios prácticos interactivos con trazos
-                      </p>
-                    </div>
-                    <ChevronRight className="w-4 h-4 text-slate-400 group-hover:translate-x-0.5 transition" />
-                  </Link>
-
-                  {/* Simulador de Examen COMEFYR — nuevo */}
-                  <Link
-                    to="/examenes"
-                    className="flex items-center justify-between p-3.5 rounded-xl bg-gradient-to-r from-cyan-950/60 to-indigo-950/60 border border-cyan-700/30 hover:border-cyan-500/40 hover:shadow-lg hover:shadow-cyan-900/20 transition group"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-cyan-500 to-indigo-500 flex items-center justify-center shadow-md shadow-cyan-500/20 group-hover:scale-105 transition">
-                        <Brain className="w-4 h-4 text-white" />
-                      </div>
-                      <div className="space-y-0.5">
-                        <p className="text-xs font-bold text-white group-hover:text-cyan-300 transition">
-                          Simulador de Examen COMEFYR
-                        </p>
-                        <p className="text-[10px] text-slate-400">
-                          85 preguntas · Modo Tutor / Examen Real
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/10 border border-amber-500/20 text-amber-400 font-bold">⚡ NUEVO</span>
-                      <ChevronRight className="w-4 h-4 text-slate-500 group-hover:text-cyan-400 group-hover:translate-x-0.5 transition" />
-                    </div>
-                  </Link>
-                </div>
               </div>
             </div>
           </div>
@@ -3733,153 +3345,267 @@ export default function StudentDashboard() {
 
       {/* ─── TAB 4: Centro de Notificaciones ─── */}
       {activeTab === 'notifications' && (
-        <div className="space-y-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-xl font-bold text-slate-900 dark:text-white">
-                Bandeja de Notificaciones y Avisos
-              </h2>
-              <p className="text-sm text-slate-500">
-                Avisos académicos, confirmación de cédula y convocatorias COMEFYR
-              </p>
-            </div>
-            {unreadCount > 0 && (
-              <button
-                onClick={handleMarkAllNotifsRead}
-                className="text-xs font-bold text-blue-600 dark:text-cyan-400 hover:underline"
-              >
-                Marcar todas como leídas
-              </button>
-            )}
-          </div>
-
-          {/* PWA Device Notification Settings Card */}
-          <div className="p-5 rounded-2xl bg-gradient-to-r from-blue-50/80 via-indigo-50/60 to-purple-50/40 dark:from-blue-950/30 dark:via-indigo-950/30 dark:to-purple-950/20 border border-blue-200/80 dark:border-blue-900/60 shadow-xs">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div className="flex items-start gap-3.5">
-                <div className="p-2.5 rounded-2xl bg-blue-600 text-white shadow-md shadow-blue-500/20 shrink-0">
-                  <Smartphone className="w-5 h-5" />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                      Alertas en tu Dispositivo y Teléfono (PWA)
-                    </h3>
-                    {deviceNotifStatus === 'granted' && (
-                      <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800">
-                        <ShieldCheck className="w-3 h-3" /> Activadas
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-xs text-slate-600 dark:text-slate-300 mt-1 max-w-xl">
-                    {deviceNotifStatus === 'granted'
-                      ? 'Recibirás avisos directos en tu barra de notificaciones y pantalla de bloqueo cuando tus profesores asignen exámenes, casos clínicos o registren calificaciones.'
-                      : 'Activa las notificaciones del navegador o PWA para recibir avisos instantáneos de tus tareas y exámenes sin tener que entrar a revisar manualmente.'}
-                  </p>
-                </div>
-              </div>
-
-              <div className="shrink-0 flex items-center gap-2">
-                {deviceNotifStatus === 'granted' ? (
-                  <button
-                    type="button"
-                    disabled={testingDeviceNotif}
-                    onClick={async () => {
-                      setTestingDeviceNotif(true);
-                      await sendTestNotification();
-                      setTimeout(() => setTestingDeviceNotif(false), 4000);
-                    }}
-                    className="px-3.5 py-2 rounded-xl bg-white dark:bg-slate-800 text-blue-600 dark:text-cyan-300 text-xs font-bold hover:bg-blue-50 dark:hover:bg-slate-750 border border-blue-200 dark:border-blue-800 transition shadow-xs cursor-pointer disabled:opacity-60 flex items-center gap-1.5"
-                  >
-                    <BellRing className="w-3.5 h-3.5" />
-                    <span>{testingDeviceNotif ? '¡Alerta enviada!' : 'Probar Notificación'}</span>
-                  </button>
+        <div className="space-y-4">
+          {/* Cabecera compacta + Filtros y "Marcar todas" en una sola fila */}
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h2 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white">
+                  Bandeja de Notificaciones y Avisos
+                </h2>
+                {unreadCount > 0 ? (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-xs font-semibold bg-rose-600 text-white font-mono tabular-nums">
+                    <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping" />
+                    {unreadCount} por atender
+                  </span>
                 ) : (
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      const res = await requestNotificationPermission(user?.id);
-                      setDeviceNotifStatus(res);
-                      if (res === 'granted' && 'serviceWorker' in navigator && import.meta.env.VITE_VAPID_PUBLIC_KEY) {
-                        try {
-                          const reg = await navigator.serviceWorker.ready;
-                          const sub = await reg.pushManager.subscribe({
-                            userVisibleOnly: true,
-                            applicationServerKey: import.meta.env.VITE_VAPID_PUBLIC_KEY,
-                          });
-                          await savePushSubscription(sub);
-                        } catch (e) {
-                          console.warn('Web Push no disponible:', e);
-                        }
-                      }
-                    }}
-                    className="px-4 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-xs font-bold transition shadow-sm cursor-pointer flex items-center gap-1.5"
-                  >
-                    <BellRing className="w-3.5 h-3.5" />
-                    <span>Activar Alertas de Dispositivo</span>
-                  </button>
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-semibold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                    <CheckCircle2 className="w-3.5 h-3.5" /> Al día
+                  </span>
                 )}
               </div>
-            </div>
-          </div>
 
-          <div className="space-y-3">
-            {notifications.map((notif) => (
-              <div
-                key={notif.id}
-                onClick={() => handleMarkNotifRead(notif.id)}
-                className={`p-4 sm:p-5 rounded-2xl border transition-all cursor-pointer ${
-                  notif.isRead
-                    ? 'border-slate-200/60 dark:border-slate-800 bg-white/50 dark:bg-slate-900/40 opacity-80'
-                    : 'border-blue-200 dark:border-blue-900/60 bg-blue-50/40 dark:bg-blue-950/20 shadow-sm'
-                }`}
-              >
-                <div className="flex items-start justify-between gap-3 mb-2">
-                  <div className="flex items-center gap-2">
+              {deviceNotifStatus === 'granted' && (
+                <button
+                  type="button"
+                  disabled={testingDeviceNotif}
+                  onClick={async () => {
+                    setTestingDeviceNotif(true);
+                    await sendTestNotification();
+                    setTimeout(() => setTestingDeviceNotif(false), 4000);
+                  }}
+                  className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-semibold hover:bg-slate-200 dark:hover:bg-slate-700 transition cursor-pointer disabled:opacity-60 inline-flex items-center gap-1"
+                >
+                  <BellRing className="w-3.5 h-3.5" />
+                  <span>{testingDeviceNotif ? 'Alerta enviada' : 'Probar alerta'}</span>
+                </button>
+              )}
+            </div>
+
+            {/* Fila única: Chips de filtro a la izquierda + Acción "Marcar todas" a la derecha */}
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-lg">
+                <button
+                  type="button"
+                  onClick={() => setNotifFilter('all')}
+                  className={`px-2.5 py-1 rounded-md text-xs font-semibold transition cursor-pointer ${
+                    notifFilter === 'all'
+                      ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                  }`}
+                >
+                  Todos ({notifications.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setNotifFilter('unread')}
+                  className={`px-2.5 py-1 rounded-md text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 ${
+                    notifFilter === 'unread'
+                      ? 'bg-rose-600 text-white shadow-xs'
+                      : unreadCount > 0
+                        ? 'text-rose-700 dark:text-rose-300 hover:bg-rose-50 dark:hover:bg-rose-950/40'
+                        : 'text-slate-600 dark:text-slate-400'
+                  }`}
+                >
+                  {unreadCount > 0 && (
                     <span
-                      className={`w-2 h-2 rounded-full ${
-                        notif.isRead ? 'bg-transparent' : 'bg-blue-600 dark:bg-cyan-400'
+                      className={`w-1.5 h-1.5 rounded-full ${
+                        notifFilter === 'unread' ? 'bg-white' : 'bg-rose-600'
                       }`}
                     />
-                    <span
-                      className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
-                        notif.type === 'cedula'
-                          ? 'bg-cyan-100 text-cyan-800 dark:bg-cyan-950 dark:text-cyan-300'
-                          : notif.type === 'workshop'
-                          ? 'bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300'
-                          : 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300'
+                  )}
+                  <span>Por atender ({unreadCount})</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setNotifFilter('read')}
+                  className={`px-2.5 py-1 rounded-md text-xs font-semibold transition cursor-pointer ${
+                    notifFilter === 'read'
+                      ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                  }`}
+                >
+                  Atendidos ({notifications.length - unreadCount})
+                </button>
+              </div>
+
+              {unreadCount > 0 && (
+                <button
+                  type="button"
+                  onClick={handleMarkAllNotifsRead}
+                  className="px-2.5 py-1.5 rounded-lg text-xs font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition cursor-pointer inline-flex items-center gap-1"
+                >
+                  <Check className="w-3.5 h-3.5" />
+                  <span>Marcar todas leídas</span>
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Banner PWA delgado y descartable (solo si no está activo ni descartado) */}
+          {deviceNotifStatus !== 'granted' && !dismissedPwaBanner && (
+            <div className="px-3.5 py-2.5 rounded-xl bg-slate-900 dark:bg-slate-900/90 border border-slate-800 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <Smartphone className="w-4 h-4 text-blue-400 shrink-0" />
+                <p className="text-xs text-slate-200 truncate">
+                  Recibe alertas instantáneas de tareas y exámenes en tu teléfono o navegador.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-1.5 shrink-0">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const res = await requestNotificationPermission(user?.id);
+                    setDeviceNotifStatus(res);
+                    if (
+                      res === 'granted' &&
+                      'serviceWorker' in navigator &&
+                      import.meta.env.VITE_VAPID_PUBLIC_KEY
+                    ) {
+                      try {
+                        const reg = await navigator.serviceWorker.ready;
+                        const sub = await reg.pushManager.subscribe({
+                          userVisibleOnly: true,
+                          applicationServerKey: import.meta.env.VITE_VAPID_PUBLIC_KEY,
+                        });
+                        await savePushSubscription(sub);
+                      } catch (e) {
+                        console.warn('Web Push no disponible:', e);
+                      }
+                    }
+                  }}
+                  className="px-2.5 py-1 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold transition cursor-pointer whitespace-nowrap"
+                >
+                  Activar alertas
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    dismissPwaPrompt(user?.id);
+                    setDismissedPwaBanner(true);
+                  }}
+                  className="p-1 rounded-md text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer"
+                  title="Ocultar aviso"
+                  aria-label="Cerrar banner de alertas de dispositivo"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          )}
+
+          <div className="space-y-3">
+            {notifications
+              .filter((n) => {
+                if (notifFilter === 'unread') return !n.isRead;
+                if (notifFilter === 'read') return n.isRead;
+                return true;
+              })
+              .map((notif) => {
+                const isUnread = !notif.isRead;
+                return (
+                  <div
+                    key={notif.id}
+                    onClick={() => {
+                      if (isUnread) handleMarkNotifRead(notif.id);
+                    }}
+                    className={`p-4 sm:p-5 rounded-2xl border transition-all ${
+                      isUnread
+                        ? 'border-l-4 border-l-rose-600 border-rose-300 dark:border-rose-800/90 bg-rose-50/80 dark:bg-rose-950/35 shadow-sm cursor-pointer'
+                        : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-3 mb-2">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {isUnread ? (
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-[10px] font-semibold uppercase tracking-wider bg-rose-600 text-white">
+                            <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+                            Por atender
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold uppercase tracking-wider bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
+                            <Check className="w-3 h-3" />
+                            Atendido
+                          </span>
+                        )}
+
+                        <span
+                          className={`px-2 py-0.5 rounded-md text-[10px] font-semibold uppercase tracking-wider ${
+                            isUnread
+                              ? 'bg-rose-100 text-rose-900 dark:bg-rose-900/80 dark:text-rose-200'
+                              : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
+                          }`}
+                        >
+                          {getNotificationTypeLabel(notif.type)}
+                        </span>
+
+                        <h3
+                          className={`text-sm font-bold ${
+                            isUnread
+                              ? 'text-rose-950 dark:text-rose-100'
+                              : 'text-slate-800 dark:text-slate-200'
+                          }`}
+                        >
+                          {notif.title}
+                        </h3>
+                      </div>
+                      <span className="text-[11px] font-mono tabular-nums text-slate-500 dark:text-slate-400 shrink-0">
+                        {new Date(notif.createdAt).toLocaleDateString('es-MX', {
+                          day: 'numeric',
+                          month: 'short',
+                        })}
+                      </span>
+                    </div>
+
+                    <p
+                      className={`text-xs sm:text-sm leading-relaxed mb-3 ${
+                        isUnread
+                          ? 'text-rose-900/90 dark:text-rose-200/90'
+                          : 'text-slate-600 dark:text-slate-400'
                       }`}
                     >
-                      {notif.type}
-                    </span>
-                    <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                      {notif.title}
-                    </h3>
-                  </div>
-                  <span className="text-[11px] text-slate-400 shrink-0">
-                    {new Date(notif.createdAt).toLocaleDateString('es-MX', {
-                      day: 'numeric',
-                      month: 'short',
-                    })}
-                  </span>
-                </div>
+                      {notif.message}
+                    </p>
 
-                <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 leading-relaxed pl-4 mb-3">
-                  {notif.message}
-                </p>
+                    <div className="flex flex-wrap items-center justify-between gap-2 pt-2.5 border-t border-slate-200/60 dark:border-slate-800">
+                      {notif.linkUrl ? (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleAttendNotification(notif);
+                          }}
+                          className={`inline-flex items-center gap-1 text-xs font-semibold cursor-pointer ${
+                            isUnread
+                              ? 'text-rose-700 dark:text-rose-300 hover:underline'
+                              : 'text-blue-600 dark:text-cyan-400 hover:underline'
+                          }`}
+                        >
+                          <span>{isUnread ? 'Atender e ir a la sección' : 'Ir a la sección'}</span>
+                          <ChevronRight className="w-3.5 h-3.5" />
+                        </button>
+                      ) : (
+                        <span />
+                      )}
 
-                {notif.linkUrl && (
-                  <div className="pl-4">
-                    <Link
-                      to={notif.linkUrl}
-                      className="inline-flex items-center gap-1 text-xs font-bold text-blue-600 dark:text-cyan-400 hover:underline"
-                    >
-                      Ir a la sección <ChevronRight className="w-3.5 h-3.5" />
-                    </Link>
+                      {isUnread && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleMarkNotifRead(notif.id);
+                          }}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white dark:bg-slate-900 text-rose-700 dark:text-rose-300 border border-rose-300 dark:border-rose-700 hover:bg-rose-100 dark:hover:bg-rose-900/50 transition cursor-pointer"
+                        >
+                          <Check className="w-3.5 h-3.5" />
+                          <span>Marcar como atendido</span>
+                        </button>
+                      )}
+                    </div>
                   </div>
-                )}
-              </div>
-            ))}
+                );
+              })}
           </div>
         </div>
       )}

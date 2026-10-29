@@ -4,7 +4,10 @@ import {
   markPortalGuideSeen,
   PORTAL_GUIDE_VERSION,
   filterSlidesForCourse,
+  moveMediaWithinKind,
   resolveSlideMedia,
+  slideMediaItems,
+  slideToGuideStep,
   validatePortalWelcomeDraft,
   detailFromText,
 } from './portalGuideService';
@@ -107,6 +110,53 @@ describe('portalGuideService', () => {
         alt: 'Clase',
       });
       expect(resolveSlideMedia(slide({ media_kind: 'video', media_url: 'https://example.com/clip.mp4' }))).toBeNull();
+    });
+
+    it('puts a photo url back on the photo list when it was saved as a video', () => {
+      const items = slideMediaItems(
+        slide({
+          media_items: [
+            {
+              id: 'photo',
+              kind: 'video',
+              url: 'https://pubodzfmqmawrfnmrce.supabase.co/storage/v1/object/public/course-images/portal.jpg',
+              label: 'Portal Alumno',
+            },
+            {
+              id: 'clip',
+              kind: 'video',
+              url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+              label: 'Clase',
+            },
+          ],
+        })
+      );
+      expect(items.map((item) => item.kind)).toEqual(['image', 'video']);
+    });
+
+    it('reorders photos without moving the video between them', () => {
+      const items = [
+        { id: 'i1', kind: 'image' as const, url: 'https://images.unsplash.com/a.jpg', label: 'A' },
+        { id: 'v', kind: 'video' as const, url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', label: 'V' },
+        { id: 'i2', kind: 'image' as const, url: 'https://images.unsplash.com/b.jpg', label: 'B' },
+      ];
+      expect(moveMediaWithinKind(items, 'i2', -1).map((item) => item.id)).toEqual(['i2', 'v', 'i1']);
+    });
+
+    it('keeps every video link on the same slide', () => {
+      const step = slideToGuideStep(
+        slide({
+          title: 'Videos',
+          media_items: [
+            { id: 'a', kind: 'video', url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', label: 'Uno' },
+            { id: 'b', kind: 'video', url: 'https://vimeo.com/123456789', label: 'Dos' },
+          ],
+        })
+      );
+      expect(step.media).toEqual([
+        { kind: 'video', src: 'https://www.youtube.com/embed/dQw4w9WgXcQ', alt: 'Uno' },
+        { kind: 'video', src: 'https://player.vimeo.com/video/123456789', alt: 'Dos' },
+      ]);
     });
 
     it('rejects a video that is not an allowed host', () => {

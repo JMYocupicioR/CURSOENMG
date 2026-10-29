@@ -5,10 +5,14 @@ const FOCO_RE = /^quiz-row-[A-Za-z0-9_-]+$/;
 
 export type QuizCatalogStatus = 'all' | 'with_quiz' | 'no_quiz';
 
+export type QuizCatalogTab = 'finals' | 'topics';
+
 export type QuizCatalogFilters = {
   q?: string;
   modulo?: string;
   estado?: QuizCatalogStatus;
+  /** Pestaña principal en `/admin/quizzes` (solo se serializa `topics`; `finals` es el default). */
+  tab?: QuizCatalogTab;
 };
 
 export type QuizCatalogFocus = {
@@ -39,6 +43,7 @@ export function buildQuizCatalogPath(
   if (q) params.set('q', q);
   if (filters.modulo && filters.modulo !== 'all') params.set('modulo', filters.modulo);
   if (filters.estado && filters.estado !== 'all') params.set('estado', filters.estado);
+  if (filters.tab === 'topics') params.set('tab', 'topics');
   const search = params.toString();
   const hash = focus ? `#${quizRowDomId(focus.moduleId, focus.topicId)}` : '';
   return `${QUIZ_CATALOG_PATH}${search ? `?${search}` : ''}${hash}`;

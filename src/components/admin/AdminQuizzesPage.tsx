@@ -36,6 +36,7 @@ export default function AdminQuizzesPage() {
         q: searchParams.get('q') ?? '',
         modulo: searchParams.get('modulo') ?? 'all',
         estado: parseQuizCatalogStatus(searchParams.get('estado')),
+        tab: searchParams.get('tab') === 'topics' ? 'topics' : undefined,
       },
       moduleId ? { moduleId, topicId } : null,
     );

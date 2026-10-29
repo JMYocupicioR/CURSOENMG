@@ -50,9 +50,9 @@ const ADMIN_PROFILE_FIELDS = [
 
 /** Actualiza el expediente de otro usuario. Solo funciona con sesión de administrador (RLS existente). */
 export async function adminUpdateProfile(userId: string, updates: Partial<Profile>): Promise<void> {
-  const payload: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  const payload: Partial<Profile> = { updated_at: new Date().toISOString() };
   for (const key of ADMIN_PROFILE_FIELDS) {
-    if (key in updates) payload[key] = updates[key];
+    if (key in updates) (payload as Record<string, unknown>)[key] = updates[key];
   }
   const { error } = await sb.from('profiles').update(payload).eq('id', userId);
   if (error) throw error;
@@ -111,7 +111,7 @@ export async function getAdminStats(): Promise<import('../types/admin').AdminSta
   };
 
   try {
-    const { data, error } = await (supabase.rpc as any)('admin_get_stats');
+    const { data, error } = await supabase.rpc('admin_get_stats');
     if (!error && data && typeof data === 'object') {
       return {
         ...defaultStats,
@@ -129,7 +129,7 @@ export async function getAdminStats(): Promise<import('../types/admin').AdminSta
 
 export async function getAdminQuizAttempts(limit = 100) {
   try {
-    const { data, error } = await (supabase.rpc as any)('admin_list_quiz_attempts', { p_limit: limit });
+    const { data, error } = await supabase.rpc('admin_list_quiz_attempts', { p_limit: limit });
     if (!error && data) return data as import('../types/admin').AdminQuizAttemptRow[];
   } catch (e) {
     console.warn('[QuizAttempts] error:', e);
@@ -138,7 +138,7 @@ export async function getAdminQuizAttempts(limit = 100) {
 }
 
 export async function revokeContributor(userId: string) {
-  const { error } = await (supabase.rpc as any)('revoke_contributor', { target_user_id: userId });
+  const { error } = await supabase.rpc('revoke_contributor', { target_user_id: userId });
   if (error) throw error;
 }
 
@@ -149,7 +149,7 @@ export async function grantPremiumAccess(
   notes?: string,
   expiresAt?: string
 ) {
-  const { error } = await (supabase.rpc as any)('grant_premium_access', {
+  const { error } = await supabase.rpc('grant_premium_access', {
     target_user_id: userId,
     p_method: method,
     p_reference: reference ?? null,
@@ -160,12 +160,12 @@ export async function grantPremiumAccess(
 }
 
 export async function revokePremiumAccess(userId: string) {
-  const { error } = await (supabase.rpc as any)('revoke_premium_access', { target_user_id: userId });
+  const { error } = await supabase.rpc('revoke_premium_access', { target_user_id: userId });
   if (error) throw error;
 }
 
 export async function adminDeleteUser(userId: string): Promise<void> {
-  const { error } = await (supabase.rpc as any)('admin_delete_user', { target_user_id: userId });
+  const { error } = await supabase.rpc('admin_delete_user', { target_user_id: userId });
   if (error) throw error;
 }
 
@@ -274,7 +274,7 @@ export async function revokeRole(userId: string, role: AppRole) {
 }
 
 export async function toggleEditorialCommitteeVisibility(userId: string, show: boolean) {
-  const { error } = await (supabase.rpc as any)('admin_toggle_editorial_committee', {
+  const { error } = await supabase.rpc('admin_toggle_editorial_committee', {
     target_user_id: userId,
     show,
   });
@@ -282,7 +282,7 @@ export async function toggleEditorialCommitteeVisibility(userId: string, show: b
 }
 
 export async function toggleSpecialistVisibility(userId: string, isPublic: boolean) {
-  const { error } = await (supabase.rpc as any)('admin_toggle_specialist_visibility', {
+  const { error } = await supabase.rpc('admin_toggle_specialist_visibility', {
     target_user_id: userId,
     show: isPublic,
   });
@@ -318,7 +318,7 @@ export async function getCommitteeMembers(): Promise<Profile[]> {
  */
 export async function getCourseTeachers(): Promise<Profile[]> {
   try {
-    const { data: rpcData, error: rpcError } = await (sb.rpc as any)('get_course_teachers');
+    const { data: rpcData, error: rpcError } = await sb.rpc('get_course_teachers');
     if (!rpcError && Array.isArray(rpcData) && rpcData.length > 0) {
       const seen = new Set<string>();
       return (rpcData as Profile[]).filter((p) => {
@@ -711,4 +711,129 @@ export async function createTopicDirectly(input: {
   if (insertError) throw insertError;
   return { id: slug };
 }
+
+/**
+ * Actualiza los metadatos o contenido básico de un tema directamente desde el panel de configuración del tema.
+ */
+export async function updateTopicDirectly(input: {
+  moduleId: string;
+  topicId: string;
+  parentId?: string | null;
+  title: string;
+  description?: string;
+  content?: string;
+  clinicalPearls?: string[];
+  authorId: string;
+}): Promise<void> {
+  const slug = input.topicId.trim();
+  const payload: RevisionPayload = {
+    id: slug,
+    slug,
+    title: input.title.trim(),
+    description: input.description?.trim() || undefined,
+    content: input.content?.trim() || undefined,
+    clinicalPearls: input.clinicalPearls?.length ? input.clinicalPearls : undefined,
+  };
+
+  try {
+    const saved = await saveRevision({
+      moduleId: input.moduleId,
+      parentId: input.parentId ?? null,
+      targetTopicId: slug,
+      action: 'update',
+      payload,
+      authorId: input.authorId,
+    });
+    await submitRevision(saved.id);
+    await reviewRevision(saved.id, 'approved', 'Edición rápida desde panel del tema');
+    return;
+  } catch (revErr) {
+    console.warn('[editorialService] Fallback directo a published_topics al actualizar tema:', revErr);
+  }
+
+  const { error } = await supabase.from('published_topics').upsert(
+    {
+      id: slug,
+      module_id: input.moduleId,
+      parent_id: input.parentId ?? null,
+      slug,
+      title: input.title.trim(),
+      description: input.description?.trim() || null,
+      content: input.content?.trim() || null,
+      clinical_pearls: input.clinicalPearls ?? [],
+      published_at: new Date().toISOString(),
+      last_edited_by: input.authorId,
+    } as any,
+    { onConflict: 'id' }
+  );
+
+  if (error) throw error;
+}
+
+/**
+ * Elimina un tema o subtema desde la administración del temario.
+ * Elimina registros dinámicos en published_topics y archiva/oculta (-999) en syllabus_topic_overrides.
+ */
+export async function deleteTopicDirectly(input: {
+  moduleId: string;
+  topicId: string;
+  authorId?: string;
+}): Promise<void> {
+  // 1. Intentar RPC administrativo dedicado
+  try {
+    const { error: rpcError } = await sb.rpc('admin_delete_syllabus_topic', {
+      p_module_id: input.moduleId,
+      p_topic_id: input.topicId,
+    });
+    if (!rpcError) return;
+  } catch {
+    // Continuar con fallback
+  }
+
+  // 2. Fallback por revisión delete si hay authorId
+  if (input.authorId) {
+    try {
+      const saved = await saveRevision({
+        moduleId: input.moduleId,
+        targetTopicId: input.topicId,
+        action: 'delete',
+        payload: { id: input.topicId, title: 'Eliminar tema' },
+        authorId: input.authorId,
+      });
+      await submitRevision(saved.id);
+      await reviewRevision(saved.id, 'approved', 'Eliminación administrativa de tema');
+    } catch {
+      // Ignorar si no existía en published_topics
+    }
+  }
+
+  // 3. Limpiar de published_topics directamente por si tiene permisos
+  try {
+    await sb
+      .from('published_topics')
+      .delete()
+      .eq('module_id', input.moduleId)
+      .or(`id.eq.${input.topicId},parent_id.eq.${input.topicId}`);
+  } catch {
+    // Ignorar error si RLS solo permite RPC
+  }
+
+  // 4. Marcar en syllabus_topic_overrides como eliminado (-999, is_visible: false)
+  const { error: ovError } = await sb.rpc('set_syllabus_topic_overrides', {
+    p_module_id: input.moduleId,
+    p_overrides: [{ topic_id: input.topicId, sort_order: -999, is_visible: false }],
+  });
+  if (ovError) {
+    await sb.from('syllabus_topic_overrides').upsert(
+      {
+        module_id: input.moduleId,
+        topic_id: input.topicId,
+        sort_order: -999,
+        is_visible: false,
+      },
+      { onConflict: 'module_id,topic_id' }
+    );
+  }
+}
+
 

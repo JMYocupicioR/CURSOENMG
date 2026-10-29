@@ -28,6 +28,12 @@ describe('quiz catalog navigation', () => {
     ).toBe('/admin/quizzes?modulo=fundamentals&estado=no_quiz');
   });
 
+  it('keeps the topics tab when filtering the lesson catalog', () => {
+    expect(
+      buildQuizCatalogPath({ estado: 'with_quiz', tab: 'topics' }),
+    ).toBe('/admin/quizzes?estado=with_quiz&tab=topics');
+  });
+
   it('accepts only the catalog list, not the editor route', () => {
     expect(isQuizCatalogPath('/admin/quizzes?estado=no_quiz#quiz-row-a--b')).toBe(true);
     expect(isQuizCatalogPath('/admin/quizzes/history')).toBe(false);

@@ -1,41 +1,21 @@
-let cachedToken: string | null = null;
-let tokenExpiresAt = 0;
+import { lookupSepCedula, normalizeCedula } from '../../server/sepCedulaLookup.js';
 
-async function getSepToken(): Promise<string> {
-  if (cachedToken && Date.now() < tokenExpiresAt) {
-    return cachedToken;
-  }
-  const tokenRes = await fetch('https://cedulaprofesional.sep.gob.mx/api/auth/token', {
-    method: 'GET',
-    headers: {
-      'X-Client-Id': process.env.SEP_CLIENT_ID || 'rnp-angular-app-prod',
-      'X-API-Key': process.env.SEP_API_KEY || '65da8s675f8s75fda675s8d76as87d5as675da',
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
-      Origin: 'https://cedulaprofesional.sep.gob.mx',
-      Referer: 'https://cedulaprofesional.sep.gob.mx/',
-    },
-  });
-  if (!tokenRes.ok) {
-    throw new Error(`Error al autenticar con SEP: ${tokenRes.statusText}`);
-  }
-  const tokenData = (await tokenRes.json()) as { access_token?: string };
-  if (!tokenData.access_token) {
-    throw new Error('No se recibió access_token de la SEP');
-  }
-  cachedToken = tokenData.access_token;
-  tokenExpiresAt = Date.now() + 50 * 60 * 1000;
-  return cachedToken;
-}
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+};
+
+const JSON_HEADERS = {
+  ...CORS_HEADERS,
+  'Content-Type': 'application/json; charset=utf-8',
+};
 
 export default async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, {
       status: 204,
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-      },
+      headers: CORS_HEADERS,
     });
   }
 
@@ -46,63 +26,39 @@ export default async (req: Request) => {
     if (!cedula && req.method === 'POST') {
       try {
         const body = (await req.json()) as { cedula?: string };
-        cedula = body.cedula;
+        cedula = body.cedula ?? null;
       } catch {}
     }
 
     if (!cedula || typeof cedula !== 'string') {
       return new Response(JSON.stringify({ success: false, error: 'Número de cédula requerido' }), {
         status: 400,
-        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+        headers: JSON_HEADERS,
       });
     }
 
-    const cleanCedula = cedula.replace(/\D/g, '');
+    const cleanCedula = normalizeCedula(cedula);
     if (cleanCedula.length < 5 || cleanCedula.length > 10) {
       return new Response(JSON.stringify({ success: false, error: 'Formato de cédula no válido' }), {
         status: 400,
-        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+        headers: JSON_HEADERS,
       });
     }
 
-    const token = await getSepToken();
-    const queryRes = await fetch(
-      'https://cedulaprofesional.sep.gob.mx/api/rnp/solr/profesionista/consultar/byDetalle',
-      {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
-          Origin: 'https://cedulaprofesional.sep.gob.mx',
-          Referer: 'https://cedulaprofesional.sep.gob.mx/',
-        },
-        body: JSON.stringify({ numCedula: cleanCedula }),
-      }
-    );
-
-    if (!queryRes.ok) {
-      return new Response(
-        JSON.stringify({ success: false, error: `Error en servicio SEP: ${queryRes.status}` }),
-        {
-          status: queryRes.status,
-          headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
-        }
-      );
-    }
-
-    const items = await queryRes.json();
+    const items = await lookupSepCedula(cleanCedula);
     return new Response(JSON.stringify({ success: true, items }), {
       status: 200,
-      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+      headers: JSON_HEADERS,
     });
-  } catch (err: any) {
-    return new Response(
-      JSON.stringify({ success: false, error: err?.message || 'Error interno al consultar SEP' }),
-      {
-        status: 500,
-        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
-      }
-    );
+  } catch (err: unknown) {
+    const status =
+      typeof err === 'object' && err && 'status' in err
+        ? Number((err as { status?: number }).status)
+        : 500;
+    const message = err instanceof Error ? err.message : 'Error interno al consultar SEP';
+    return new Response(JSON.stringify({ success: false, error: message }), {
+      status: Number.isFinite(status) && status >= 400 ? status : 500,
+      headers: JSON_HEADERS,
+    });
   }
 };

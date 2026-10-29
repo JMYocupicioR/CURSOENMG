@@ -33,7 +33,7 @@ export function AdminStudentModeBanner() {
     <>
       <div className="h-10" aria-hidden />
       <div className="fixed top-14 sm:top-16 inset-x-0 z-40 border-b border-amber-300/80 dark:border-amber-700/70 bg-amber-50/95 dark:bg-amber-950/95 backdrop-blur-md">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 h-10 flex items-center justify-between gap-3">
+        <div className="max-w-[1680px] 2xl:max-w-[1800px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10 h-10 flex items-center justify-between gap-3">
           <p className="flex items-center gap-2 min-w-0 text-xs sm:text-sm font-semibold text-amber-900 dark:text-amber-100">
             <Eye className="w-4 h-4 shrink-0 text-amber-600 dark:text-amber-300" />
             <span className="truncate">Modo estudiante — así ve la plataforma un alumno</span>

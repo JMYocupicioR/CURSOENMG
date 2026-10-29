@@ -95,7 +95,7 @@ export async function requestNotificationPermission(
     }
 
     if (permission === 'granted') {
-      await sendTestNotification(role);
+      void sendTestNotification(role);
     }
 
     return permission as NotificationPermissionStatus;
@@ -140,11 +140,12 @@ export async function sendDeviceNotification({
     ...(typeof navigator !== 'undefined' && 'vibrate' in navigator ? { vibrate: [200, 100, 200] } : {}),
   };
 
-  // 1. Try Service Worker showNotification first (ideal for PWA / mobile background)
+  // getRegistration() resolves with undefined when nothing is registered.
+  // serviceWorker.ready never settles in that case (localhost unregisters workers).
   if ('serviceWorker' in navigator) {
     try {
-      const registration = await navigator.serviceWorker.ready;
-      if (registration && 'showNotification' in registration) {
+      const registration = await navigator.serviceWorker.getRegistration();
+      if (registration?.active && 'showNotification' in registration) {
         await registration.showNotification(title, notifOptions);
         return true;
       }

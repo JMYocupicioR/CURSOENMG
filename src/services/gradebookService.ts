@@ -1,13 +1,22 @@
 import { supabase } from '../lib/supabase';
 import { isAppendixModule } from '../content/appendixModules';
 import { allModules } from '../content/modules';
-import { calculateStudentMetrics, fetchStudentCompletedTopics, getAllTopicIds } from './studentService';
-import { getMyAttempts, getMyProgressByModule } from './quizService';
-import { getStudentAssignments } from './studentPlanService';
-import { calculateStudentAttendanceMetrics } from './attendanceService';
+import {
+  calculateStudentMetrics,
+  fetchCohortCompletedTopics,
+  fetchStudentCompletedTopics,
+  getAllTopicIds,
+} from './studentService';
+import { getCohortAttempts, getMyAttempts, getMyProgressByModule } from './quizService';
+import { getAllStudentAssignments, getStudentAssignments } from './studentPlanService';
+import { calculateStudentAttendanceMetrics, getCohortAttendance } from './attendanceService';
 import { getWorkshops } from './courseService';
 import { getStudentMilestoneAudits, getAcademicMilestones } from './academicScheduleService';
-import { isTableMissingInSupabase, markTableAsMissingInSupabase } from './tableAvailability';
+import {
+  isMissingRelationError,
+  isTableMissingInSupabase,
+  markTableAsMissingInSupabase,
+} from './tableAvailability';
 import {
   computeKardexMath,
   kardexStatusFromMath,
@@ -15,6 +24,7 @@ import {
   type KardexBucketInput,
 } from '../utils/academicKardex';
 import type {
+  ClassAttendanceRecord,
   GradebookRubricConfig,
   StudentKardexData,
   StudentCohortSummary,
@@ -70,18 +80,25 @@ export async function getGradebookRubrics(): Promise<GradebookRubricConfig> {
   // 1. Supabase (solo si la tabla no está marcada como ausente)
   if (!isTableMissingInSupabase('academic_rubric_configs')) {
     try {
-      const { data, error, status } = await (supabase.from as any)('academic_rubric_configs')
+      const { data, error, status } = await supabase
+        .from('academic_rubric_configs')
         .select('*')
         .eq('id', 'default_rubric_2026')
         .maybeSingle();
 
-      if (status === 404 || error) {
+      if (isMissingRelationError(error, status)) {
         markTableAsMissingInSupabase('academic_rubric_configs');
-      } else if (data && data.rubrics) {
-        return data as GradebookRubricConfig;
+      } else if (!error && data && data.rubrics) {
+        return {
+          id: data.id,
+          title: data.title,
+          minPassingGrade: data.min_passing_grade,
+          rubrics: data.rubrics,
+          updated_at: data.updated_at,
+        };
       }
     } catch {
-      markTableAsMissingInSupabase('academic_rubric_configs');
+      // Transient network error: fall back to localStorage without disabling table
     }
   }
 
@@ -113,18 +130,18 @@ export async function saveGradebookRubrics(config: GradebookRubricConfig): Promi
   // 2. Supabase
   if (!isTableMissingInSupabase('academic_rubric_configs')) {
     try {
-      const { error, status } = await (supabase.from as any)('academic_rubric_configs').upsert({
+      const { error, status } = await supabase.from('academic_rubric_configs').upsert({
         id: updated.id,
         title: updated.title,
         min_passing_grade: updated.minPassingGrade,
         rubrics: updated.rubrics,
         updated_at: updated.updated_at,
       });
-      if (status === 404 || error) {
+      if (isMissingRelationError(error, status)) {
         markTableAsMissingInSupabase('academic_rubric_configs');
       }
     } catch {
-      markTableAsMissingInSupabase('academic_rubric_configs');
+      // No deshabilitar tabla por error transitorio de red
     }
   }
 }
@@ -135,6 +152,7 @@ export interface PreloadedStudentKardexData {
   assignments?: StudentAssignment[];
   completedTopicsSet?: Set<string>;
   workshops?: LiveWorkshop[];
+  attendanceRecords?: ClassAttendanceRecord[];
 }
 
 // ─── Motor de Cálculo de Kardex Académico Oficial por Alumno ──────────────────
@@ -240,6 +258,7 @@ export async function calculateStudentKardex(
 
   const attendanceMetrics = await calculateStudentAttendanceMetrics(studentId, {
     eligibleSessionsCount,
+    preloadedRecords: preloadedData?.attendanceRecords,
   });
 
   // 6. Auditoría de Hitos de Calendarización
@@ -374,15 +393,53 @@ export async function getCohortAcademicSummaries(
   profiles: AdminProfileRow[]
 ): Promise<Map<string, StudentCohortSummary>> {
   const map = new Map<string, StudentCohortSummary>();
-  const [rubrics, milestones] = await Promise.all([
+  if (profiles.length === 0) return map;
+
+  const studentIds = profiles.map((p) => p.id);
+
+  const [
+    rubrics,
+    milestones,
+    workshops,
+    allAssignments,
+    allAttendance,
+    completedTopicsByUser,
+    attemptsByUser,
+  ] = await Promise.all([
     getGradebookRubrics(),
     getAcademicMilestones(),
+    getWorkshops().catch(() => [] as LiveWorkshop[]),
+    getAllStudentAssignments(profiles).catch(() => [] as StudentAssignment[]),
+    getCohortAttendance(studentIds).catch(() => [] as ClassAttendanceRecord[]),
+    fetchCohortCompletedTopics(studentIds).catch(() => new Map<string, Set<string>>()),
+    getCohortAttempts(studentIds).catch(() => new Map<string, QuizAttempt[]>()),
   ]);
+
+  const assignmentsByUser = new Map<string, StudentAssignment[]>();
+  for (const asg of allAssignments) {
+    const list = assignmentsByUser.get(asg.student_id) ?? [];
+    list.push(asg);
+    assignmentsByUser.set(asg.student_id, list);
+  }
+
+  const attendanceByUser = new Map<string, ClassAttendanceRecord[]>();
+  for (const rec of allAttendance) {
+    const list = attendanceByUser.get(rec.student_id) ?? [];
+    list.push(rec);
+    attendanceByUser.set(rec.student_id, list);
+  }
 
   await Promise.all(
     profiles.map(async (p) => {
       try {
-        const kardex = await calculateStudentKardex(p.id, p, rubrics, milestones);
+        const kardex = await calculateStudentKardex(p.id, p, rubrics, milestones, {
+          attempts: attemptsByUser.get(p.id) ?? [],
+          moduleProgress: [],
+          assignments: assignmentsByUser.get(p.id) ?? [],
+          completedTopicsSet: completedTopicsByUser.get(p.id) ?? new Set<string>(),
+          workshops,
+          attendanceRecords: attendanceByUser.get(p.id) ?? [],
+        });
 
         // Evaluar estado de cumplimiento con el calendario
         const now = new Date();

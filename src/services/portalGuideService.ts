@@ -74,24 +74,58 @@ export function filterSlidesForCourse(
 
 const MEDIA_KINDS: PortalWelcomeMediaItemKind[] = ['image', 'video', 'link'];
 
+function separatePortalMedia(items: PortalWelcomeMediaItem[]): PortalWelcomeMediaItem[] {
+  return items.map((item) => {
+    const url = item.url.trim();
+    if (!url) return item;
+    const video = Boolean(parseVideoUrl(url));
+    const image = isAllowedImageUrl(url) && !/\.svg(?:$|\?)/i.test(url);
+    if (item.kind === 'video' && image && !video) return { ...item, kind: 'image' };
+    if (item.kind === 'image' && video && !image) return { ...item, kind: 'video' };
+    return item;
+  });
+}
+
+export function moveMediaWithinKind(
+  items: PortalWelcomeMediaItem[],
+  id: string,
+  direction: -1 | 1
+): PortalWelcomeMediaItem[] {
+  const currentIndex = items.findIndex((item) => item.id === id);
+  if (currentIndex < 0) return items;
+  const kind = items[currentIndex].kind;
+  const siblings = items
+    .map((item, index) => ({ item, index }))
+    .filter(({ item }) => item.kind === kind);
+  const position = siblings.findIndex(({ item }) => item.id === id);
+  const neighbor = siblings[position + direction];
+  if (!neighbor) return items;
+  const next = items.slice();
+  next[currentIndex] = items[neighbor.index];
+  next[neighbor.index] = items[currentIndex];
+  return next;
+}
+
 export function slideMediaItems(
   slide: Pick<PortalWelcomeSlide, 'id' | 'title' | 'media_items' | 'media_kind' | 'media_url' | 'media_alt'>
 ): PortalWelcomeMediaItem[] {
   if (Array.isArray(slide.media_items) && slide.media_items.length > 0) {
-    return slide.media_items.filter(
-      (item) => item && MEDIA_KINDS.includes(item.kind) && typeof item.url === 'string'
+    return separatePortalMedia(
+      slide.media_items.filter(
+        (item) => item && MEDIA_KINDS.includes(item.kind) && typeof item.url === 'string'
+      )
     );
   }
   const url = slide.media_url?.trim() ?? '';
   if ((slide.media_kind === 'image' || slide.media_kind === 'video') && url) {
-    return [
+    return separatePortalMedia([
       {
         id: `${slide.id}-media`,
         kind: slide.media_kind,
         url,
         label: slide.media_alt?.trim() ?? '',
       },
-    ];
+    ]);
   }
   return [];
 }

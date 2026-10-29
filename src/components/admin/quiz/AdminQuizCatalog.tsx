@@ -72,6 +72,7 @@ export function AdminQuizCatalog({ onSelectTopic, isModal }: AdminQuizCatalogPro
         q: patch.q !== undefined ? patch.q : searchQuery,
         modulo: patch.modulo !== undefined ? patch.modulo : selectedModuleFilter,
         estado: patch.estado !== undefined ? patch.estado : statusFilter,
+        tab: 'topics',
       }),
       { replace: true },
     );
@@ -171,6 +172,7 @@ export function AdminQuizCatalog({ onSelectTopic, isModal }: AdminQuizCatalogPro
     q: searchQuery,
     modulo: selectedModuleFilter,
     estado: statusFilter,
+    tab: 'topics' as const,
   };
 
   const handleQuickPreview = async (topicId: string, topicTitle: string) => {
